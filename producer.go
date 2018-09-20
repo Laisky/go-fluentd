@@ -9,7 +9,6 @@ import (
 	"go.uber.org/zap"
 
 	utils "github.com/Laisky/go-utils"
-	"github.com/ugorji/go/codec"
 )
 
 // Producer send messages to downstream
@@ -42,10 +41,9 @@ func (p *Producer) Run(fork int, commitChan chan<- int64) {
 				nRetry       = 0
 				maxRetry     = 3
 				id           int64
-				msgWrap      = []interface{}{nil, nil, nil}
 				retryMsgChan = make(chan *FluentMsg, 50)
 				msg          *FluentMsg
-				encoder      *codec.Encoder
+				encoder      *Encoder
 			)
 
 		RECONNECT:
@@ -58,7 +56,7 @@ func (p *Producer) Run(fork int, commitChan chan<- int64) {
 			defer conn.Close()
 			utils.Logger.Info("connected to backend", zap.String("backend", conn.RemoteAddr().String()))
 
-			encoder = codec.NewEncoder(conn, NewCodec())
+			encoder = NewEncoder(conn)
 			for {
 				select {
 				case msg = <-retryMsgChan:
@@ -67,8 +65,6 @@ func (p *Producer) Run(fork int, commitChan chan<- int64) {
 
 				nRetry = 0
 				for {
-					msgWrap[0] = msg.Tag
-					msgWrap[2] = msg.Message
 					if utils.Settings.GetBool("dry") {
 						utils.Logger.Info("send message to backend",
 							zap.String("tag", msg.Tag),
@@ -77,7 +73,7 @@ func (p *Producer) Run(fork int, commitChan chan<- int64) {
 						goto FINISHED
 					}
 
-					err = encoder.Encode(msgWrap)
+					err = encoder.Encode(msg)
 					if err != nil {
 						nRetry++
 						if nRetry > maxRetry {

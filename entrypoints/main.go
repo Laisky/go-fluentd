@@ -14,7 +14,9 @@ import (
 
 // SetupSettings setup arguments restored in viper
 func SetupSettings() {
-	utils.Settings.Setup(utils.Settings.GetString("config"))
+	if err := utils.Settings.Setup(utils.Settings.GetString("config")); err != nil {
+		panic(err)
+	}
 
 	if utils.Settings.GetBool("debug") { // debug mode
 		fmt.Println("run in debug mode")

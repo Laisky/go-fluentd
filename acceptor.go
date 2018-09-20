@@ -2,6 +2,7 @@ package concator
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -81,15 +82,18 @@ func (a *Acceptor) Run() (err error) {
 func (a *Acceptor) decodeMsg(conn net.Conn) {
 	defer conn.Close()
 	var (
-		dec = codec.NewDecoder(bufio.NewReader(conn), NewCodec())
-		v   = []interface{}{nil, nil, nil} // tag, time, messages
-		msg *FluentMsg
-		err error
+		dec    = codec.NewDecoder(bufio.NewReader(conn), NewCodec())
+		dec2   *codec.Decoder
+		reader *bytes.Reader
+		v      = []interface{}{nil, nil, nil} // tag, time, messages
+		v2     = []interface{}{nil, nil}
+		msg    *FluentMsg
+		err    error
+		tag    string
+		ok     bool
 	)
 	for {
-		msg = a.msgPool.Get().(*FluentMsg)
-		msg.Message = make(map[string]interface{}) // create new map, avoid influenced by old data
-		v[2] = msg.Message                         // v[2] is a map
+		v[2] = nil // create new map, avoid influenced by old data
 		err = dec.Decode(&v)
 		if err == io.EOF {
 			utils.Logger.Info("connection closed", zap.String("remote", conn.RemoteAddr().String()))
@@ -99,14 +103,51 @@ func (a *Acceptor) decodeMsg(conn net.Conn) {
 			return
 		}
 
-		msg.Tag = string(v[0].([]byte))
-		msg.Id = a.couter.Count()
-
-		if msg.Id == 100000000 {
-			a.couter.Set(0)
+		tag = string(v[0].([]byte))
+		switch tsOrData := v[1].(type) {
+		case []interface{}:
+			utils.Logger.Debug("got message in format: `[]interface{}`")
+			for _, _entry := range tsOrData {
+				msg = a.msgPool.Get().(*FluentMsg)
+				if msg.Message, ok = _entry.([]interface{})[1].(map[string]interface{}); !ok {
+					utils.Logger.Error("failed to decode message", zap.String("tag", tag))
+					a.msgPool.Put(msg)
+					continue
+				}
+				msg.Tag = tag
+				msg.Id = a.couter.Count()
+				a.msgChan <- msg
+			}
+		case []byte:
+			utils.Logger.Debug("got message in format: `[]byte`")
+			reader = bytes.NewReader(tsOrData)
+			dec2 = codec.NewDecoder(reader, NewCodec())
+			for reader.Len() > 0 {
+				v2[1] = nil
+				if err = dec2.Decode(&v2); err == io.EOF {
+					break
+				} else if err != nil {
+					utils.Logger.Error("failed to decode message")
+					break
+				} else {
+					msg = a.msgPool.Get().(*FluentMsg)
+					msg.Message = v2[1].(map[string]interface{})
+					msg.Tag = tag
+					msg.Id = a.couter.Count()
+					a.msgChan <- msg
+				}
+			}
+		default:
+			utils.Logger.Debug("got message in format: default")
+			msg = a.msgPool.Get().(*FluentMsg)
+			msg.Message = v[2].(map[string]interface{})
+			msg.Tag = tag
+			msg.Id = a.couter.Count()
+			if msg.Id > 100000000 {
+				a.couter.Set(0)
+			}
+			a.msgChan <- msg
 		}
-
-		a.msgChan <- msg
 	}
 }
 

@@ -112,6 +112,8 @@ func (c *Concator) Run(inChan <-chan *FluentMsg) {
 			// need to concat
 			utils.Logger.Debug("concat lines", zap.ByteString("log", msg.Message[c.msgKey].([]byte)))
 			c.slot[identifier].msg.Message[c.msgKey] =
+				append(c.slot[identifier].msg.Message[c.msgKey].([]byte), '\n')
+			c.slot[identifier].msg.Message[c.msgKey] =
 				append(c.slot[identifier].msg.Message[c.msgKey].([]byte), msg.Message[c.msgKey].([]byte)...)
 			c.slot[identifier].msg.extIds = append(c.slot[identifier].msg.extIds, msg.Id)
 			c.slot[identifier].lastT = now

@@ -115,8 +115,7 @@ func (a *Acceptor) decodeMsg(conn net.Conn) {
 					continue
 				}
 				msg.Tag = tag
-				msg.Id = a.couter.Count()
-				a.msgChan <- msg
+				a.SendMsg(msg)
 			}
 		case []byte:
 			utils.Logger.Debug("got message in format: `[]byte`")
@@ -133,8 +132,7 @@ func (a *Acceptor) decodeMsg(conn net.Conn) {
 					msg = a.msgPool.Get().(*FluentMsg)
 					msg.Message = v2[1].(map[string]interface{})
 					msg.Tag = tag
-					msg.Id = a.couter.Count()
-					a.msgChan <- msg
+					a.SendMsg(msg)
 				}
 			}
 		default:
@@ -142,13 +140,17 @@ func (a *Acceptor) decodeMsg(conn net.Conn) {
 			msg = a.msgPool.Get().(*FluentMsg)
 			msg.Message = v[2].(map[string]interface{})
 			msg.Tag = tag
-			msg.Id = a.couter.Count()
-			if msg.Id > 100000000 {
-				a.couter.Set(0)
-			}
-			a.msgChan <- msg
+			a.SendMsg(msg)
 		}
 	}
+}
+
+func (a *Acceptor) SendMsg(msg *FluentMsg) {
+	msg.Id = a.couter.Count()
+	if msg.Id == 100000000 {
+		a.couter.Set(0)
+	}
+	a.msgChan <- msg
 }
 
 // MessageChan return the message chan that received by acceptor

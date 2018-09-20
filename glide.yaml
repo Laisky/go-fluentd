@@ -1,4 +1,4 @@
-package: pateo.com/go-concator
+package: github.com/Laisky/go-concator
 import:
 - package: github.com/Laisky/go-utils
   vcs: git

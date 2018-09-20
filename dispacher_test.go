@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	utils "github.com/Laisky/go-utils"
-	concator "pateo.com/go-concator"
+	concator "github.com/Laisky/go-concator"
 )
 
 func TestRefreshConfig(t *testing.T) {

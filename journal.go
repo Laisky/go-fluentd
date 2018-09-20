@@ -114,6 +114,7 @@ func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, msgChan <-chan *FluentMsg) cha
 			data["id"] = msg.Id
 			data["tag"] = msg.Tag
 			data["message"] = msg.Message
+			utils.Logger.Debug("got new message", zap.Int64("id", msg.Id), zap.String("tag", msg.Tag))
 			for {
 				if err = j.j.WriteData(&data); err != nil {
 					nRetry++

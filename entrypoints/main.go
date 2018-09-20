@@ -9,12 +9,14 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
-	concator "pateo.com/go-concator"
+	concator "github.com/Laisky/go-concator"
 )
 
 // SetupSettings setup arguments restored in viper
 func SetupSettings() {
-	utils.Settings.Setup(utils.Settings.GetString("config"))
+	if err := utils.Settings.Setup(utils.Settings.GetString("config")); err != nil {
+		panic(err)
+	}
 
 	if utils.Settings.GetBool("debug") { // debug mode
 		fmt.Println("run in debug mode")

@@ -22,7 +22,8 @@ func NewCodec() *codec.MsgpackHandle {
 	_codec := &codec.MsgpackHandle{}
 	_codec.MapType = reflect.TypeOf(map[string]interface{}(nil))
 	_codec.DecodeOptions.MapValueReset = true
-	// _codec.RawToString = false
+	_codec.RawToString = false
+	_codec.StructToArray = true
 	return _codec
 }
 

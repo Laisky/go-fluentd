@@ -122,7 +122,7 @@ func (a *Acceptor) decodeMsg(conn net.Conn) {
 			utils.Logger.Debug("got message in format: `[]byte`")
 			reader = bytes.NewReader(tsOrData)
 			if dec2 != nil {
-				dec.Reset(reader)
+				dec2.Reset(reader)
 			} else {
 				dec2 = codec.NewDecoder(reader, _codec)
 			}

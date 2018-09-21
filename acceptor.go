@@ -82,7 +82,8 @@ func (a *Acceptor) Run() (err error) {
 func (a *Acceptor) decodeMsg(conn net.Conn) {
 	defer conn.Close()
 	var (
-		dec    = codec.NewDecoder(bufio.NewReader(conn), NewCodec())
+		_codec = NewCodec()
+		dec    = codec.NewDecoder(bufio.NewReader(conn), _codec)
 		dec2   *codec.Decoder
 		reader *bytes.Reader
 		v      = []interface{}{nil, nil, nil} // tag, time, messages
@@ -120,7 +121,12 @@ func (a *Acceptor) decodeMsg(conn net.Conn) {
 		case []byte:
 			utils.Logger.Debug("got message in format: `[]byte`")
 			reader = bytes.NewReader(tsOrData)
-			dec2 = codec.NewDecoder(reader, NewCodec())
+			if dec2 != nil {
+				dec.Reset(reader)
+			} else {
+				dec2 = codec.NewDecoder(reader, _codec)
+			}
+
 			for reader.Len() > 0 {
 				v2[1] = nil
 				if err = dec2.Decode(&v2); err == io.EOF {

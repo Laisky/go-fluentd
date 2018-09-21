@@ -82,10 +82,11 @@ func (d *Dispatcher) Run() {
 // LoadDispatcherConfig return the configurations about dispatch rules
 func LoadDispatcherConfig() map[string]*DispatcherConfig {
 	dispatherConfigs := map[string]*DispatcherConfig{}
+	env := "." + utils.Settings.GetString("env")
 	var cfg map[string]interface{}
 	for tag, cfgI := range utils.Settings.Get("settings.tag_configs").(map[string]interface{}) {
 		cfg = cfgI.(map[string]interface{})
-		dispatherConfigs[tag] = &DispatcherConfig{
+		dispatherConfigs[tag+env] = &DispatcherConfig{
 			MsgKey:     cfg["msg_key"].(string),
 			Identifier: cfg["identifier"].(string),
 			Regex:      regexp.MustCompile(cfg["regex"].(string)),

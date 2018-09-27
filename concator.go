@@ -18,6 +18,7 @@ type Concator struct {
 	slot       map[string]*PendingMsg
 	regex      *regexp.Regexp // regex to match first line
 	pMsgPool   *sync.Pool
+	maxLen     int
 }
 
 // ConcatorFactory can spawn new Concator
@@ -42,6 +43,7 @@ func NewConcator(outChan chan<- *FluentMsg, msgKey, identifier string, regex *re
 		regex:      regex,
 		slot:       map[string]*PendingMsg{},
 		pMsgPool:   pMsgPool,
+		maxLen:     utils.Settings.GetInt("settings.max_msg_length"),
 	}
 }
 
@@ -117,6 +119,14 @@ func (c *Concator) Run(inChan <-chan *FluentMsg) {
 				append(c.slot[identifier].msg.Message[c.msgKey].([]byte), msg.Message[c.msgKey].([]byte)...)
 			c.slot[identifier].msg.extIds = append(c.slot[identifier].msg.extIds, msg.Id)
 			c.slot[identifier].lastT = now
+
+			// too long to send
+			if len(c.slot[identifier].msg.Message[c.msgKey].([]byte)) >= c.maxLen {
+				utils.Logger.Debug("too long to send", zap.String("msgKey", c.msgKey), zap.String("tag", msg.Tag))
+				c.outChan <- c.slot[identifier].msg
+				c.pMsgPool.Put(c.slot[identifier])
+				delete(c.slot, identifier)
+			}
 
 		default: // check timeout
 			now = time.Now()

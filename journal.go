@@ -89,7 +89,9 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan chan *FluentMsg) 
 
 func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, msgChan <-chan *FluentMsg) chan *FluentMsg {
 	var (
-		newChan = make(chan *FluentMsg, 5000)
+		chanCap      = 5000
+		nBusyChanLen = 3500
+		newChan      = make(chan *FluentMsg, chanCap)
 	)
 
 	// deal with legacy
@@ -132,7 +134,16 @@ func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, msgChan <-chan *FluentMsg) cha
 			}
 
 			utils.Logger.Debug("success write data journal", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id))
-			newChan <- msg
+
+			// give chan to legacy processing
+			if j.j.IsLegacyRunning() && len(newChan) > nBusyChanLen {
+				continue
+			}
+
+			select {
+			case newChan <- msg:
+			default:
+			}
 		}
 	}()
 

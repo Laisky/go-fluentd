@@ -46,6 +46,7 @@ func HeartBeat() {
 	go func() {
 		for {
 			utils.Logger.Info("heartbeat", zap.Int("goroutine", runtime.NumGoroutine()))
+			utils.Logger.Sync()
 			time.Sleep(60 * time.Second)
 		}
 	}()

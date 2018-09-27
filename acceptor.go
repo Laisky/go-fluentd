@@ -105,10 +105,10 @@ func (a *Acceptor) decodeMsg(conn net.Conn) {
 		}
 
 		tag = string(v[0].([]byte))
-		switch tsOrData := v[1].(type) {
+		switch v[1].(type) {
 		case []interface{}:
 			utils.Logger.Debug("got message in format: `[]interface{}`")
-			for _, _entry := range tsOrData {
+			for _, _entry := range v[1].([]interface{}) {
 				msg = a.msgPool.Get().(*FluentMsg)
 				if msg.Message, ok = _entry.([]interface{})[1].(map[string]interface{}); !ok {
 					utils.Logger.Error("failed to decode message", zap.String("tag", tag))
@@ -120,7 +120,12 @@ func (a *Acceptor) decodeMsg(conn net.Conn) {
 			}
 		case []byte:
 			utils.Logger.Debug("got message in format: `[]byte`")
-			reader = bytes.NewReader(tsOrData)
+			if reader == nil {
+				reader = bytes.NewReader(v[1].([]byte))
+			} else {
+				reader.Reset(v[1].([]byte))
+			}
+
 			if dec2 != nil {
 				dec2.Reset(reader)
 			} else {

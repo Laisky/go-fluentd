@@ -53,9 +53,9 @@ func (a *Acceptor) Run() (err error) {
 	}
 
 	go func() {
-		// legacy
+		// got exists max id from legacy
 		utils.Logger.Info("process legacy data...")
-		maxId, err := a.journal.ProcessLegacyMsg(a.msgPool, a.msgChan)
+		maxId, err := a.journal.LoadMaxId()
 		if err != nil {
 			panic(fmt.Errorf("try to process legacy messages got error: %+v", err))
 		}

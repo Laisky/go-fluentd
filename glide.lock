@@ -1,5 +1,5 @@
-hash: eab88f1bb4aa58905e31f32df8660b281272c25cdae0ebe9f5b454d7f3846008
-updated: 2018-09-18T10:57:16.636257386+08:00
+hash: 966ed191e17e1b06f0da93ef1da988cbc17341ab8b2a135a3323115a2c8c24d8
+updated: 2018-09-27T17:03:51.982991889+08:00
 imports:
 - name: github.com/dgrijalva/jwt-go
   version: 06ea1031745cb8b3dab3f6a236daf2b0aa468b7e
@@ -24,7 +24,7 @@ imports:
 - name: github.com/Laisky/go-chaining
   version: 43dcdc5a21be9b79f2b7ee0d8ba67ed8a7158cda
 - name: github.com/Laisky/go-utils
-  version: 53bedc4b2cce4b1dbad7d8fa1da2740fd8b7b3d5
+  version: 6adb42cd301dfb63dfba4540935105c4cc94648f
   vcs: git
   subpackages:
   - journal

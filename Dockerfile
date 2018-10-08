@@ -1,4 +1,4 @@
-FROM golang:1.11.0-alpine3.8 AS gobin
+FROM golang:1.11.1-alpine3.8 AS gobin
 RUN apk update && apk upgrade && \
     apk add --no-cache g++ make gcc git ca-certificates && \
     update-ca-certificates

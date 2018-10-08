@@ -66,11 +66,9 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan chan *FluentMsg) 
 		msg  *FluentMsg
 		data = map[string]interface{}{}
 	)
-	for {
-		if j.j.LockLegacy() { // avoid rotate
-			break
-		}
-		time.Sleep(1 * time.Millisecond)
+
+	if !j.j.LockLegacy() { // avoid rotate
+		return
 	}
 
 	startTs := time.Now()

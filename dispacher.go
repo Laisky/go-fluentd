@@ -1,7 +1,10 @@
 package concator
 
 import (
+	"fmt"
 	"regexp"
+
+	"github.com/kataras/iris"
 
 	"go.uber.org/zap"
 
@@ -44,6 +47,7 @@ func NewDispatcher(msgChan <-chan *FluentMsg, cf ConcatorFactoryItf, bypassMsgCh
 // Run dispacher to distrubute messages to different concators
 func (d *Dispatcher) Run() {
 	utils.Logger.Info("run dispacher...")
+	d.RunMonitor()
 	go func() {
 		var (
 			msgChan chan<- *FluentMsg
@@ -77,6 +81,17 @@ func (d *Dispatcher) Run() {
 			msgChan <- msg
 		}
 	}()
+}
+
+func (d *Dispatcher) RunMonitor() {
+	utils.Logger.Info("bind `/monitor/dispatcher`")
+	Server.Get("/monitor/dispatcher", func(ctx iris.Context) {
+		cnt := "concatorMap tag:chan\n"
+		for tag, c := range d.concatorMap {
+			cnt += fmt.Sprintf("%v: %v\n", tag, len(c))
+		}
+		ctx.Writef(cnt)
+	})
 }
 
 // LoadDispatcherConfig return the configurations about dispatch rules

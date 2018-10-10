@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kataras/iris"
+
 	"go.uber.org/zap"
 
 	utils "github.com/Laisky/go-utils"
@@ -13,19 +15,37 @@ import (
 
 // Producer send messages to downstream
 type Producer struct {
-	addr    string
-	msgChan <-chan *FluentMsg
-	msgPool *sync.Pool
+	addr               string
+	msgChan            <-chan *FluentMsg
+	msgPool            *sync.Pool
+	producerTagChanMap map[string]chan<- *FluentMsg
+	retryMsgChan       chan *FluentMsg
 }
 
 // NewProducer create new producer
 func NewProducer(addr string, msgChan <-chan *FluentMsg, msgPool *sync.Pool) *Producer {
 	utils.Logger.Info("create Producer")
-	return &Producer{
-		addr:    addr,
-		msgChan: msgChan,
-		msgPool: msgPool,
+	p := &Producer{
+		addr:               addr,
+		msgChan:            msgChan,
+		msgPool:            msgPool,
+		producerTagChanMap: map[string]chan<- *FluentMsg{},
+		retryMsgChan:       make(chan *FluentMsg, 500),
 	}
+	p.BindMonitor()
+	return p
+}
+
+func (p *Producer) BindMonitor() {
+	utils.Logger.Info("bind `/monitor/producer`")
+	Server.Get("/monitor/producer", func(ctx iris.Context) {
+		cnt := "producerTagChanMap tag:chan\n"
+		for tag, c := range p.producerTagChanMap {
+			cnt += fmt.Sprintf("> %v: %v\n", tag, len(c))
+		}
+		cnt += fmt.Sprintf("> retryMsgChan: %v\n", len(p.retryMsgChan))
+		ctx.Writef(cnt)
+	})
 }
 
 // Run starting <n> Producer to send messages
@@ -33,22 +53,23 @@ func (p *Producer) Run(fork int, commitChan chan<- int64) {
 	utils.Logger.Info("start producer", zap.String("addr", p.addr))
 
 	var (
-		msg                *FluentMsg
-		retryMsgChan       = make(chan *FluentMsg, 500)
-		producerTagChanMap = map[string]chan<- *FluentMsg{}
-		ok                 bool
+		msg *FluentMsg
+		ok  bool
 	)
 
 	for {
 		select {
-		case msg = <-retryMsgChan:
+		case msg = <-p.retryMsgChan:
 		case msg = <-p.msgChan:
 		}
 
-		if _, ok = producerTagChanMap[msg.Tag]; !ok {
-			producerTagChanMap[msg.Tag] = p.SpawnForTag(fork, msg.Tag, commitChan)
+		if _, ok = p.producerTagChanMap[msg.Tag]; !ok {
+			p.producerTagChanMap[msg.Tag] = p.SpawnForTag(fork, msg.Tag, commitChan)
 		}
-		producerTagChanMap[msg.Tag] <- msg
+
+		select {
+		case p.producerTagChanMap[msg.Tag] <- msg:
+		}
 	}
 
 }
@@ -67,14 +88,13 @@ func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) ch
 				nRetry           = 0
 				maxRetry         = 3
 				id               int64
-				retryMsgChan     = make(chan *FluentMsg, 50)
 				msg              *FluentMsg
 				maxNBatch        = 100
 				msgBatch         = make([]*FluentMsg, maxNBatch)
 				msgBatchDelivery []*FluentMsg
 				iBatch           = 0
 				lastT            = time.Unix(0, 0)
-				maxWait          = 10 * time.Second
+				maxWait          = 30 * time.Second
 				encoder          *Encoder
 			)
 
@@ -85,7 +105,6 @@ func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) ch
 				time.Sleep(1 * time.Second)
 				goto RECONNECT
 			}
-			defer conn.Close()
 			utils.Logger.Info("connected to backend",
 				zap.String("backend", conn.RemoteAddr().String()),
 				zap.String("tag", tag))
@@ -117,7 +136,7 @@ func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) ch
 							utils.Logger.Error("try send message got error", zap.Error(err), zap.String("tag", tag))
 
 							for _, msg = range msgBatchDelivery {
-								retryMsgChan <- msg
+								p.retryMsgChan <- msg
 							}
 
 							if err = conn.Close(); err != nil {

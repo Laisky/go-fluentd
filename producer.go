@@ -36,6 +36,7 @@ func NewProducer(addr string, msgChan <-chan *FluentMsg, msgPool *sync.Pool) *Pr
 	return p
 }
 
+// BindMonitor bind monitor for producer
 func (p *Producer) BindMonitor() {
 	utils.Logger.Info("bind `/monitor/producer`")
 	Server.Get("/monitor/producer", func(ctx iris.Context) {
@@ -69,15 +70,17 @@ func (p *Producer) Run(fork int, commitChan chan<- int64) {
 
 		select {
 		case p.producerTagChanMap[msg.Tag] <- msg:
+		default:
 		}
 	}
 
 }
 
+// SpawnForTag spawn `fork` numbers connections to downstream for each tag
 func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) chan<- *FluentMsg {
 	utils.Logger.Info("SpawnForTag", zap.Int("fork", fork), zap.String("tag", tag))
 	var (
-		inChan = make(chan *FluentMsg, 1000)
+		inChan = make(chan *FluentMsg, 1000) // for each tag
 	)
 
 	for i := 0; i < fork; i++ { // parallel to each tag
@@ -89,7 +92,7 @@ func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) ch
 				maxRetry         = 3
 				id               int64
 				msg              *FluentMsg
-				maxNBatch        = 100
+				maxNBatch        = utils.Settings.GetInt("settings.msg_batch_size")
 				msgBatch         = make([]*FluentMsg, maxNBatch)
 				msgBatchDelivery []*FluentMsg
 				iBatch           = 0
@@ -98,7 +101,7 @@ func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) ch
 				encoder          *Encoder
 			)
 
-		RECONNECT:
+		RECONNECT: // reconnect to downstream
 			conn, err := net.DialTimeout("tcp", p.addr, 10*time.Second)
 			if err != nil {
 				utils.Logger.Error("try to connect to backend got error", zap.Error(err), zap.String("tag", tag))
@@ -109,7 +112,7 @@ func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) ch
 				zap.String("backend", conn.RemoteAddr().String()),
 				zap.String("tag", tag))
 
-			encoder = NewEncoder(conn)
+			encoder = NewEncoder(conn) // one encoder for each connection
 			for msg = range inChan {
 				msgBatch[iBatch] = msg
 				iBatch++

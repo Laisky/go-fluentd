@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"runtime/pprof"
 
 	concator "github.com/Laisky/go-concator"
 	utils "github.com/Laisky/go-utils"
@@ -33,8 +35,9 @@ func SetupSettings() {
 func SetupArgs() {
 	pflag.Bool("debug", false, "run in debug mode")
 	pflag.Bool("dry", false, "run in dry mode")
+	pflag.Bool("pprof", false, "run in prof mode")
 	pflag.String("config", "/etc/go-ramjet/settings", "config file directory path")
-	pflag.String("addr", "0.0.0.0:8080", "like `0.0.0.0:8080`")
+	pflag.String("addr", "localhost:8080", "like `localhost:8080`")
 	pflag.String("env", "nil", "environment `sit/perf/uat/prod`")
 	pflag.Int("heartbeat", 60, "heartbeat seconds")
 	pflag.Parse()
@@ -47,6 +50,19 @@ func main() {
 	SetupSettings()
 	defer utils.Logger.Info("All done")
 
+	// pprof
+	if utils.Settings.GetBool("pprof") {
+		f, err := os.Create("cpu.pprof")
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+
+	// run
 	controllor := concator.NewControllor()
 	controllor.Run()
 	concator.RunServer(utils.Settings.GetString("addr"))

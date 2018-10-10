@@ -2,14 +2,11 @@ package main
 
 import (
 	"fmt"
-	"runtime"
-	"time"
 
 	concator "github.com/Laisky/go-concator"
 	utils "github.com/Laisky/go-utils"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"go.uber.org/zap"
 )
 
 // SetupSettings setup arguments restored in viper
@@ -37,28 +34,20 @@ func SetupArgs() {
 	pflag.Bool("debug", false, "run in debug mode")
 	pflag.Bool("dry", false, "run in dry mode")
 	pflag.String("config", "/etc/go-ramjet/settings", "config file directory path")
+	pflag.String("addr", "0.0.0.0:8080", "like `0.0.0.0:8080`")
 	pflag.String("env", "nil", "environment `sit/perf/uat/prod`")
+	pflag.Int("heartbeat", 60, "heartbeat seconds")
 	pflag.Parse()
 	viper.BindPFlags(pflag.CommandLine)
-}
-
-func HeartBeat() {
-	go func() {
-		for {
-			utils.Logger.Info("heartbeat", zap.Int("goroutine", runtime.NumGoroutine()))
-			utils.Logger.Sync()
-			time.Sleep(60 * time.Second)
-		}
-	}()
 }
 
 func main() {
 	defer utils.Logger.Sync()
 	SetupArgs()
 	SetupSettings()
-	HeartBeat()
 	defer utils.Logger.Info("All done")
 
 	controllor := concator.NewControllor()
 	controllor.Run()
+	concator.RunServer(utils.Settings.GetString("addr"))
 }

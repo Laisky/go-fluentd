@@ -1,8 +1,13 @@
 package concator
 
 import (
+	"fmt"
 	"reflect"
+	"runtime"
 	"sync"
+	"time"
+
+	"github.com/kataras/iris"
 
 	"go.uber.org/zap"
 
@@ -64,18 +69,54 @@ func (c *Controllor) Run() {
 
 	concatorFact := NewConcatorFactory()
 
+	waitDumpChan := acceptor.MessageChan()
+	waitDispatchChan := journal.DumpMsgFlow(c.msgPool, waitDumpChan)
 	dispatcher := NewDispatcher(
-		journal.DumpMsgFlow(c.msgPool, acceptor.MessageChan()),
+		waitDispatchChan,
 		concatorFact,
 		concatorFact.MessageChan())
 	dispatcher.Run()
 
+	waitProduceChan := concatorFact.MessageChan()
 	producer := NewProducer(
 		utils.Settings.GetString("settings.backend_addr"),
-		concatorFact.MessageChan(),
+		waitProduceChan,
 		c.msgPool,
 	)
-	producer.Run(
+	waitCommitChan := journal.GetCommitChan()
+
+	// heartbeat
+	go func() {
+		for {
+			for {
+				utils.Logger.Info("heartbeat",
+					zap.Int("goroutine", runtime.NumGoroutine()),
+					zap.Int("waitDumpChan", len(waitDumpChan)),
+					zap.Int("waitDispatchChan", len(waitDispatchChan)),
+					zap.Int("waitProduceChan", len(waitProduceChan)),
+					zap.Int("waitCommitChan", len(waitCommitChan)),
+				)
+				utils.Logger.Sync()
+				time.Sleep(utils.Settings.GetDuration("heartbeat") * time.Second)
+			}
+		}
+	}()
+	Server.Get("/monitor/controllor", func(ctx iris.Context) {
+		ctx.WriteString(fmt.Sprintf(`
+goroutine: %v
+waitDumpChan: %v
+waitDispatchChan: %v
+waitProduceChan: %v
+waitCommitChan: %v`,
+			runtime.NumGoroutine(),
+			len(waitDumpChan),
+			len(waitDispatchChan),
+			len(waitProduceChan),
+			len(waitCommitChan),
+		))
+	})
+
+	go producer.Run(
 		utils.Settings.GetInt("settings.producer_forks"),
-		journal.GetCommitChan())
+		waitCommitChan)
 }

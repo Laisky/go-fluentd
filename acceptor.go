@@ -53,6 +53,10 @@ func (a *Acceptor) Run() (err error) {
 	}
 
 	go func() {
+		var (
+			conn net.Conn
+		)
+
 		// got exists max id from legacy
 		utils.Logger.Info("process legacy data...")
 		maxId, err := a.journal.LoadMaxId()
@@ -63,7 +67,7 @@ func (a *Acceptor) Run() (err error) {
 
 		utils.Logger.Info("starting to listening...")
 		for {
-			conn, err := ln.Accept()
+			conn, err = ln.Accept()
 			if err != nil {
 				utils.Logger.Error("try to accept connection got error", zap.Error(err))
 				continue
@@ -92,6 +96,7 @@ func (a *Acceptor) decodeMsg(conn net.Conn) {
 		err    error
 		tag    string
 		ok     bool
+		entryI interface{}
 	)
 	for {
 		v[2] = nil // create new map, avoid influenced by old data
@@ -108,9 +113,9 @@ func (a *Acceptor) decodeMsg(conn net.Conn) {
 		switch v[1].(type) {
 		case []interface{}:
 			utils.Logger.Debug("got message in format: `[]interface{}`")
-			for _, _entry := range v[1].([]interface{}) {
+			for _, entryI = range v[1].([]interface{}) {
 				msg = a.msgPool.Get().(*FluentMsg)
-				if msg.Message, ok = _entry.([]interface{})[1].(map[string]interface{}); !ok {
+				if msg.Message, ok = entryI.([]interface{})[1].(map[string]interface{}); !ok {
 					utils.Logger.Error("failed to decode message", zap.String("tag", tag))
 					a.msgPool.Put(msg)
 					continue

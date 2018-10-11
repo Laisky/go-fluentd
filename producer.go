@@ -99,10 +99,12 @@ func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) ch
 				lastT            = time.Unix(0, 0)
 				maxWait          = 30 * time.Second
 				encoder          *Encoder
+				conn             net.Conn
+				err              error
 			)
 
 		RECONNECT: // reconnect to downstream
-			conn, err := net.DialTimeout("tcp", p.addr, 10*time.Second)
+			conn, err = net.DialTimeout("tcp", p.addr, 10*time.Second)
 			if err != nil {
 				utils.Logger.Error("try to connect to backend got error", zap.Error(err), zap.String("tag", tag))
 				time.Sleep(1 * time.Second)

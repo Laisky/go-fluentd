@@ -88,17 +88,15 @@ func (c *Controllor) Run() {
 	// heartbeat
 	go func() {
 		for {
-			for {
-				utils.Logger.Info("heartbeat",
-					zap.Int("goroutine", runtime.NumGoroutine()),
-					zap.Int("waitDumpChan", len(waitDumpChan)),
-					zap.Int("waitDispatchChan", len(waitDispatchChan)),
-					zap.Int("waitProduceChan", len(waitProduceChan)),
-					zap.Int("waitCommitChan", len(waitCommitChan)),
-				)
-				utils.Logger.Sync()
-				time.Sleep(utils.Settings.GetDuration("heartbeat") * time.Second)
-			}
+			utils.Logger.Info("heartbeat",
+				zap.Int("goroutine", runtime.NumGoroutine()),
+				zap.Int("waitDumpChan", len(waitDumpChan)),
+				zap.Int("waitDispatchChan", len(waitDispatchChan)),
+				zap.Int("waitProduceChan", len(waitProduceChan)),
+				zap.Int("waitCommitChan", len(waitCommitChan)),
+			)
+			utils.Logger.Sync()
+			time.Sleep(utils.Settings.GetDuration("heartbeat") * time.Second)
 		}
 	}()
 	Server.Get("/monitor/controllor", func(ctx iris.Context) {

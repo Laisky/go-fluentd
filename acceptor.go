@@ -53,9 +53,9 @@ func (a *Acceptor) Run() (err error) {
 	}
 
 	go func() {
-		// legacy
+		// got exists max id from legacy
 		utils.Logger.Info("process legacy data...")
-		maxId, err := a.journal.ProcessLegacyMsg(a.msgPool, a.msgChan)
+		maxId, err := a.journal.LoadMaxId()
 		if err != nil {
 			panic(fmt.Errorf("try to process legacy messages got error: %+v", err))
 		}
@@ -82,7 +82,8 @@ func (a *Acceptor) Run() (err error) {
 func (a *Acceptor) decodeMsg(conn net.Conn) {
 	defer conn.Close()
 	var (
-		dec    = codec.NewDecoder(bufio.NewReader(conn), NewCodec())
+		_codec = NewCodec()
+		dec    = codec.NewDecoder(bufio.NewReader(conn), _codec)
 		dec2   *codec.Decoder
 		reader *bytes.Reader
 		v      = []interface{}{nil, nil, nil} // tag, time, messages
@@ -104,10 +105,10 @@ func (a *Acceptor) decodeMsg(conn net.Conn) {
 		}
 
 		tag = string(v[0].([]byte))
-		switch tsOrData := v[1].(type) {
+		switch v[1].(type) {
 		case []interface{}:
 			utils.Logger.Debug("got message in format: `[]interface{}`")
-			for _, _entry := range tsOrData {
+			for _, _entry := range v[1].([]interface{}) {
 				msg = a.msgPool.Get().(*FluentMsg)
 				if msg.Message, ok = _entry.([]interface{})[1].(map[string]interface{}); !ok {
 					utils.Logger.Error("failed to decode message", zap.String("tag", tag))
@@ -115,13 +116,22 @@ func (a *Acceptor) decodeMsg(conn net.Conn) {
 					continue
 				}
 				msg.Tag = tag
-				msg.Id = a.couter.Count()
-				a.msgChan <- msg
+				a.SendMsg(msg)
 			}
 		case []byte:
 			utils.Logger.Debug("got message in format: `[]byte`")
-			reader = bytes.NewReader(tsOrData)
-			dec2 = codec.NewDecoder(reader, NewCodec())
+			if reader == nil {
+				reader = bytes.NewReader(v[1].([]byte))
+			} else {
+				reader.Reset(v[1].([]byte))
+			}
+
+			if dec2 != nil {
+				dec2.Reset(reader)
+			} else {
+				dec2 = codec.NewDecoder(reader, _codec)
+			}
+
 			for reader.Len() > 0 {
 				v2[1] = nil
 				if err = dec2.Decode(&v2); err == io.EOF {
@@ -133,8 +143,7 @@ func (a *Acceptor) decodeMsg(conn net.Conn) {
 					msg = a.msgPool.Get().(*FluentMsg)
 					msg.Message = v2[1].(map[string]interface{})
 					msg.Tag = tag
-					msg.Id = a.couter.Count()
-					a.msgChan <- msg
+					a.SendMsg(msg)
 				}
 			}
 		default:
@@ -142,13 +151,17 @@ func (a *Acceptor) decodeMsg(conn net.Conn) {
 			msg = a.msgPool.Get().(*FluentMsg)
 			msg.Message = v[2].(map[string]interface{})
 			msg.Tag = tag
-			msg.Id = a.couter.Count()
-			if msg.Id > 100000000 {
-				a.couter.Set(0)
-			}
-			a.msgChan <- msg
+			a.SendMsg(msg)
 		}
 	}
+}
+
+func (a *Acceptor) SendMsg(msg *FluentMsg) {
+	msg.Id = a.couter.Count()
+	if msg.Id == 100000000 {
+		a.couter.Set(0)
+	}
+	a.msgChan <- msg
 }
 
 // MessageChan return the message chan that received by acceptor

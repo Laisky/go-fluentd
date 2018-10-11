@@ -18,6 +18,7 @@ type Concator struct {
 	slot       map[string]*PendingMsg
 	regex      *regexp.Regexp // regex to match first line
 	pMsgPool   *sync.Pool
+	maxLen     int
 }
 
 // ConcatorFactory can spawn new Concator
@@ -42,6 +43,7 @@ func NewConcator(outChan chan<- *FluentMsg, msgKey, identifier string, regex *re
 		regex:      regex,
 		slot:       map[string]*PendingMsg{},
 		pMsgPool:   pMsgPool,
+		maxLen:     utils.Settings.GetInt("settings.max_msg_length"),
 	}
 }
 
@@ -61,7 +63,7 @@ func (c *Concator) Run(inChan <-chan *FluentMsg) {
 
 		now             time.Time
 		initWaitTs      = 200 * time.Millisecond
-		maxWaitTs       = 1 * time.Second
+		maxWaitTs       = 200 * time.Microsecond
 		waitTs          = initWaitTs
 		nWaits          = 0
 		nWaitsToDouble  = 2
@@ -75,7 +77,8 @@ func (c *Concator) Run(inChan <-chan *FluentMsg) {
 			now = time.Now()
 			timer.Reset(now)
 			identifierI, ok = msg.Message[c.identifier]
-			if !ok { // messages without identifier
+			// messages without identifier
+			if !ok {
 				utils.Logger.Warn("identifier not exists", zap.String("identifier", c.identifier), zap.String("tag", msg.Tag))
 				c.outChan <- msg
 				continue
@@ -83,9 +86,9 @@ func (c *Concator) Run(inChan <-chan *FluentMsg) {
 
 			identifier = string(identifierI.([]byte))
 			pmsg, ok = c.slot[identifier]
-			if !ok { // new identifier
+			// new identifier
+			if !ok {
 				utils.Logger.Debug("got new identifier", zap.String("identifier", identifier), zap.ByteString("log", msg.Message[c.msgKey].([]byte)))
-				msg.extIds = []int64{} // create ids, wait to append tail-msg's id
 				pmsg = c.pMsgPool.Get().(*PendingMsg)
 				pmsg.lastT = now
 				pmsg.msg = msg
@@ -103,7 +106,6 @@ func (c *Concator) Run(inChan <-chan *FluentMsg) {
 			if c.regex.MatchString(string(msgI.([]byte))) { // new line
 				utils.Logger.Debug("got new line", zap.ByteString("log", msg.Message[c.msgKey].([]byte)))
 				c.outChan <- c.slot[identifier].msg
-				msg.extIds = []int64{} // create ids, wait to append tail-msg's id
 				c.slot[identifier].msg = msg
 				c.slot[identifier].lastT = now
 				continue
@@ -115,8 +117,19 @@ func (c *Concator) Run(inChan <-chan *FluentMsg) {
 				append(c.slot[identifier].msg.Message[c.msgKey].([]byte), '\n')
 			c.slot[identifier].msg.Message[c.msgKey] =
 				append(c.slot[identifier].msg.Message[c.msgKey].([]byte), msg.Message[c.msgKey].([]byte)...)
+			if c.slot[identifier].msg.extIds == nil {
+				c.slot[identifier].msg.extIds = []int64{} // create ids, wait to append tail-msg's id
+			}
 			c.slot[identifier].msg.extIds = append(c.slot[identifier].msg.extIds, msg.Id)
 			c.slot[identifier].lastT = now
+
+			// too long to send
+			if len(c.slot[identifier].msg.Message[c.msgKey].([]byte)) >= c.maxLen {
+				utils.Logger.Debug("too long to send", zap.String("msgKey", c.msgKey), zap.String("tag", msg.Tag))
+				c.outChan <- c.slot[identifier].msg
+				c.pMsgPool.Put(c.slot[identifier])
+				delete(c.slot, identifier)
+			}
 
 		default: // check timeout
 			now = time.Now()
@@ -137,7 +150,7 @@ func (c *Concator) Run(inChan <-chan *FluentMsg) {
 // NewConcatorFactory create new ConcatorFactory
 func NewConcatorFactory() *ConcatorFactory {
 	utils.Logger.Info("create concatorFactory")
-	outChan := make(chan *FluentMsg, 1000)
+	outChan := make(chan *FluentMsg, 5000)
 	return &ConcatorFactory{
 		outChan: outChan,
 		pMsgPool: &sync.Pool{

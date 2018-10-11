@@ -13,12 +13,21 @@ import (
 	"github.com/pkg/errors"
 )
 
+var (
+	outChanCap     = 5000
+	outChanBusyLen = 3500
+)
+
+// Journal dumps all messages to files,
+// then check every msg with commited id to make sure no msg lost
 type Journal struct {
 	bufDirPath string
 	j          *journal.Journal
 	legacyLock uint32
+	outChan    chan *FluentMsg
 }
 
+// NewJournal create new Journal with `bufDirPath` and `bufFileSize`
 func NewJournal(bufDirPath string, bufFileSize int64) *Journal {
 	cfg := &journal.JournalConfig{
 		BufDirPath:   bufDirPath,
@@ -29,7 +38,17 @@ func NewJournal(bufDirPath string, bufFileSize int64) *Journal {
 		bufDirPath: bufDirPath,
 		j:          journal.NewJournal(cfg),
 		legacyLock: 0,
+		outChan:    make(chan *FluentMsg, outChanCap),
 	}
+}
+
+// LoadMaxId load the max commited id from journal
+func (j *Journal) LoadMaxId() (int64, error) {
+	return j.j.LoadMaxId()
+}
+
+func (j *Journal) GetOutChan() chan *FluentMsg {
+	return j.outChan
 }
 
 func (j *Journal) ConvertMsg2Buf(msg *FluentMsg, data *map[string]interface{}) {
@@ -51,11 +70,9 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan chan *FluentMsg) 
 		msg  *FluentMsg
 		data = map[string]interface{}{}
 	)
-	for {
-		if j.j.LockLegacy() { // avoid rotate
-			break
-		}
-		time.Sleep(1 * time.Millisecond)
+
+	if !j.j.LockLegacy() { // avoid rotate
+		return
 	}
 
 	startTs := time.Now()
@@ -88,15 +105,11 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan chan *FluentMsg) 
 }
 
 func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, msgChan <-chan *FluentMsg) chan *FluentMsg {
-	var (
-		newChan = make(chan *FluentMsg, 5000)
-	)
-
 	// deal with legacy
 	go func() {
 		var err error
 		for {
-			if _, err = j.ProcessLegacyMsg(msgPool, newChan); err != nil {
+			if _, err = j.ProcessLegacyMsg(msgPool, j.outChan); err != nil {
 				utils.Logger.Error("process legacy got error", zap.Error(err))
 			}
 			time.Sleep(1 * time.Minute) // per minute
@@ -132,11 +145,20 @@ func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, msgChan <-chan *FluentMsg) cha
 			}
 
 			utils.Logger.Debug("success write data journal", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id))
-			newChan <- msg
+
+			// give chan to legacy processing
+			if j.j.IsLegacyRunning() && len(j.outChan) > outChanBusyLen {
+				continue
+			}
+
+			select {
+			case j.outChan <- msg:
+			default:
+			}
 		}
 	}()
 
-	return newChan
+	return j.outChan
 }
 
 func (j *Journal) GetCommitChan() chan<- int64 {

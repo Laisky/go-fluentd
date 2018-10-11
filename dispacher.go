@@ -1,7 +1,10 @@
 package concator
 
 import (
+	"fmt"
 	"regexp"
+
+	"github.com/kataras/iris"
 
 	"go.uber.org/zap"
 
@@ -44,6 +47,7 @@ func NewDispatcher(msgChan <-chan *FluentMsg, cf ConcatorFactoryItf, bypassMsgCh
 // Run dispacher to distrubute messages to different concators
 func (d *Dispatcher) Run() {
 	utils.Logger.Info("run dispacher...")
+	d.BindMonitor()
 	go func() {
 		var (
 			msgChan chan<- *FluentMsg
@@ -79,13 +83,25 @@ func (d *Dispatcher) Run() {
 	}()
 }
 
+func (d *Dispatcher) BindMonitor() {
+	utils.Logger.Info("bind `/monitor/dispatcher`")
+	Server.Get("/monitor/dispatcher", func(ctx iris.Context) {
+		cnt := "concatorMap tag:chan\n"
+		for tag, c := range d.concatorMap {
+			cnt += fmt.Sprintf("> %v: %v\n", tag, len(c))
+		}
+		ctx.Writef(cnt)
+	})
+}
+
 // LoadDispatcherConfig return the configurations about dispatch rules
 func LoadDispatcherConfig() map[string]*DispatcherConfig {
 	dispatherConfigs := map[string]*DispatcherConfig{}
+	env := "." + utils.Settings.GetString("env")
 	var cfg map[string]interface{}
 	for tag, cfgI := range utils.Settings.Get("settings.tag_configs").(map[string]interface{}) {
 		cfg = cfgI.(map[string]interface{})
-		dispatherConfigs[tag] = &DispatcherConfig{
+		dispatherConfigs[tag+env] = &DispatcherConfig{
 			MsgKey:     cfg["msg_key"].(string),
 			Identifier: cfg["identifier"].(string),
 			Regex:      regexp.MustCompile(cfg["regex"].(string)),

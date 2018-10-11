@@ -112,7 +112,7 @@ func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, msgChan <-chan *FluentMsg) cha
 			if _, err = j.ProcessLegacyMsg(msgPool, j.outChan); err != nil {
 				utils.Logger.Error("process legacy got error", zap.Error(err))
 			}
-			time.Sleep(1 * time.Minute) // per minute
+			time.Sleep(30 * time.Second)
 		}
 	}()
 

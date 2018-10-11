@@ -1,7 +1,12 @@
 package concator
 
 import (
+	"bufio"
+	"bytes"
 	"io"
+
+	"github.com/Laisky/go-utils"
+	"go.uber.org/zap"
 
 	"github.com/ugorji/go/codec"
 )
@@ -12,21 +17,44 @@ type TinyFluentRecord struct {
 }
 
 type Encoder struct {
-	wrap    []interface{}
-	encoder *codec.Encoder
+	wrap, batchWrap               []interface{}
+	encoder, internalBatchEncoder *codec.Encoder
+	msgBuf                        *bytes.Buffer
+	msgWriter                     *bufio.Writer
+	tmpMsg                        *FluentMsg
 }
 
 func NewEncoder(writer io.Writer) *Encoder {
-	return &Encoder{
-		wrap:    []interface{}{nil, []TinyFluentRecord{TinyFluentRecord{}}},
-		encoder: codec.NewEncoder(writer, NewCodec()),
+	enc := &Encoder{
+		wrap:      []interface{}{0, []TinyFluentRecord{TinyFluentRecord{}}},
+		encoder:   codec.NewEncoder(writer, NewCodec()),
+		msgBuf:    &bytes.Buffer{},
+		batchWrap: []interface{}{nil, nil, nil},
 	}
+	enc.msgWriter = bufio.NewWriter(enc.msgBuf)
+	enc.internalBatchEncoder = codec.NewEncoder(enc.msgWriter, NewCodec())
+	return enc
 }
 
 func (e *Encoder) Encode(msg *FluentMsg) error {
 	e.wrap[0] = msg.Tag
 	e.wrap[1].([]TinyFluentRecord)[0].Data = msg.Message
 	return e.encoder.Encode(e.wrap)
+}
+
+func (e *Encoder) EncodeBatch(tag string, msgBatch []*FluentMsg) (err error) {
+	for _, e.tmpMsg = range msgBatch {
+		e.wrap[1] = e.tmpMsg.Message
+		if err = e.internalBatchEncoder.Encode(e.wrap); err != nil {
+			utils.Logger.Error("try to encode msg got error", zap.String("tag", tag))
+		}
+	}
+
+	e.batchWrap[0] = tag
+	e.msgWriter.Flush()
+	e.batchWrap[1] = e.msgBuf.Bytes()
+	e.msgBuf.Reset()
+	return e.encoder.Encode(e.batchWrap)
 }
 
 type Decoder struct {

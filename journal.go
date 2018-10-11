@@ -18,6 +18,8 @@ var (
 	outChanBusyLen = 3500
 )
 
+// Journal dumps all messages to files,
+// then check every msg with commited id to make sure no msg lost
 type Journal struct {
 	bufDirPath string
 	j          *journal.Journal
@@ -25,6 +27,7 @@ type Journal struct {
 	outChan    chan *FluentMsg
 }
 
+// NewJournal create new Journal with `bufDirPath` and `bufFileSize`
 func NewJournal(bufDirPath string, bufFileSize int64) *Journal {
 	cfg := &journal.JournalConfig{
 		BufDirPath:   bufDirPath,
@@ -39,6 +42,7 @@ func NewJournal(bufDirPath string, bufFileSize int64) *Journal {
 	}
 }
 
+// LoadMaxId load the max commited id from journal
 func (j *Journal) LoadMaxId() (int64, error) {
 	return j.j.LoadMaxId()
 }

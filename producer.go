@@ -151,7 +151,7 @@ func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) ch
 							goto RECONNECT
 						}
 
-						time.Sleep(100 * time.Microsecond)
+						time.Sleep(100 * time.Millisecond)
 						continue
 					}
 

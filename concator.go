@@ -62,8 +62,8 @@ func (c *Concator) Run(inChan <-chan *FluentMsg) {
 		ok                bool
 
 		now             time.Time
-		initWaitTs      = 20 * time.Microsecond
-		maxWaitTs       = 500 * time.Microsecond
+		initWaitTs      = 20 * time.Millisecond
+		maxWaitTs       = 500 * time.Millisecond
 		waitTs          = initWaitTs
 		nWaits          = 0
 		nWaitsToDouble  = 2

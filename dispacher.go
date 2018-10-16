@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/kataras/iris"
-
-	"go.uber.org/zap"
-
+	"github.com/Laisky/go-concator/libs"
 	utils "github.com/Laisky/go-utils"
+	"github.com/kataras/iris"
+	"go.uber.org/zap"
 )
 
 // DispatcherConfig configurations about how to dispatch messages
@@ -19,28 +18,28 @@ type DispatcherConfig struct {
 
 // Dispatcher dispatch messages by tag to different concator
 type Dispatcher struct {
-	concatorMap      map[string]chan<- *FluentMsg // tag:msgchan
-	msgChan          <-chan *FluentMsg
+	concatorMap      map[string]chan<- *libs.FluentMsg // tag:msgchan
+	msgChan          <-chan *libs.FluentMsg
 	cf               ConcatorFactoryItf
 	dispatherConfigs map[string]*DispatcherConfig // tag:config
-	bypassMsgChan    chan<- *FluentMsg            // skip concator, direct to producer
+	bypassMsgChan    chan<- *libs.FluentMsg       // skip concator, direct to producer
 }
 
 // ConcatorFactoryItf interface of ConcatorFactory,
 // decoupling with specific ConcatorFactory
 type ConcatorFactoryItf interface {
-	Spawn(string, string, *regexp.Regexp) chan<- *FluentMsg
+	Spawn(string, string, *regexp.Regexp) chan<- *libs.FluentMsg
 }
 
 // NewDispatcher create new Dispatcher
-func NewDispatcher(msgChan <-chan *FluentMsg, cf ConcatorFactoryItf, bypassMsgChan chan<- *FluentMsg) *Dispatcher {
+func NewDispatcher(msgChan <-chan *libs.FluentMsg, cf ConcatorFactoryItf, bypassMsgChan chan<- *libs.FluentMsg) *Dispatcher {
 	utils.Logger.Info("create Dispatcher")
 	return &Dispatcher{
 		msgChan:          msgChan,
 		cf:               cf,
 		dispatherConfigs: LoadDispatcherConfig(),
 		bypassMsgChan:    bypassMsgChan,
-		concatorMap:      map[string]chan<- *FluentMsg{},
+		concatorMap:      map[string]chan<- *libs.FluentMsg{},
 	}
 }
 
@@ -50,7 +49,7 @@ func (d *Dispatcher) Run() {
 	d.BindMonitor()
 	go func() {
 		var (
-			msgChan chan<- *FluentMsg
+			msgChan chan<- *libs.FluentMsg
 			ok      bool
 			cfg     *DispatcherConfig
 		)

@@ -6,31 +6,30 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kataras/iris"
-
-	"go.uber.org/zap"
-
+	"github.com/Laisky/go-concator/libs"
 	utils "github.com/Laisky/go-utils"
+	"github.com/kataras/iris"
+	"go.uber.org/zap"
 )
 
 // Producer send messages to downstream
 type Producer struct {
 	addr               string
-	msgChan            <-chan *FluentMsg
+	msgChan            <-chan *libs.FluentMsg
 	msgPool            *sync.Pool
-	producerTagChanMap map[string]chan<- *FluentMsg
-	retryMsgChan       chan *FluentMsg
+	producerTagChanMap map[string]chan<- *libs.FluentMsg
+	retryMsgChan       chan *libs.FluentMsg
 }
 
 // NewProducer create new producer
-func NewProducer(addr string, msgChan <-chan *FluentMsg, msgPool *sync.Pool) *Producer {
+func NewProducer(addr string, msgChan <-chan *libs.FluentMsg, msgPool *sync.Pool) *Producer {
 	utils.Logger.Info("create Producer")
 	p := &Producer{
 		addr:               addr,
 		msgChan:            msgChan,
 		msgPool:            msgPool,
-		producerTagChanMap: map[string]chan<- *FluentMsg{},
-		retryMsgChan:       make(chan *FluentMsg, 500),
+		producerTagChanMap: map[string]chan<- *libs.FluentMsg{},
+		retryMsgChan:       make(chan *libs.FluentMsg, 500),
 	}
 	p.BindMonitor()
 	return p
@@ -54,7 +53,7 @@ func (p *Producer) Run(fork int, commitChan chan<- int64) {
 	utils.Logger.Info("start producer", zap.String("addr", p.addr))
 
 	var (
-		msg *FluentMsg
+		msg *libs.FluentMsg
 		ok  bool
 	)
 
@@ -77,10 +76,10 @@ func (p *Producer) Run(fork int, commitChan chan<- int64) {
 }
 
 // SpawnForTag spawn `fork` numbers connections to downstream for each tag
-func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) chan<- *FluentMsg {
+func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) chan<- *libs.FluentMsg {
 	utils.Logger.Info("SpawnForTag", zap.Int("fork", fork), zap.String("tag", tag))
 	var (
-		inChan = make(chan *FluentMsg, 1000) // for each tag
+		inChan = make(chan *libs.FluentMsg, 1000) // for each tag
 	)
 
 	for i := 0; i < fork; i++ { // parallel to each tag
@@ -91,10 +90,10 @@ func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) ch
 				nRetry           = 0
 				maxRetry         = 3
 				id               int64
-				msg              *FluentMsg
+				msg              *libs.FluentMsg
 				maxNBatch        = utils.Settings.GetInt("settings.msg_batch_size")
-				msgBatch         = make([]*FluentMsg, maxNBatch)
-				msgBatchDelivery []*FluentMsg
+				msgBatch         = make([]*libs.FluentMsg, maxNBatch)
+				msgBatchDelivery []*libs.FluentMsg
 				iBatch           = 0
 				lastT            = time.Unix(0, 0)
 				maxWait          = 30 * time.Second
@@ -162,13 +161,13 @@ func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) ch
 			FINISHED:
 				for _, msg = range msgBatchDelivery {
 					commitChan <- msg.Id
-					if msg.extIds != nil {
-						for _, id = range msg.extIds {
+					if msg.ExtIds != nil {
+						for _, id = range msg.ExtIds {
 							commitChan <- id
 						}
 					}
 
-					msg.extIds = nil
+					msg.ExtIds = nil
 					p.msgPool.Put(msg)
 				}
 			}

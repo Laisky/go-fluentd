@@ -1,5 +1,5 @@
-hash: a5963158349cd272f7b6288281963b18085e1c1ed62b495a44562955e2e5c912
-updated: 2018-10-09T15:18:06.970727541+08:00
+hash: be45c2ab820956bfe4df6643b8ffc6e4aa7a3099d38b98c9a68152ed6a4ced9d
+updated: 2018-10-18T11:42:13.70922431+08:00
 imports:
 - name: github.com/aymerick/raymond
   version: b565731e1464263de0bda75f2e45d97b54b60110
@@ -7,10 +7,24 @@ imports:
   - ast
   - lexer
   - parser
+- name: github.com/bsm/sarama-cluster
+  version: c618e605e15c0d7535f6c96ff8efbb0dba4fd66c
 - name: github.com/BurntSushi/toml
   version: a368813c5e648fee92e5f6c30e3944ff9d5e8895
+- name: github.com/davecgh/go-spew
+  version: 8991bc29aa16c548c550c7ff78260e27b9ab7c73
+  subpackages:
+  - spew
 - name: github.com/dgrijalva/jwt-go
   version: 06ea1031745cb8b3dab3f6a236daf2b0aa468b7e
+- name: github.com/eapache/go-resiliency
+  version: ea41b0fad31007accc7f806884dcdf3da98b79ce
+  subpackages:
+  - breaker
+- name: github.com/eapache/go-xerial-snappy
+  version: bb955e01b9346ac19dc29eb16586c90ded99a98c
+- name: github.com/eapache/queue
+  version: 093482f3f8ce946c05bcba64badd2c82369e084d
 - name: github.com/eknkc/amber
   version: cdade1c073850f4ffc70a829e31235ea6892853b
   subpackages:
@@ -99,10 +113,11 @@ imports:
 - name: github.com/Laisky/go-chaining
   version: 43dcdc5a21be9b79f2b7ee0d8ba67ed8a7158cda
 - name: github.com/Laisky/go-utils
-  version: 6adb42cd301dfb63dfba4540935105c4cc94648f
+  version: df761c70ddc990ab3e0d6cdc995c9e569174b571
   vcs: git
   subpackages:
   - journal
+  - kafka
 - name: github.com/magiconair/properties
   version: c2353362d570a7bfa228149c62842019201cfb71
 - name: github.com/mattn/go-colorable
@@ -125,12 +140,20 @@ imports:
   version: c01d1270ff3e442a8a57cddc1c92dc1138598194
 - name: github.com/philhofer/fwd
   version: bb6d471dc95d4fe11e432687f8b70ff496cf3136
+- name: github.com/pierrec/lz4
+  version: 6b9367c9ff401dbc54fabce3fb8d972e799b702d
+  subpackages:
+  - internal/xxh32
 - name: github.com/pkg/errors
   version: 645ef00459ed84a119197bfb8d8205042c6df63d
+- name: github.com/rcrowley/go-metrics
+  version: e2704e165165ec55d062f5919b4b29494e9fa790
 - name: github.com/RoaringBitmap/roaring
   version: 3d677d3262197ee558b85029301eb69b8239f91a
 - name: github.com/ryanuber/columnize
   version: abc90934186a77966e2beeac62ed966aac0561d5
+- name: github.com/Shopify/sarama
+  version: ec843464b50d4c8b56403ec9d589cf41ea30e722
 - name: github.com/shurcooL/sanitized_anchor_name
   version: 86672fcb3f950f35f2e675df2240550f2a50762f
 - name: github.com/spf13/afero

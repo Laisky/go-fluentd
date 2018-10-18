@@ -8,6 +8,8 @@ Replace fluentd concat
 Roles:
 
 - Acceptor
+- AcceptorFilters
+- Journal
 - Dispatcher
 - Concator
 - Producer

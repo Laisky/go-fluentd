@@ -9,6 +9,7 @@ import (
 
 	"github.com/Laisky/go-concator/acceptorFilters"
 	"github.com/Laisky/go-concator/libs"
+	"github.com/Laisky/go-concator/postFilters"
 	"github.com/Laisky/go-concator/recvs"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/go-utils/kafka"
@@ -103,7 +104,7 @@ func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorP
 			Env:   env,
 			Rules: acceptorFilters.ParseSpringRules(utils.Settings.Get("settings.acceptor_filters.spring.rules").([]interface{})),
 		}),
-		// set the DefaultFilter as the last filter
+		// set the DefaultFilter as last filter
 		acceptorFilters.NewDefaultFilter(acceptorFilters.NewDefaultFilterCfg()),
 	)
 }
@@ -115,6 +116,16 @@ func (c *Controllor) initDispatcher(waitDispatchChan chan *libs.FluentMsg, conca
 	dispatcher.Run()
 
 	return dispatcher
+}
+
+func (c *Controllor) initPostPipeline(env string) *postFilters.PostPipeline {
+	return postFilters.NewPostPipeline(
+		c.msgPool,
+		postFilters.NewDefaultFilter(&postFilters.DefaultFilterCfg{
+			MsgKey: utils.Settings.GetString("settings.post_filters.default.msg_key"),
+			MaxLen: utils.Settings.GetInt("settings.post_filters.default.max_len"),
+		}),
+	)
 }
 
 func (c *Controllor) initProducer(waitProduceChan chan *libs.FluentMsg) *Producer {
@@ -151,7 +162,11 @@ func (c *Controllor) Run() {
 
 	concatorFact := NewConcatorFactory()
 	dispatcher := c.initDispatcher(waitDispatchChan, concatorFact)
-	waitProduceChan := dispatcher.GetOutChan()
+
+	waitPostPipelineChan := dispatcher.GetOutChan()
+	postPipeline := c.initPostPipeline(env)
+	waitProduceChan := postPipeline.Wrap(waitPostPipelineChan)
+
 	producer := c.initProducer(waitProduceChan)
 	waitCommitChan := journal.GetCommitChan()
 

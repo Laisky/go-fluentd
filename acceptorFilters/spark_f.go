@@ -13,6 +13,8 @@ type SparkFilterCfg struct {
 	MsgKey, Tag string
 }
 
+// SparkFilter filter spark messages.
+// some old spark messages need tobe discard
 type SparkFilter struct {
 	*BaseFilter
 	*SparkFilterCfg
@@ -34,8 +36,9 @@ func (f *SparkFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 		return msg
 	}
 
-	// ignore some format
+	// discard some format
 	if f.IgnoreRegex.Match(msg.Message[f.MsgKey].([]byte)) {
+		f.msgPool.Put(msg)
 		return nil
 	}
 

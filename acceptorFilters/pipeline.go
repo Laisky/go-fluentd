@@ -29,6 +29,7 @@ func (f *AcceptorPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan chan *libs
 
 	for _, filter = range f.filters {
 		filter.SetUpstream(inChan)
+		filter.SetMsgPool(f.msgPool)
 	}
 
 	go func() {
@@ -37,7 +38,6 @@ func (f *AcceptorPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan chan *libs
 			msg = origMsg
 			for _, filter = range f.filters {
 				if msg = filter.Filter(msg); msg == nil { // msg has been discarded
-					f.msgPool.Put(origMsg)
 					goto NEXT_MSG
 				}
 			}

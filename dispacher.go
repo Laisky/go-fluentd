@@ -19,26 +19,27 @@ type DispatcherConfig struct {
 // Dispatcher dispatch messages by tag to different concator
 type Dispatcher struct {
 	concatorMap      map[string]chan<- *libs.FluentMsg // tag:msgchan
-	msgChan          <-chan *libs.FluentMsg
+	inChan           <-chan *libs.FluentMsg
 	cf               ConcatorFactoryItf
 	dispatherConfigs map[string]*DispatcherConfig // tag:config
-	bypassMsgChan    chan<- *libs.FluentMsg       // skip concator, direct to producer
+	outChan          chan *libs.FluentMsg         // skip concator, direct to producer
 }
 
 // ConcatorFactoryItf interface of ConcatorFactory,
 // decoupling with specific ConcatorFactory
 type ConcatorFactoryItf interface {
 	Spawn(string, string, *regexp.Regexp) chan<- *libs.FluentMsg
+	MessageChan() chan *libs.FluentMsg
 }
 
 // NewDispatcher create new Dispatcher
-func NewDispatcher(msgChan <-chan *libs.FluentMsg, cf ConcatorFactoryItf, bypassMsgChan chan<- *libs.FluentMsg) *Dispatcher {
+func NewDispatcher(inChan <-chan *libs.FluentMsg, cf ConcatorFactoryItf) *Dispatcher {
 	utils.Logger.Info("create Dispatcher")
 	return &Dispatcher{
-		msgChan:          msgChan,
+		inChan:           inChan,
 		cf:               cf,
 		dispatherConfigs: LoadDispatcherConfig(),
-		bypassMsgChan:    bypassMsgChan,
+		outChan:          cf.MessageChan(),
 		concatorMap:      map[string]chan<- *libs.FluentMsg{},
 	}
 }
@@ -54,7 +55,7 @@ func (d *Dispatcher) Run() {
 			cfg     *DispatcherConfig
 		)
 		// send each message to appropriate concator by `tag`
-		for msg := range d.msgChan {
+		for msg := range d.inChan {
 			msgChan, ok = d.concatorMap[msg.Tag]
 			if ok {
 				msgChan <- msg
@@ -65,7 +66,7 @@ func (d *Dispatcher) Run() {
 			cfg, ok = d.dispatherConfigs[msg.Tag]
 			if !ok { // unknown tag
 				utils.Logger.Warn("got unknown tag", zap.String("tag", msg.Tag))
-				d.bypassMsgChan <- msg
+				d.outChan <- msg
 				continue
 			}
 
@@ -91,6 +92,10 @@ func (d *Dispatcher) BindMonitor() {
 		}
 		ctx.Writef(cnt)
 	})
+}
+
+func (d *Dispatcher) GetOutChan() chan *libs.FluentMsg {
+	return d.outChan
 }
 
 // LoadDispatcherConfig return the configurations about dispatch rules

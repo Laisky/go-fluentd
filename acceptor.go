@@ -57,6 +57,6 @@ func (a *Acceptor) Run() (err error) {
 }
 
 // MessageChan return the message chan that received by acceptor
-func (a *Acceptor) MessageChan() <-chan *libs.FluentMsg {
+func (a *Acceptor) MessageChan() chan *libs.FluentMsg {
 	return a.msgChan
 }

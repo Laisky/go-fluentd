@@ -15,7 +15,7 @@ var (
 )
 
 func RunServer(addr string) {
-	Server.Get("/health", func(ctx iris.Context) {
+	Server.Any("/health", func(ctx iris.Context) {
 		ctx.Write([]byte("Hello, World"))
 	})
 

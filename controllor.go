@@ -97,6 +97,7 @@ func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorP
 		acceptorFilters.NewSparkFilter(&acceptorFilters.SparkFilterCfg{
 			Tag:         "spark." + env,
 			MsgKey:      utils.Settings.GetString("settings.acceptor_filters.spark.msg_key"),
+			Identifier:  utils.Settings.GetString("settings.acceptor_filters.spark.container_id"),
 			IgnoreRegex: regexp.MustCompile(utils.Settings.GetString("settings.acceptor_filters.spark.ignore_regex")),
 		}),
 		acceptorFilters.NewSpringFilter(&acceptorFilters.SpringFilterCfg{

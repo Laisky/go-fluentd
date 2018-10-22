@@ -2,6 +2,8 @@ package postFilters
 
 import (
 	"github.com/Laisky/go-concator/libs"
+	"github.com/Laisky/go-utils"
+	"go.uber.org/zap"
 )
 
 type DefaultFilterCfg struct {
@@ -22,8 +24,13 @@ func NewDefaultFilter(cfg *DefaultFilterCfg) *DefaultFilter {
 }
 
 func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
-	if len(msg.Message[f.MsgKey].([]byte)) > f.MaxLen {
-		msg.Message[f.MsgKey] = msg.Message[f.MsgKey].([]byte)[:f.MaxLen]
+	switch msg.Message[f.MsgKey].(type) {
+	case []byte:
+		if len(msg.Message[f.MsgKey].([]byte)) > f.MaxLen {
+			msg.Message[f.MsgKey] = msg.Message[f.MsgKey].([]byte)[:f.MaxLen]
+		}
+	default:
+		utils.Logger.Warn("unknon message key", zap.String("tag", msg.Tag))
 	}
 
 	return msg

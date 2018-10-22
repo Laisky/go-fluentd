@@ -9,8 +9,8 @@ import (
 )
 
 type SparkFilterCfg struct {
-	IgnoreRegex *regexp.Regexp
-	MsgKey, Tag string
+	IgnoreRegex             *regexp.Regexp
+	MsgKey, Tag, Identifier string
 }
 
 // SparkFilter filter spark messages.
@@ -41,6 +41,9 @@ func (f *SparkFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 		f.msgPool.Put(msg)
 		return nil
 	}
+
+	// set spark container_id
+	msg.Message[f.Identifier] = "spark"
 
 	return msg
 }

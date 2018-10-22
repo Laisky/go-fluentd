@@ -94,15 +94,17 @@ func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorP
 	return acceptorFilters.NewAcceptorPipeline(
 		c.msgPool,
 		acceptorFilters.NewSparkFilter(&acceptorFilters.SparkFilterCfg{
-			Tag:         utils.Settings.GetString("settings.acceptor_filters.spark.tags." + env),
+			Tag:         "spark." + env,
 			MsgKey:      utils.Settings.GetString("settings.acceptor_filters.spark.msg_key"),
 			IgnoreRegex: regexp.MustCompile(utils.Settings.GetString("settings.acceptor_filters.spark.ignore_regex")),
 		}),
 		acceptorFilters.NewSpringFilter(&acceptorFilters.SpringFilterCfg{
-			Tag:   utils.Settings.GetString("settings.acceptor_filters.spring.tags." + env),
+			Tag:   "spring." + env,
 			Env:   env,
 			Rules: acceptorFilters.ParseSpringRules(utils.Settings.Get("settings.acceptor_filters.spring.rules").([]interface{})),
 		}),
+		// set the DefaultFilter as the last filter
+		acceptorFilters.NewDefaultFilter(acceptorFilters.NewDefaultFilterCfg()),
 	)
 }
 

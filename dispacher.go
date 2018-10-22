@@ -10,19 +10,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// DispatcherConfig configurations about how to dispatch messages
-type DispatcherConfig struct {
-	MsgKey, Identifier string
-	Regex              *regexp.Regexp
-}
-
 // Dispatcher dispatch messages by tag to different concator
 type Dispatcher struct {
 	concatorMap      map[string]chan<- *libs.FluentMsg // tag:msgchan
 	inChan           <-chan *libs.FluentMsg
 	cf               ConcatorFactoryItf
-	dispatherConfigs map[string]*DispatcherConfig // tag:config
-	outChan          chan *libs.FluentMsg         // skip concator, direct to producer
+	dispatherConfigs map[string]*libs.TagConfig // tag:config
+	outChan          chan *libs.FluentMsg       // skip concator, direct to producer
 }
 
 // ConcatorFactoryItf interface of ConcatorFactory,
@@ -38,7 +32,7 @@ func NewDispatcher(inChan <-chan *libs.FluentMsg, cf ConcatorFactoryItf) *Dispat
 	return &Dispatcher{
 		inChan:           inChan,
 		cf:               cf,
-		dispatherConfigs: LoadDispatcherConfig(),
+		dispatherConfigs: libs.LoadTagConfigs(),
 		outChan:          cf.MessageChan(),
 		concatorMap:      map[string]chan<- *libs.FluentMsg{},
 	}
@@ -52,7 +46,7 @@ func (d *Dispatcher) Run() {
 		var (
 			msgChan chan<- *libs.FluentMsg
 			ok      bool
-			cfg     *DispatcherConfig
+			cfg     *libs.TagConfig
 		)
 		// send each message to appropriate concator by `tag`
 		for msg := range d.inChan {
@@ -96,21 +90,4 @@ func (d *Dispatcher) BindMonitor() {
 
 func (d *Dispatcher) GetOutChan() chan *libs.FluentMsg {
 	return d.outChan
-}
-
-// LoadDispatcherConfig return the configurations about dispatch rules
-func LoadDispatcherConfig() map[string]*DispatcherConfig {
-	dispatherConfigs := map[string]*DispatcherConfig{}
-	env := "." + utils.Settings.GetString("env")
-	var cfg map[string]interface{}
-	for tag, cfgI := range utils.Settings.Get("settings.tag_configs").(map[string]interface{}) {
-		cfg = cfgI.(map[string]interface{})
-		dispatherConfigs[tag+env] = &DispatcherConfig{
-			MsgKey:     cfg["msg_key"].(string),
-			Identifier: cfg["identifier"].(string),
-			Regex:      regexp.MustCompile(cfg["regex"].(string)),
-		}
-	}
-
-	return dispatherConfigs
 }

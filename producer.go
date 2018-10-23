@@ -12,22 +12,28 @@ import (
 	"go.uber.org/zap"
 )
 
+type ProducerCfg struct {
+	Addr      string
+	InChan    chan *libs.FluentMsg
+	MsgPool   *sync.Pool
+	BatchSize int
+	MaxWait   time.Duration
+}
+
 // Producer send messages to downstream
 type Producer struct {
-	addr               string
-	msgChan            <-chan *libs.FluentMsg
-	msgPool            *sync.Pool
+	*ProducerCfg
 	producerTagChanMap map[string]chan<- *libs.FluentMsg
 	retryMsgChan       chan *libs.FluentMsg
 }
 
 // NewProducer create new producer
-func NewProducer(addr string, msgChan <-chan *libs.FluentMsg, msgPool *sync.Pool) *Producer {
-	utils.Logger.Info("create Producer")
+func NewProducer(cfg *ProducerCfg) *Producer {
+	utils.Logger.Info("create Producer",
+		zap.String("backend", cfg.Addr),
+		zap.Duration("maxWait", cfg.MaxWait))
 	p := &Producer{
-		addr:               addr,
-		msgChan:            msgChan,
-		msgPool:            msgPool,
+		ProducerCfg:        cfg,
 		producerTagChanMap: map[string]chan<- *libs.FluentMsg{},
 		retryMsgChan:       make(chan *libs.FluentMsg, 500),
 	}
@@ -50,7 +56,7 @@ func (p *Producer) BindMonitor() {
 
 // Run starting <n> Producer to send messages
 func (p *Producer) Run(fork int, commitChan chan<- int64) {
-	utils.Logger.Info("start producer", zap.String("addr", p.addr))
+	utils.Logger.Info("start producer", zap.String("addr", p.Addr))
 
 	var (
 		msg *libs.FluentMsg
@@ -60,7 +66,7 @@ func (p *Producer) Run(fork int, commitChan chan<- int64) {
 	for {
 		select {
 		case msg = <-p.retryMsgChan:
-		case msg = <-p.msgChan:
+		case msg = <-p.InChan:
 		}
 
 		if _, ok = p.producerTagChanMap[msg.Tag]; !ok {
@@ -91,19 +97,17 @@ func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) ch
 				maxRetry         = 3
 				id               int64
 				msg              *libs.FluentMsg
-				maxNBatch        = utils.Settings.GetInt("settings.msg_batch_size")
-				msgBatch         = make([]*libs.FluentMsg, maxNBatch)
+				msgBatch         = make([]*libs.FluentMsg, p.BatchSize)
 				msgBatchDelivery []*libs.FluentMsg
 				iBatch           = 0
 				lastT            = time.Unix(0, 0)
-				maxWait          = 30 * time.Second
 				encoder          *Encoder
 				conn             net.Conn
 				err              error
 			)
 
 		RECONNECT: // reconnect to downstream
-			conn, err = net.DialTimeout("tcp", p.addr, 10*time.Second)
+			conn, err = net.DialTimeout("tcp", p.Addr, 10*time.Second)
 			if err != nil {
 				utils.Logger.Error("try to connect to backend got error", zap.Error(err), zap.String("tag", tag))
 				time.Sleep(1 * time.Second)
@@ -117,8 +121,8 @@ func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) ch
 			for msg = range inChan {
 				msgBatch[iBatch] = msg
 				iBatch++
-				if iBatch < maxNBatch &&
-					time.Now().Sub(lastT) < maxWait {
+				if iBatch < p.BatchSize &&
+					time.Now().Sub(lastT) < p.MaxWait {
 					continue
 				}
 				lastT = time.Now()
@@ -139,8 +143,11 @@ func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) ch
 						if nRetry > maxRetry {
 							utils.Logger.Error("try send message got error", zap.Error(err), zap.String("tag", tag))
 
-							for _, msg = range msgBatchDelivery {
-								p.retryMsgChan <- msg
+							for _, msg = range msgBatchDelivery { // put back
+								select {
+								case p.retryMsgChan <- msg:
+								default:
+								}
 							}
 
 							if err = conn.Close(); err != nil {
@@ -154,7 +161,7 @@ func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) ch
 						continue
 					}
 
-					utils.Logger.Debug("success sent message to backend", zap.String("backend", p.addr), zap.String("tag", tag))
+					utils.Logger.Debug("success sent message to backend", zap.String("backend", p.Addr), zap.String("tag", tag))
 					goto FINISHED
 				}
 
@@ -168,7 +175,7 @@ func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) ch
 					}
 
 					msg.ExtIds = nil
-					p.msgPool.Put(msg)
+					p.MsgPool.Put(msg)
 				}
 			}
 		}()

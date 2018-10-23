@@ -34,10 +34,9 @@ func (f *PostPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan chan *libs.Flu
 
 	go func() {
 	NEXT_MSG:
-		for origMsg := range inChan {
-			msg = origMsg
+		for msg = range inChan {
 			for _, filter = range f.filters {
-				if msg = filter.Filter(msg); msg == nil { // msg has been discarded
+				if msg = filter.Filter(msg); msg == nil { // quit filters for this msg
 					goto NEXT_MSG
 				}
 			}

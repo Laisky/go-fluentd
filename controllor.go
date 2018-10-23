@@ -130,11 +130,13 @@ func (c *Controllor) initPostPipeline(env string) *postFilters.PostPipeline {
 }
 
 func (c *Controllor) initProducer(waitProduceChan chan *libs.FluentMsg) *Producer {
-	return NewProducer(
-		utils.Settings.GetString("settings.backend_addr"),
-		waitProduceChan,
-		c.msgPool,
-	)
+	return NewProducer(&ProducerCfg{
+		Addr:      utils.Settings.GetString("settings.producer.backend_addr"),
+		BatchSize: utils.Settings.GetInt("settings.producer.msg_batch_size"),
+		MaxWait:   utils.Settings.GetDuration("settings.producer.max_wait_sec") * time.Second,
+		InChan:    waitProduceChan,
+		MsgPool:   c.msgPool,
+	})
 }
 
 func (c *Controllor) runHeartBeat() {

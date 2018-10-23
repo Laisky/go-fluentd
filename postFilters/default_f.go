@@ -30,7 +30,7 @@ func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 			msg.Message[f.MsgKey] = msg.Message[f.MsgKey].([]byte)[:f.MaxLen]
 		}
 	default:
-		utils.Logger.Warn("unknon message key", zap.String("tag", msg.Tag))
+		utils.Logger.Warn("unknown message key", zap.String("tag", msg.Tag))
 	}
 
 	return msg

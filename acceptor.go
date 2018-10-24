@@ -31,7 +31,7 @@ func NewAcceptor(msgpool *sync.Pool, journal *Journal, recvs ...libs.AcceptorRec
 
 // Run starting acceptor to listening and receive messages,
 // you can use `acceptor.MessageChan()` to load messages`
-func (a *Acceptor) Run() (err error) {
+func (a *Acceptor) Run() {
 	var (
 		maxIDToRotate int64 = 100000000
 	)
@@ -48,12 +48,11 @@ func (a *Acceptor) Run() (err error) {
 	}
 
 	for _, recv := range a.recvs {
-		utils.Logger.Info("enable recv", zap.String("name", utils.GetFuncName(recv.Setup)))
+		utils.Logger.Info("enable recv", zap.String("name", recv.GetName()))
 		recv.Setup(a.msgPool, a.msgChan, couter)
 		go recv.Run()
 	}
 
-	return nil
 }
 
 // MessageChan return the message chan that received by acceptor

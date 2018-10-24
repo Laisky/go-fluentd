@@ -84,10 +84,8 @@ func (c *Controllor) initAcceptor(journal *Journal, receivers []libs.AcceptorRec
 		journal,
 		receivers...,
 	)
-	if err := acceptor.Run(); err != nil {
-		utils.Logger.Fatal("try to run acceptor", zap.Error(err))
-	}
 
+	acceptor.Run()
 	return acceptor
 }
 
@@ -97,7 +95,7 @@ func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorP
 		acceptorFilters.NewSparkFilter(&acceptorFilters.SparkFilterCfg{
 			Tag:         "spark." + env,
 			MsgKey:      utils.Settings.GetString("settings.acceptor_filters.spark.msg_key"),
-			Identifier:  utils.Settings.GetString("settings.acceptor_filters.spark.container_id"),
+			Identifier:  utils.Settings.GetString("settings.acceptor_filters.spark.identifier"),
 			IgnoreRegex: regexp.MustCompile(utils.Settings.GetString("settings.acceptor_filters.spark.ignore_regex")),
 		}),
 		acceptorFilters.NewSpringFilter(&acceptorFilters.SpringFilterCfg{
@@ -180,19 +178,25 @@ func (c *Controllor) Run() {
 	Server.Get("/monitor/controllor", func(ctx iris.Context) {
 		ctx.WriteString(fmt.Sprintf(`
 goroutine: %v
-waitDumpChan: %v
-waitDispatchChan: %v
-waitProduceChan: %v
-waitCommitChan: %v`,
+waitDumpChan: %v / %v
+waitAccepPipelineChan: %v / %v
+waitDispatchChan: %v / %v
+waitPostPipelineChan: %v / %v
+waitProduceChan: %v / %v
+waitCommitChan: %v / %v`,
 			runtime.NumGoroutine(),
-			len(waitDumpChan),
-			len(waitDispatchChan),
-			len(waitProduceChan),
-			len(waitCommitChan),
+			len(waitDumpChan), cap(waitDumpChan),
+			len(waitAccepPipelineChan), cap(waitAccepPipelineChan),
+			len(waitDispatchChan), cap(waitDispatchChan),
+			len(waitPostPipelineChan), cap(waitPostPipelineChan),
+			len(waitProduceChan), cap(waitProduceChan),
+			len(waitCommitChan), cap(waitCommitChan),
 		))
 	})
 
-	producer.Run(
+	go producer.Run(
 		utils.Settings.GetInt("settings.producer_forks"),
 		waitCommitChan)
+
+	RunServer(utils.Settings.GetString("addr"))
 }

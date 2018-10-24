@@ -1,6 +1,7 @@
 package acceptorFilters
 
 import (
+	"fmt"
 	"regexp"
 
 	"github.com/Laisky/go-concator/libs"
@@ -25,6 +26,10 @@ func NewSparkFilter(cfg *SparkFilterCfg) *SparkFilter {
 		zap.String("regex", cfg.IgnoreRegex.String()),
 		zap.String("tag", cfg.Tag))
 
+	if cfg.Identifier == "" {
+		panic(fmt.Errorf("`Identifier` should not be empty, but got: %v", cfg.Identifier))
+	}
+
 	return &SparkFilter{
 		BaseFilter:     &BaseFilter{},
 		SparkFilterCfg: cfg,
@@ -37,13 +42,16 @@ func (f *SparkFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	}
 
 	// discard some format
+	utils.Logger.Debug("ignore spark log",
+		zap.String("tag", f.Tag),
+		zap.ByteString("log", msg.Message[f.MsgKey].([]byte)))
 	if f.IgnoreRegex.Match(msg.Message[f.MsgKey].([]byte)) {
 		f.msgPool.Put(msg)
 		return nil
 	}
 
 	// set spark container_id
-	msg.Message[f.Identifier] = "spark"
+	msg.Message[f.Identifier] = []byte("spark")
 
 	return msg
 }

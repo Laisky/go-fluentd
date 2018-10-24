@@ -30,6 +30,10 @@ func NewTcpRecv(addr string) *TcpRecv {
 	}
 }
 
+func (r *TcpRecv) GetName() string {
+	return "TcpRecv"
+}
+
 func (r *TcpRecv) Run() {
 	utils.Logger.Info("run TcpRecv")
 	var (
@@ -72,6 +76,7 @@ func (r *TcpRecv) decodeMsg(conn net.Conn) {
 		entryI interface{}
 	)
 	for {
+		utils.Logger.Debug("wait to decode new message")
 		v[2] = nil // create new map, avoid influenced by old data
 		err = dec.Decode(&v)
 		if err == io.EOF {
@@ -82,7 +87,14 @@ func (r *TcpRecv) decodeMsg(conn net.Conn) {
 			return
 		}
 
-		tag = string(v[0].([]byte))
+		switch v[0].(type) {
+		case []byte:
+			tag = string(v[0].([]byte))
+		default:
+			utils.Logger.Error("message[0] is not `[]byte`")
+			continue
+		}
+
 		switch v[1].(type) {
 		case []interface{}:
 			utils.Logger.Debug("got message in format: `[]interface{}`")

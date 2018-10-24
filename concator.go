@@ -1,6 +1,7 @@
 package concator
 
 import (
+	"reflect"
 	"regexp"
 	"sync"
 	"time"
@@ -84,7 +85,19 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 				continue
 			}
 
-			identifier = string(identifierI.([]byte))
+			// unknown identifier type
+			switch identifierI.(type) {
+			case []byte:
+				identifier = string(identifierI.([]byte))
+			case string:
+				identifier = identifierI.(string)
+			default:
+				utils.Logger.Error("unknown identifier type, should be `[]byte` or `string`",
+					zap.String("type", reflect.TypeOf(identifierI).String()))
+				c.outChan <- msg
+				continue
+			}
+
 			pmsg, ok = c.slot[identifier]
 			// new identifier
 			if !ok {
@@ -104,7 +117,9 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 				continue
 			}
 			if c.regex.MatchString(string(msgI.([]byte))) { // new line
-				utils.Logger.Debug("got new line", zap.ByteString("log", msg.Message[c.msgKey].([]byte)))
+				utils.Logger.Debug("got new line",
+					zap.ByteString("log", msg.Message[c.msgKey].([]byte)),
+					zap.String("tag", msg.Tag))
 				c.outChan <- c.slot[identifier].msg
 				c.slot[identifier].msg = msg
 				c.slot[identifier].lastT = now

@@ -8,6 +8,7 @@ import (
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/go-utils/kafka"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 type KafkaCommitCfg struct {
@@ -32,9 +33,13 @@ type KafkaRecv struct {
 func NewKafkaRecv(cfg *KafkaCfg) *KafkaRecv {
 	utils.Logger.Info("create KafkaRecv")
 	return &KafkaRecv{
-		KafkaCfg: cfg,
 		BaseRecv: &BaseRecv{},
+		KafkaCfg: cfg,
 	}
+}
+
+func (r *KafkaRecv) GetName() string {
+	return "KafkaRecv"
 }
 
 func (r *KafkaRecv) Run() {
@@ -42,25 +47,29 @@ func (r *KafkaRecv) Run() {
 
 	for i := 0; i < r.NConsumer; i++ {
 		go func() {
-			cli, err := kafka.NewKafkaCliWithGroupId(&kafka.KafkaCliCfg{
-				Brokers:          r.Brokers,
-				Topics:           r.Topics,
-				Groupid:          r.Group,
-				KMsgPool:         r.KMsgPool,
-				IntervalNum:      r.IntervalNum,
-				IntervalDuration: r.IntervalDuration,
-			})
-			if err != nil {
-				panic(errors.Wrap(err, "try to connect to kafka got error"))
-			}
-
-			var (
-				kmsg  *kafka.KafkaMsg
-				msg   *libs.FluentMsg
-				metaK string
-				metaV interface{}
-			)
 			for {
+				utils.Logger.Info("connecot to kafka brokers",
+					zap.Strings("brokers", r.Brokers),
+					zap.Strings("topics", r.Topics),
+					zap.String("group", r.Group))
+				cli, err := kafka.NewKafkaCliWithGroupId(&kafka.KafkaCliCfg{
+					Brokers:          r.Brokers,
+					Topics:           r.Topics,
+					Groupid:          r.Group,
+					KMsgPool:         r.KMsgPool,
+					IntervalNum:      r.IntervalNum,
+					IntervalDuration: r.IntervalDuration,
+				})
+				if err != nil {
+					panic(errors.Wrap(err, "try to connect to kafka got error"))
+				}
+
+				var (
+					kmsg  *kafka.KafkaMsg
+					msg   *libs.FluentMsg
+					metaK string
+					metaV interface{}
+				)
 				for kmsg = range cli.Messages() { // receive new kmsg, and convert to fluent msg
 					msg = r.msgPool.Get().(*libs.FluentMsg)
 					msg.Id = r.counter.Count()
@@ -75,6 +84,7 @@ func (r *KafkaRecv) Run() {
 					r.outChan <- msg
 					cli.CommitWithMsg(kmsg)
 				}
+				cli.Close()
 			}
 		}()
 	}

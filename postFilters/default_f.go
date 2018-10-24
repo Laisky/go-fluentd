@@ -26,11 +26,15 @@ func NewDefaultFilter(cfg *DefaultFilterCfg) *DefaultFilter {
 func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	switch msg.Message[f.MsgKey].(type) {
 	case []byte:
-		if len(msg.Message[f.MsgKey].([]byte)) > f.MaxLen {
-			msg.Message[f.MsgKey] = msg.Message[f.MsgKey].([]byte)[:f.MaxLen]
-		}
 	default:
-		utils.Logger.Warn("unknown message key", zap.String("tag", msg.Tag))
+		utils.Logger.Warn("incorrect message key",
+			zap.String("tag", msg.Tag),
+			zap.String("msg_key", f.MsgKey))
+		return msg
+	}
+
+	if len(msg.Message[f.MsgKey].([]byte)) > f.MaxLen {
+		msg.Message[f.MsgKey] = msg.Message[f.MsgKey].([]byte)[:f.MaxLen]
 	}
 
 	return msg

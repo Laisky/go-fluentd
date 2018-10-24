@@ -12,4 +12,5 @@ type CounterIft interface {
 type AcceptorRecvItf interface {
 	Setup(*sync.Pool, chan *FluentMsg, CounterIft)
 	Run()
+	GetName() string
 }

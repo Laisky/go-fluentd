@@ -1,8 +1,6 @@
 package acceptorFilters
 
 import (
-	"fmt"
-
 	"github.com/Laisky/go-concator/libs"
 	utils "github.com/Laisky/go-utils"
 	"go.uber.org/zap"
@@ -20,14 +18,13 @@ type DefaultFilter struct {
 }
 
 func NewDefaultFilterCfg() *DefaultFilterCfg {
-	fmt.Printf("tag configs: %+v", libs.LoadTagConfigs())
 	c := &DefaultFilterCfg{
 		RemoveEmptyTag:     true,
 		RemoveUnsupportTag: true,
 		tags:               map[string]interface{}{},
 	}
 
-	for tag := range libs.LoadTagConfigs() {
+	for tag := range libs.LoadConcatorTagConfigs() {
 		c.tags[tag] = nil
 	}
 

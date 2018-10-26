@@ -16,8 +16,10 @@ Replace most of fluentd's functions except string parsing
 - AcceptorPipeline (consists of AcceptorFilters)
 - Journal
 - Dispatcher
-- DispatcherPipeline (consists of DispatcherFilters)
-- Concator
+- TagPipeline (consists of TagFilters)
+    - Concator
+    - Parser for each tag
+- PostPipeline (consists of PostFilters)
 - Producer
 
 
@@ -38,26 +40,26 @@ All filters should return very fast to avoid blocking.
 
 ### Journal
 
-TBD...
+...
 
 
 ### Dispatcher
 
-TBD...
+...
 
 
-### DispatcherPipeline
+### TagPipeline
 
-TBD...
+...
 
 
-### Concator
+### PostPipeline
 
-TBD...
+...
 
 
 ### Producer
 
-TBD...
+...
 
 

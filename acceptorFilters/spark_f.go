@@ -41,6 +41,12 @@ func (f *SparkFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 		return msg
 	}
 
+	switch msg.Message[f.MsgKey].(type) {
+	case []byte:
+	default:
+		return msg
+	}
+
 	// discard some format
 	utils.Logger.Debug("ignore spark log",
 		zap.String("tag", f.Tag),

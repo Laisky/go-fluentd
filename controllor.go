@@ -178,15 +178,15 @@ func (c *Controllor) Run() {
 	Server.Get("/monitor/controllor", func(ctx iris.Context) {
 		ctx.WriteString(fmt.Sprintf(`
 goroutine: %v
-waitDumpChan: %v / %v
 waitAccepPipelineChan: %v / %v
+waitDumpChan: %v / %v
 waitDispatchChan: %v / %v
 waitPostPipelineChan: %v / %v
 waitProduceChan: %v / %v
 waitCommitChan: %v / %v`,
 			runtime.NumGoroutine(),
-			len(waitDumpChan), cap(waitDumpChan),
 			len(waitAccepPipelineChan), cap(waitAccepPipelineChan),
+			len(waitDumpChan), cap(waitDumpChan),
 			len(waitDispatchChan), cap(waitDispatchChan),
 			len(waitPostPipelineChan), cap(waitPostPipelineChan),
 			len(waitProduceChan), cap(waitProduceChan),

@@ -7,7 +7,6 @@ import (
 	"github.com/Laisky/go-concator/libs"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/go-utils/kafka"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -46,7 +45,7 @@ func (r *KafkaRecv) Run() {
 	utils.Logger.Info("run KafkaRecv")
 
 	for i := 0; i < r.NConsumer; i++ {
-		go func() {
+		go func(i int) {
 			for {
 				utils.Logger.Info("connecot to kafka brokers",
 					zap.Strings("brokers", r.Brokers),
@@ -61,8 +60,10 @@ func (r *KafkaRecv) Run() {
 					IntervalDuration: r.IntervalDuration,
 				})
 				if err != nil {
-					panic(errors.Wrap(err, "try to connect to kafka got error"))
+					utils.Logger.Error("try to connect to kafka got error", zap.Error(err), zap.Int("n", i))
+					continue
 				}
+				utils.Logger.Info("success connected to kafka broker", zap.Int("n", i))
 
 				var (
 					kmsg  *kafka.KafkaMsg
@@ -86,6 +87,6 @@ func (r *KafkaRecv) Run() {
 				}
 				cli.Close()
 			}
-		}()
+		}(i)
 	}
 }

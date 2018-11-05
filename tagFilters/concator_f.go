@@ -11,12 +11,10 @@ import (
 )
 
 type ConcatorCfg struct {
-	Tag        string
-	OutChan    chan<- *libs.FluentMsg
-	MsgKey     string
-	Identifier string
-	PMsgPool   *sync.Pool
-	Regexp     *regexp.Regexp
+	Tag, MsgKey, Identifier string
+	OutChan                 chan<- *libs.FluentMsg
+	PMsgPool                *sync.Pool
+	Regexp                  *regexp.Regexp
 }
 
 // Concator work for one tag, contains many identifier("container_id")
@@ -190,6 +188,7 @@ func (cf *ConcatorFactory) GetName() string {
 }
 
 func (cf *ConcatorFactory) IsTagSupported(tag string) bool {
+	utils.Logger.Debug("IsTagSupported", zap.String("tag", tag))
 	_, ok := cf.ConcatorCfgs[tag]
 	return ok
 }

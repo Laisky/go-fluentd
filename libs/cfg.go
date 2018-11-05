@@ -15,10 +15,11 @@ type ConcatorTagCfg struct {
 // LoadConcatorTagConfigs return the configurations about dispatch rules
 func LoadConcatorTagConfigs() (concatorcfgs map[string]*ConcatorTagCfg) {
 	concatorcfgs = map[string]*ConcatorTagCfg{}
+	env := utils.Settings.GetString("env")
 	for tag, tagcfgI := range utils.Settings.Get("settings.tag_filters.concator").(map[string]interface{}) {
 		cfg := tagcfgI.(map[string]interface{})
 
-		concatorcfgs[tag] = &ConcatorTagCfg{
+		concatorcfgs[tag+"."+env] = &ConcatorTagCfg{
 			MsgKey:     cfg["msg_key"].(string),
 			Identifier: cfg["identifier"].(string),
 			Regexp:     regexp.MustCompile(cfg["regex"].(string)),

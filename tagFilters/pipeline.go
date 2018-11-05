@@ -41,7 +41,9 @@ func (p *TagPipeline) Spawn(tag string, outChan chan<- *libs.FluentMsg) (chan<- 
 	)
 	for i = lastI; i >= 0; i-- {
 		f = p.TagFilterFactoryItfs[i]
-		utils.Logger.Info("enable tag filter", zap.String("name", f.GetName()))
+		utils.Logger.Info("enable tagfilter",
+			zap.String("name", f.GetName()),
+			zap.String("tag", tag))
 		if f.IsTagSupported(tag) {
 			isTagSupported = true
 			downstreamChan = f.Spawn(tag, downstreamChan) // downstream outChan is upstream's inChan

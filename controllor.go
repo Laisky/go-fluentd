@@ -109,6 +109,22 @@ func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorP
 	)
 }
 
+func (c *Controllor) initTagPipeline(env string) *tagFilters.TagPipeline {
+	return tagFilters.NewTagPipeline(
+		&tagFilters.TagPipelineCfg{DefaultInternalChanSize: 1000},
+		tagFilters.NewConcatorFact(&tagFilters.ConcatorFactCfg{
+			ConcatorCfgs: libs.LoadConcatorTagConfigs(),
+		}),
+		tagFilters.NewConnectorFact(&tagFilters.ConnectorFactCfg{
+			Tag:             utils.Settings.GetString("settings.tag_filters.connector.tag") + "." + env,
+			MsgKey:          utils.Settings.GetString("settings.tag_filters.connector.msg_key"),
+			Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.connector.pattern")),
+			IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.connector.is_remove_orig_log"),
+			MsgPool:         c.msgPool,
+		}),
+	)
+}
+
 func (c *Controllor) initDispatcher(waitDispatchChan chan *libs.FluentMsg, tagPipeline *tagFilters.TagPipeline) *Dispatcher {
 	dispatcher := NewDispatcher(&DispatcherCfg{
 		InChan:      waitDispatchChan,
@@ -128,12 +144,6 @@ func (c *Controllor) initPostPipeline(env string) *postFilters.PostPipeline {
 			MaxLen: utils.Settings.GetInt("settings.post_filters.default.max_len"),
 		}),
 		// custom filters...
-		postFilters.NewConnectorFilter(&postFilters.ConnectorCfg{
-			Tag:             "connector." + env,
-			MsgKey:          utils.Settings.GetString("settings.post_filters.connector.msg_key"),
-			Reg:             regexp.MustCompile(utils.Settings.GetString("settings.post_filters.connector.regex")),
-			IsRemoveOrigLog: utils.Settings.GetBool("settings.post_filters.connector.is_remove_orig_log"),
-		}),
 	)
 }
 
@@ -171,12 +181,7 @@ func (c *Controllor) Run() {
 	waitDumpChan := acceptorPipeline.Wrap(waitAccepPipelineChan)
 	waitDispatchChan := journal.DumpMsgFlow(c.msgPool, waitDumpChan)
 
-	tagPipeline := tagFilters.NewTagPipeline(
-		&tagFilters.TagPipelineCfg{DefaultInternalChanSize: 1000},
-		tagFilters.NewConcatorFact(&tagFilters.ConcatorFactCfg{
-			ConcatorCfgs: libs.LoadConcatorTagConfigs(),
-		}),
-	)
+	tagPipeline := c.initTagPipeline(env)
 	dispatcher := c.initDispatcher(waitDispatchChan, tagPipeline)
 
 	waitPostPipelineChan := dispatcher.GetOutChan()

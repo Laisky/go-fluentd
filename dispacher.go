@@ -3,6 +3,7 @@ package concator
 import (
 	"fmt"
 	"regexp"
+	"sync"
 
 	"github.com/Laisky/go-concator/libs"
 	"github.com/Laisky/go-concator/tagFilters"
@@ -19,8 +20,8 @@ type DispatcherCfg struct {
 // Dispatcher dispatch messages by tag to different concator
 type Dispatcher struct {
 	*DispatcherCfg
-	concatorMap map[string]chan<- *libs.FluentMsg // tag:msgchan
-	outChan     chan *libs.FluentMsg              // skip concator, direct to producer
+	concatorMap *sync.Map            // tag:msgchan
+	outChan     chan *libs.FluentMsg // skip concator, direct to producer
 }
 
 // ConcatorFactoryItf interface of ConcatorFactory,
@@ -36,7 +37,7 @@ func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 	return &Dispatcher{
 		DispatcherCfg: cfg,
 		outChan:       make(chan *libs.FluentMsg, 5000),
-		concatorMap:   map[string]chan<- *libs.FluentMsg{},
+		concatorMap:   &sync.Map{},
 	}
 }
 
@@ -46,15 +47,16 @@ func (d *Dispatcher) Run() {
 	d.BindMonitor()
 	go func() {
 		var (
-			inChanForEachTag chan<- *libs.FluentMsg
-			ok               bool
-			err              error
+			inChanForEachTagi interface{}
+			inChanForEachTag  chan<- *libs.FluentMsg
+			ok                bool
+			err               error
 		)
 		// send each message to appropriate concator by `tag`
 		for msg := range d.InChan {
-			inChanForEachTag, ok = d.concatorMap[msg.Tag]
+			inChanForEachTagi, ok = d.concatorMap.Load(msg.Tag)
 			if ok {
-				inChanForEachTag <- msg
+				inChanForEachTagi.(chan<- *libs.FluentMsg) <- msg
 				continue
 			}
 
@@ -68,7 +70,7 @@ func (d *Dispatcher) Run() {
 				continue
 			}
 
-			d.concatorMap[msg.Tag] = inChanForEachTag
+			d.concatorMap.Store(msg.Tag, inChanForEachTag)
 			inChanForEachTag <- msg
 		}
 	}()
@@ -78,9 +80,11 @@ func (d *Dispatcher) BindMonitor() {
 	utils.Logger.Info("bind `/monitor/dispatcher`")
 	Server.Get("/monitor/dispatcher", func(ctx iris.Context) {
 		cnt := "concatorMap tag:chan\n"
-		for tag, c := range d.concatorMap {
-			cnt += fmt.Sprintf("> %v: %v\n", tag, len(c))
-		}
+		d.concatorMap.Range(func(tagi interface{}, ci interface{}) bool {
+			cnt += fmt.Sprintf("> %v: %v\n", tagi.(string), len(ci.(chan<- *libs.FluentMsg)))
+			return true
+		})
+
 		ctx.Writef(cnt)
 	})
 }

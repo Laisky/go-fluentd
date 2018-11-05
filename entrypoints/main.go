@@ -65,5 +65,4 @@ func main() {
 	// run
 	controllor := concator.NewControllor()
 	controllor.Run()
-	concator.RunServer(utils.Settings.GetString("addr"))
 }

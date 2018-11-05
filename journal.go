@@ -6,11 +6,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.uber.org/zap"
-
+	"github.com/Laisky/go-concator/libs"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/go-utils/journal"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 var (
@@ -24,7 +24,7 @@ type Journal struct {
 	bufDirPath string
 	j          *journal.Journal
 	legacyLock uint32
-	outChan    chan *FluentMsg
+	outChan    chan *libs.FluentMsg
 }
 
 // NewJournal create new Journal with `bufDirPath` and `bufFileSize`
@@ -38,7 +38,7 @@ func NewJournal(bufDirPath string, bufFileSize int64) *Journal {
 		bufDirPath: bufDirPath,
 		j:          journal.NewJournal(cfg),
 		legacyLock: 0,
-		outChan:    make(chan *FluentMsg, outChanCap),
+		outChan:    make(chan *libs.FluentMsg, outChanCap),
 	}
 }
 
@@ -47,17 +47,17 @@ func (j *Journal) LoadMaxId() (int64, error) {
 	return j.j.LoadMaxId()
 }
 
-func (j *Journal) GetOutChan() chan *FluentMsg {
+func (j *Journal) GetOutChan() chan *libs.FluentMsg {
 	return j.outChan
 }
 
-func (j *Journal) ConvertMsg2Buf(msg *FluentMsg, data *map[string]interface{}) {
+func (j *Journal) ConvertMsg2Buf(msg *libs.FluentMsg, data *map[string]interface{}) {
 	(*data)["id"] = msg.Id
 	(*data)["tag"] = msg.Tag
 	(*data)["message"] = msg.Message
 }
 
-func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan chan *FluentMsg) (maxId int64, err error) {
+func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan chan *libs.FluentMsg) (maxId int64, err error) {
 	utils.Logger.Info("starting to process legacy data...")
 	if ok := atomic.CompareAndSwapUint32(&j.legacyLock, 0, 1); !ok {
 		utils.Logger.Info("legacy data already in processing")
@@ -67,7 +67,7 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan chan *FluentMsg) 
 
 	var (
 		i    = 0
-		msg  *FluentMsg
+		msg  *libs.FluentMsg
 		data = map[string]interface{}{}
 	)
 
@@ -78,7 +78,7 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan chan *FluentMsg) 
 	startTs := time.Now()
 	for {
 		i++
-		msg = msgPool.Get().(*FluentMsg)
+		msg = msgPool.Get().(*libs.FluentMsg)
 		data["message"] = nil // alloc new map to avoid old data contaminate
 
 		if err = j.j.LoadLegacyBuf(&data); err == io.EOF {
@@ -104,7 +104,7 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan chan *FluentMsg) 
 	}
 }
 
-func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, msgChan <-chan *FluentMsg) chan *FluentMsg {
+func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, msgChan <-chan *libs.FluentMsg) chan *libs.FluentMsg {
 	// deal with legacy
 	go func() {
 		var err error

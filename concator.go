@@ -1,18 +1,19 @@
 package concator
 
 import (
+	"reflect"
 	"regexp"
 	"sync"
 	"time"
 
-	"go.uber.org/zap"
-
+	"github.com/Laisky/go-concator/libs"
 	utils "github.com/Laisky/go-utils"
+	"go.uber.org/zap"
 )
 
 // Concator work for one tag, contains many identifier("container_id")
 type Concator struct {
-	outChan    chan<- *FluentMsg
+	outChan    chan<- *libs.FluentMsg
 	msgKey     string // msgKey to concat
 	identifier string // key to distinguish sources
 	slot       map[string]*PendingMsg
@@ -23,18 +24,18 @@ type Concator struct {
 
 // ConcatorFactory can spawn new Concator
 type ConcatorFactory struct {
-	outChan  chan *FluentMsg
+	outChan  chan *libs.FluentMsg
 	pMsgPool *sync.Pool
 }
 
 // PendingMsg is the message wait tobe concatenate
 type PendingMsg struct {
-	msg   *FluentMsg
+	msg   *libs.FluentMsg
 	lastT time.Time
 }
 
 // NewConcator create new Concator
-func NewConcator(outChan chan<- *FluentMsg, msgKey, identifier string, regex *regexp.Regexp, pMsgPool *sync.Pool) *Concator {
+func NewConcator(outChan chan<- *libs.FluentMsg, msgKey, identifier string, regex *regexp.Regexp, pMsgPool *sync.Pool) *Concator {
 	utils.Logger.Debug("create new concator", zap.String("identifier", identifier), zap.String("msgKey", msgKey))
 	return &Concator{
 		outChan:    outChan,
@@ -53,17 +54,17 @@ func NewConcator(outChan chan<- *FluentMsg, msgKey, identifier string, regex *re
 //
 // TODO: concator for each tag now,
 // maybe set one concator for each identifier in the future for better performance
-func (c *Concator) Run(inChan <-chan *FluentMsg) {
+func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 	var (
-		msg               *FluentMsg
+		msg               *libs.FluentMsg
 		pmsg              *PendingMsg
 		identifier        string
 		identifierI, msgI interface{}
 		ok                bool
 
 		now             time.Time
-		initWaitTs      = 20 * time.Microsecond
-		maxWaitTs       = 500 * time.Microsecond
+		initWaitTs      = 20 * time.Millisecond
+		maxWaitTs       = 500 * time.Millisecond
 		waitTs          = initWaitTs
 		nWaits          = 0
 		nWaitsToDouble  = 2
@@ -84,7 +85,19 @@ func (c *Concator) Run(inChan <-chan *FluentMsg) {
 				continue
 			}
 
-			identifier = string(identifierI.([]byte))
+			// unknown identifier type
+			switch identifierI.(type) {
+			case []byte:
+				identifier = string(identifierI.([]byte))
+			case string:
+				identifier = identifierI.(string)
+			default:
+				utils.Logger.Error("unknown identifier type, should be `[]byte` or `string`",
+					zap.String("type", reflect.TypeOf(identifierI).String()))
+				c.outChan <- msg
+				continue
+			}
+
 			pmsg, ok = c.slot[identifier]
 			// new identifier
 			if !ok {
@@ -104,7 +117,9 @@ func (c *Concator) Run(inChan <-chan *FluentMsg) {
 				continue
 			}
 			if c.regex.MatchString(string(msgI.([]byte))) { // new line
-				utils.Logger.Debug("got new line", zap.ByteString("log", msg.Message[c.msgKey].([]byte)))
+				utils.Logger.Debug("got new line",
+					zap.ByteString("log", msg.Message[c.msgKey].([]byte)),
+					zap.String("tag", msg.Tag))
 				c.outChan <- c.slot[identifier].msg
 				c.slot[identifier].msg = msg
 				c.slot[identifier].lastT = now
@@ -117,10 +132,10 @@ func (c *Concator) Run(inChan <-chan *FluentMsg) {
 				append(c.slot[identifier].msg.Message[c.msgKey].([]byte), '\n')
 			c.slot[identifier].msg.Message[c.msgKey] =
 				append(c.slot[identifier].msg.Message[c.msgKey].([]byte), msg.Message[c.msgKey].([]byte)...)
-			if c.slot[identifier].msg.extIds == nil {
-				c.slot[identifier].msg.extIds = []int64{} // create ids, wait to append tail-msg's id
+			if c.slot[identifier].msg.ExtIds == nil {
+				c.slot[identifier].msg.ExtIds = []int64{} // create ids, wait to append tail-msg's id
 			}
-			c.slot[identifier].msg.extIds = append(c.slot[identifier].msg.extIds, msg.Id)
+			c.slot[identifier].msg.ExtIds = append(c.slot[identifier].msg.ExtIds, msg.Id)
 			c.slot[identifier].lastT = now
 
 			// too long to send
@@ -150,7 +165,7 @@ func (c *Concator) Run(inChan <-chan *FluentMsg) {
 // NewConcatorFactory create new ConcatorFactory
 func NewConcatorFactory() *ConcatorFactory {
 	utils.Logger.Info("create concatorFactory")
-	outChan := make(chan *FluentMsg, 5000)
+	outChan := make(chan *libs.FluentMsg, 5000)
 	return &ConcatorFactory{
 		outChan: outChan,
 		pMsgPool: &sync.Pool{
@@ -162,14 +177,14 @@ func NewConcatorFactory() *ConcatorFactory {
 }
 
 // Spawn create and run new Concator for new tag
-func (cf *ConcatorFactory) Spawn(msgKey, identifier string, regex *regexp.Regexp) chan<- *FluentMsg {
-	inChan := make(chan *FluentMsg, 1000)
+func (cf *ConcatorFactory) Spawn(msgKey, identifier string, regex *regexp.Regexp) chan<- *libs.FluentMsg {
+	inChan := make(chan *libs.FluentMsg, 1000)
 	concator := NewConcator(cf.outChan, msgKey, identifier, regex, cf.pMsgPool)
 	go concator.Run(inChan)
 	return inChan
 }
 
 // MessageChan return the message chan that collect messages produced by all Concator
-func (cf *ConcatorFactory) MessageChan() chan *FluentMsg {
+func (cf *ConcatorFactory) MessageChan() chan *libs.FluentMsg {
 	return cf.outChan
 }

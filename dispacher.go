@@ -4,43 +4,37 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/kataras/iris"
-
-	"go.uber.org/zap"
-
+	"github.com/Laisky/go-concator/libs"
 	utils "github.com/Laisky/go-utils"
+	"github.com/kataras/iris"
+	"go.uber.org/zap"
 )
-
-// DispatcherConfig configurations about how to dispatch messages
-type DispatcherConfig struct {
-	MsgKey, Identifier string
-	Regex              *regexp.Regexp
-}
 
 // Dispatcher dispatch messages by tag to different concator
 type Dispatcher struct {
-	concatorMap      map[string]chan<- *FluentMsg // tag:msgchan
-	msgChan          <-chan *FluentMsg
+	concatorMap      map[string]chan<- *libs.FluentMsg // tag:msgchan
+	inChan           <-chan *libs.FluentMsg
 	cf               ConcatorFactoryItf
-	dispatherConfigs map[string]*DispatcherConfig // tag:config
-	bypassMsgChan    chan<- *FluentMsg            // skip concator, direct to producer
+	dispatherConfigs map[string]*libs.TagConfig // tag:config
+	outChan          chan *libs.FluentMsg       // skip concator, direct to producer
 }
 
 // ConcatorFactoryItf interface of ConcatorFactory,
 // decoupling with specific ConcatorFactory
 type ConcatorFactoryItf interface {
-	Spawn(string, string, *regexp.Regexp) chan<- *FluentMsg
+	Spawn(string, string, *regexp.Regexp) chan<- *libs.FluentMsg
+	MessageChan() chan *libs.FluentMsg
 }
 
 // NewDispatcher create new Dispatcher
-func NewDispatcher(msgChan <-chan *FluentMsg, cf ConcatorFactoryItf, bypassMsgChan chan<- *FluentMsg) *Dispatcher {
+func NewDispatcher(inChan <-chan *libs.FluentMsg, cf ConcatorFactoryItf) *Dispatcher {
 	utils.Logger.Info("create Dispatcher")
 	return &Dispatcher{
-		msgChan:          msgChan,
+		inChan:           inChan,
 		cf:               cf,
-		dispatherConfigs: LoadDispatcherConfig(),
-		bypassMsgChan:    bypassMsgChan,
-		concatorMap:      map[string]chan<- *FluentMsg{},
+		dispatherConfigs: libs.LoadTagConfigs(),
+		outChan:          cf.MessageChan(),
+		concatorMap:      map[string]chan<- *libs.FluentMsg{},
 	}
 }
 
@@ -50,12 +44,12 @@ func (d *Dispatcher) Run() {
 	d.BindMonitor()
 	go func() {
 		var (
-			msgChan chan<- *FluentMsg
+			msgChan chan<- *libs.FluentMsg
 			ok      bool
-			cfg     *DispatcherConfig
+			cfg     *libs.TagConfig
 		)
 		// send each message to appropriate concator by `tag`
-		for msg := range d.msgChan {
+		for msg := range d.inChan {
 			msgChan, ok = d.concatorMap[msg.Tag]
 			if ok {
 				msgChan <- msg
@@ -66,7 +60,7 @@ func (d *Dispatcher) Run() {
 			cfg, ok = d.dispatherConfigs[msg.Tag]
 			if !ok { // unknown tag
 				utils.Logger.Warn("got unknown tag", zap.String("tag", msg.Tag))
-				d.bypassMsgChan <- msg
+				d.outChan <- msg
 				continue
 			}
 
@@ -94,19 +88,6 @@ func (d *Dispatcher) BindMonitor() {
 	})
 }
 
-// LoadDispatcherConfig return the configurations about dispatch rules
-func LoadDispatcherConfig() map[string]*DispatcherConfig {
-	dispatherConfigs := map[string]*DispatcherConfig{}
-	env := "." + utils.Settings.GetString("env")
-	var cfg map[string]interface{}
-	for tag, cfgI := range utils.Settings.Get("settings.tag_configs").(map[string]interface{}) {
-		cfg = cfgI.(map[string]interface{})
-		dispatherConfigs[tag+env] = &DispatcherConfig{
-			MsgKey:     cfg["msg_key"].(string),
-			Identifier: cfg["identifier"].(string),
-			Regex:      regexp.MustCompile(cfg["regex"].(string)),
-		}
-	}
-
-	return dispatherConfigs
+func (d *Dispatcher) GetOutChan() chan *libs.FluentMsg {
+	return d.outChan
 }

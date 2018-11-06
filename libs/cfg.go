@@ -17,7 +17,7 @@ func LoadTagConfigs() map[string]*TagConfig {
 	dispatherConfigs := map[string]*TagConfig{}
 	env := "." + utils.Settings.GetString("env")
 	var cfg map[string]interface{}
-	for tag, cfgI := range utils.Settings.Get("settings.tag_configs").(map[string]interface{}) {
+	for tag, cfgI := range utils.Settings.Get("settings.tag_filters.concator").(map[string]interface{}) {
 		cfg = cfgI.(map[string]interface{})
 		dispatherConfigs[tag+env] = &TagConfig{
 			MsgKey:     cfg["msg_key"].(string),

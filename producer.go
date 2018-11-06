@@ -134,7 +134,7 @@ func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) ch
 					if utils.Settings.GetBool("dry") {
 						utils.Logger.Info("send message to backend",
 							zap.String("tag", tag),
-							zap.ByteString("log", msgBatch[0].Message["log"].([]byte)))
+							zap.String("log", fmt.Sprint(msgBatch[0].Message)))
 						goto FINISHED
 					}
 

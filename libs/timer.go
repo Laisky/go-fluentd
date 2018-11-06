@@ -1,11 +1,10 @@
-package concator
+package libs
 
 import (
 	"time"
 
-	"go.uber.org/zap"
-
 	utils "github.com/Laisky/go-utils"
+	"go.uber.org/zap"
 )
 
 type TimerConfig struct {

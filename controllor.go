@@ -11,6 +11,7 @@ import (
 	"github.com/Laisky/go-concator/libs"
 	"github.com/Laisky/go-concator/postFilters"
 	"github.com/Laisky/go-concator/recvs"
+	"github.com/Laisky/go-concator/tagFilters"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/go-utils/kafka"
 	"github.com/kataras/iris"
@@ -108,10 +109,27 @@ func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorP
 	)
 }
 
-func (c *Controllor) initDispatcher(waitDispatchChan chan *libs.FluentMsg, concatorFact ConcatorFactoryItf) *Dispatcher {
-	dispatcher := NewDispatcher(
-		waitDispatchChan,
-		concatorFact)
+func (c *Controllor) initTagPipeline(env string) *tagFilters.TagPipeline {
+	return tagFilters.NewTagPipeline(
+		&tagFilters.TagPipelineCfg{DefaultInternalChanSize: 1000},
+		tagFilters.NewConcatorFact(&tagFilters.ConcatorFactCfg{
+			ConcatorCfgs: libs.LoadConcatorTagConfigs(),
+		}),
+		tagFilters.NewConnectorFact(&tagFilters.ConnectorFactCfg{
+			Tag:             utils.Settings.GetString("settings.tag_filters.connector.tag") + "." + env,
+			MsgKey:          utils.Settings.GetString("settings.tag_filters.connector.msg_key"),
+			Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.connector.pattern")),
+			IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.connector.is_remove_orig_log"),
+			MsgPool:         c.msgPool,
+		}),
+	)
+}
+
+func (c *Controllor) initDispatcher(waitDispatchChan chan *libs.FluentMsg, tagPipeline *tagFilters.TagPipeline) *Dispatcher {
+	dispatcher := NewDispatcher(&DispatcherCfg{
+		InChan:      waitDispatchChan,
+		TagPipeline: tagPipeline,
+	})
 	dispatcher.Run()
 
 	return dispatcher
@@ -120,10 +138,12 @@ func (c *Controllor) initDispatcher(waitDispatchChan chan *libs.FluentMsg, conca
 func (c *Controllor) initPostPipeline(env string) *postFilters.PostPipeline {
 	return postFilters.NewPostPipeline(
 		c.msgPool,
+		// set the DefaultFilter as first filter
 		postFilters.NewDefaultFilter(&postFilters.DefaultFilterCfg{
 			MsgKey: utils.Settings.GetString("settings.post_filters.default.msg_key"),
 			MaxLen: utils.Settings.GetInt("settings.post_filters.default.max_len"),
 		}),
+		// custom filters...
 	)
 }
 
@@ -161,8 +181,8 @@ func (c *Controllor) Run() {
 	waitDumpChan := acceptorPipeline.Wrap(waitAccepPipelineChan)
 	waitDispatchChan := journal.DumpMsgFlow(c.msgPool, waitDumpChan)
 
-	concatorFact := NewConcatorFactory()
-	dispatcher := c.initDispatcher(waitDispatchChan, concatorFact)
+	tagPipeline := c.initTagPipeline(env)
+	dispatcher := c.initDispatcher(waitDispatchChan, tagPipeline)
 
 	waitPostPipelineChan := dispatcher.GetOutChan()
 	postPipeline := c.initPostPipeline(env)

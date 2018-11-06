@@ -3,20 +3,25 @@ package concator
 import (
 	"fmt"
 	"regexp"
+	"sync"
 
 	"github.com/Laisky/go-concator/libs"
+	"github.com/Laisky/go-concator/tagFilters"
 	utils "github.com/Laisky/go-utils"
 	"github.com/kataras/iris"
 	"go.uber.org/zap"
 )
 
+type DispatcherCfg struct {
+	InChan      chan *libs.FluentMsg
+	TagPipeline *tagFilters.TagPipeline
+}
+
 // Dispatcher dispatch messages by tag to different concator
 type Dispatcher struct {
-	concatorMap      map[string]chan<- *libs.FluentMsg // tag:msgchan
-	inChan           <-chan *libs.FluentMsg
-	cf               ConcatorFactoryItf
-	dispatherConfigs map[string]*libs.TagConfig // tag:config
-	outChan          chan *libs.FluentMsg       // skip concator, direct to producer
+	*DispatcherCfg
+	concatorMap *sync.Map            // tag:msgchan
+	outChan     chan *libs.FluentMsg // skip concator, direct to producer
 }
 
 // ConcatorFactoryItf interface of ConcatorFactory,
@@ -27,14 +32,12 @@ type ConcatorFactoryItf interface {
 }
 
 // NewDispatcher create new Dispatcher
-func NewDispatcher(inChan <-chan *libs.FluentMsg, cf ConcatorFactoryItf) *Dispatcher {
+func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 	utils.Logger.Info("create Dispatcher")
 	return &Dispatcher{
-		inChan:           inChan,
-		cf:               cf,
-		dispatherConfigs: libs.LoadTagConfigs(),
-		outChan:          cf.MessageChan(),
-		concatorMap:      map[string]chan<- *libs.FluentMsg{},
+		DispatcherCfg: cfg,
+		outChan:       make(chan *libs.FluentMsg, 5000),
+		concatorMap:   &sync.Map{},
 	}
 }
 
@@ -44,35 +47,31 @@ func (d *Dispatcher) Run() {
 	d.BindMonitor()
 	go func() {
 		var (
-			msgChan chan<- *libs.FluentMsg
-			ok      bool
-			cfg     *libs.TagConfig
+			inChanForEachTagi interface{}
+			inChanForEachTag  chan<- *libs.FluentMsg
+			ok                bool
+			err               error
 		)
 		// send each message to appropriate concator by `tag`
-		for msg := range d.inChan {
-			msgChan, ok = d.concatorMap[msg.Tag]
+		for msg := range d.InChan {
+			inChanForEachTagi, ok = d.concatorMap.Load(msg.Tag)
 			if ok {
-				msgChan <- msg
+				inChanForEachTagi.(chan<- *libs.FluentMsg) <- msg
 				continue
 			}
 
 			// new tag
-			cfg, ok = d.dispatherConfigs[msg.Tag]
-			if !ok { // unknown tag
-				utils.Logger.Warn("got unknown tag", zap.String("tag", msg.Tag))
-				d.outChan <- msg
+			utils.Logger.Info("got new tag", zap.String("tag", msg.Tag))
+			inChanForEachTag, err = d.TagPipeline.Spawn(msg.Tag, d.outChan)
+			if err != nil {
+				utils.Logger.Error("try to spawn new tagpipeline got error",
+					zap.Error(err),
+					zap.String("tag", msg.Tag))
 				continue
 			}
 
-			// spawn an new concator
-			utils.Logger.Info("got new tag", zap.String("tag", msg.Tag))
-			msgChan = d.cf.Spawn(
-				cfg.MsgKey,
-				cfg.Identifier,
-				cfg.Regex)
-			d.concatorMap[msg.Tag] = msgChan
-
-			msgChan <- msg
+			d.concatorMap.Store(msg.Tag, inChanForEachTag)
+			inChanForEachTag <- msg
 		}
 	}()
 }
@@ -81,9 +80,11 @@ func (d *Dispatcher) BindMonitor() {
 	utils.Logger.Info("bind `/monitor/dispatcher`")
 	Server.Get("/monitor/dispatcher", func(ctx iris.Context) {
 		cnt := "concatorMap tag:chan\n"
-		for tag, c := range d.concatorMap {
-			cnt += fmt.Sprintf("> %v: %v\n", tag, len(c))
-		}
+		d.concatorMap.Range(func(tagi interface{}, ci interface{}) bool {
+			cnt += fmt.Sprintf("> %v: %v\n", tagi.(string), len(ci.(chan<- *libs.FluentMsg)))
+			return true
+		})
+
 		ctx.Writef(cnt)
 	})
 }

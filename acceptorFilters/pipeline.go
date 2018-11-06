@@ -42,6 +42,7 @@ func (f *AcceptorPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan chan *libs
 			case msg = <-inChan:
 			}
 
+			utils.Logger.Debug("AcceptorPipeline got msg")
 			for _, filter = range f.filters {
 				if msg = filter.Filter(msg); msg == nil { // quit filters for this msg
 					goto NEXT_MSG

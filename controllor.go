@@ -122,6 +122,13 @@ func (c *Controllor) initTagPipeline(env string) *tagFilters.TagPipeline {
 			IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.connector.is_remove_orig_log"),
 			MsgPool:         c.msgPool,
 		}),
+		tagFilters.NewGeelyFact(&tagFilters.GeelyFactCfg{
+			Tag:             utils.Settings.GetString("settings.tag_filters.geely.tag") + "." + env,
+			MsgKey:          utils.Settings.GetString("settings.tag_filters.geely.msg_key"),
+			Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.geely.pattern")),
+			IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.geely.is_remove_orig_log"),
+			MsgPool:         c.msgPool,
+		}),
 	)
 }
 

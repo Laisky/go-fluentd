@@ -116,7 +116,8 @@ func (c *Controllor) initTagPipeline(env string) *tagFilters.TagPipeline {
 			ConcatorCfgs: libs.LoadConcatorTagConfigs(),
 		}),
 		tagFilters.NewConnectorFact(&tagFilters.ConnectorFactCfg{
-			Tag:             utils.Settings.GetString("settings.tag_filters.connector.tag") + "." + env,
+			Env:             env,
+			Tags:            utils.Settings.GetStringSlice("settings.tag_filters.connector.tags"),
 			MsgKey:          utils.Settings.GetString("settings.tag_filters.connector.msg_key"),
 			Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.connector.pattern")),
 			IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.connector.is_remove_orig_log"),

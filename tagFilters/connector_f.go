@@ -11,7 +11,8 @@ import (
 )
 
 type ConnectorCfg struct {
-	Tag, MsgKey     string
+	cf              *ConnectorFact
+	MsgKey          string
 	Regexp          *regexp.Regexp
 	OutChan         chan<- *libs.FluentMsg
 	InChan          <-chan *libs.FluentMsg
@@ -32,7 +33,7 @@ func NewConnector(cfg *ConnectorCfg) *Connector {
 
 func (f *Connector) Run() {
 	for msg := range f.InChan {
-		if msg.Tag != f.Tag {
+		if !f.cf.IsTagSupported(msg.Tag) {
 			f.OutChan <- msg
 		}
 
@@ -40,7 +41,7 @@ func (f *Connector) Run() {
 		case []byte:
 		default:
 			utils.Logger.Warn("msg key not exists",
-				zap.String("tag", f.Tag),
+				zap.String("tag", msg.Tag),
 				zap.String("msg_key", f.MsgKey))
 			f.OutChan <- msg
 		}
@@ -67,13 +68,18 @@ func (f *Connector) Run() {
 				utils.Logger.Error("unmarshal connector args got error", zap.Error(err))
 			}
 		}
+		delete(msg.Message, "args")
+
+		// flatten messages
+		libs.FlattenMap(msg.Message)
 
 		f.OutChan <- msg
 	}
 }
 
 type ConnectorFactCfg struct {
-	Tag, MsgKey     string
+	Tags            []string
+	Env, MsgKey     string
 	Regexp          *regexp.Regexp
 	MsgPool         *sync.Pool
 	IsRemoveOrigLog bool
@@ -81,28 +87,38 @@ type ConnectorFactCfg struct {
 
 type ConnectorFact struct {
 	*ConnectorFactCfg
+	tagsset map[string]struct{}
 }
 
 func NewConnectorFact(cfg *ConnectorFactCfg) *ConnectorFact {
 	utils.Logger.Info("create new connectorfactory")
-	return &ConnectorFact{
+	cf := &ConnectorFact{
 		ConnectorFactCfg: cfg,
 	}
+
+	cf.tagsset = map[string]struct{}{}
+	for _, tag := range cf.Tags {
+		utils.Logger.Info("connector factory add tag", zap.String("tag", tag+"."+cf.Env))
+		cf.tagsset[tag+"."+cf.Env] = struct{}{}
+	}
+
+	return cf
 }
 
 func (cf *ConnectorFact) GetName() string {
 	return "connector_tagfilter"
 }
 
-func (cf *ConnectorFact) IsTagSupported(tag string) bool {
-	return tag == cf.Tag
+func (cf *ConnectorFact) IsTagSupported(tag string) (ok bool) {
+	_, ok = cf.tagsset[tag]
+	return ok
 }
 
 func (cf *ConnectorFact) Spawn(tag string, outChan chan<- *libs.FluentMsg) chan<- *libs.FluentMsg {
 	utils.Logger.Info("spawn connector tagfilter", zap.String("tag", tag))
 	inChan := make(chan *libs.FluentMsg, 1000)
 	f := NewConnector(&ConnectorCfg{
-		Tag:             tag,
+		cf:              cf,
 		InChan:          inChan,
 		OutChan:         outChan,
 		MsgKey:          cf.MsgKey,

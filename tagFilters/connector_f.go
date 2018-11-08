@@ -43,6 +43,7 @@ func (f *Connector) Run() {
 				zap.String("tag", f.Tag),
 				zap.String("msg_key", f.MsgKey))
 			f.OutChan <- msg
+			continue
 		}
 
 		// parse log string

@@ -6,25 +6,25 @@ import (
 	utils "github.com/Laisky/go-utils"
 )
 
-// TagConfig configurations about how to dispatch messages
-type TagConfig struct {
+// ConcatorTagCfg configurations about how to dispatch messages
+type ConcatorTagCfg struct {
 	MsgKey, Identifier string
-	Regex              *regexp.Regexp
+	Regexp             *regexp.Regexp
 }
 
-// LoadTagConfigs return the configurations about dispatch rules
-func LoadTagConfigs() map[string]*TagConfig {
-	dispatherConfigs := map[string]*TagConfig{}
-	env := "." + utils.Settings.GetString("env")
-	var cfg map[string]interface{}
-	for tag, cfgI := range utils.Settings.Get("settings.tag_filters.concator").(map[string]interface{}) {
-		cfg = cfgI.(map[string]interface{})
-		dispatherConfigs[tag+env] = &TagConfig{
+// LoadConcatorTagConfigs return the configurations about dispatch rules
+func LoadConcatorTagConfigs() (concatorcfgs map[string]*ConcatorTagCfg) {
+	concatorcfgs = map[string]*ConcatorTagCfg{}
+	env := utils.Settings.GetString("env")
+	for tag, tagcfgI := range utils.Settings.Get("settings.tag_filters.concator").(map[string]interface{}) {
+		cfg := tagcfgI.(map[string]interface{})
+
+		concatorcfgs[tag+"."+env] = &ConcatorTagCfg{
 			MsgKey:     cfg["msg_key"].(string),
 			Identifier: cfg["identifier"].(string),
-			Regex:      regexp.MustCompile(cfg["regex"].(string)),
+			Regexp:     regexp.MustCompile(cfg["regex"].(string)),
 		}
 	}
 
-	return dispatherConfigs
+	return concatorcfgs
 }

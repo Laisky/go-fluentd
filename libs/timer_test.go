@@ -1,11 +1,11 @@
-package concator_test
+package libs_test
 
 import (
 	"testing"
 	"time"
 
-	utils "github.com/Laisky/go-utils"
 	concator "github.com/Laisky/go-concator"
+	utils "github.com/Laisky/go-utils"
 )
 
 var (

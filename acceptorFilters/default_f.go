@@ -1,8 +1,6 @@
 package acceptorFilters
 
 import (
-	"fmt"
-
 	"github.com/Laisky/go-concator/libs"
 	utils "github.com/Laisky/go-utils"
 	"go.uber.org/zap"
@@ -20,14 +18,13 @@ type DefaultFilter struct {
 }
 
 func NewDefaultFilterCfg() *DefaultFilterCfg {
-	fmt.Printf("tag configs: %+v", libs.LoadTagConfigs())
 	c := &DefaultFilterCfg{
 		RemoveEmptyTag:     true,
 		RemoveUnsupportTag: true,
 		tags:               map[string]interface{}{},
 	}
 
-	for tag := range libs.LoadTagConfigs() {
+	for tag := range libs.LoadConcatorTagConfigs() {
 		c.tags[tag] = nil
 	}
 
@@ -50,13 +47,13 @@ func (f *DefaultFilter) IsTagInConfigs(tag string) (ok bool) {
 
 func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	if f.RemoveEmptyTag && msg.Tag == "" {
-		utils.Logger.Debug("remove empty tag", zap.String("tag", msg.Tag))
+		utils.Logger.Warn("remove empty tag", zap.String("tag", msg.Tag))
 		f.msgPool.Put(msg)
 		return nil
 	}
 
 	if f.RemoveUnsupportTag && !f.IsTagInConfigs(msg.Tag) {
-		utils.Logger.Debug("remove unsupported tag", zap.String("tag", msg.Tag))
+		utils.Logger.Warn("remove unsupported tag", zap.String("tag", msg.Tag))
 		f.msgPool.Put(msg)
 		return nil
 	}

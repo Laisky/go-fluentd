@@ -2,19 +2,22 @@ package tagFilters
 
 import (
 	"errors"
+	"sync"
 
 	"github.com/Laisky/go-concator/libs"
 	utils "github.com/Laisky/go-utils"
 	"go.uber.org/zap"
 )
 
+type TagPipelineCfg struct {
+	DefaultInternalChanSize int
+	MsgPool                 *sync.Pool
+	CommitedChan            chan<- int64
+}
+
 type TagPipeline struct {
 	*TagPipelineCfg
 	TagFilterFactoryItfs []TagFilterFactoryItf
-}
-
-type TagPipelineCfg struct {
-	DefaultInternalChanSize int
 }
 
 // NewTagPipeline create new TagPipeline
@@ -22,6 +25,11 @@ func NewTagPipeline(cfg *TagPipelineCfg, itfs ...TagFilterFactoryItf) *TagPipeli
 	utils.Logger.Info("create tag pipeline")
 	if cfg.DefaultInternalChanSize <= 0 {
 		cfg.DefaultInternalChanSize = 1000
+	}
+
+	for _, itf := range itfs {
+		itf.SetMsgPool(cfg.MsgPool)
+		itf.SetCommittedChan(cfg.CommitedChan)
 	}
 
 	return &TagPipeline{

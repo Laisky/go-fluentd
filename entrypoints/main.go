@@ -17,13 +17,23 @@ func SetupSettings() {
 		panic(err)
 	}
 
+	// check --log-level
+	switch utils.Settings.GetString("log-level") {
+	case "info":
+	case "debug":
+	case "error":
+	default:
+		panic(fmt.Sprintf("unknown value `--log-level=%v`", utils.Settings.GetString("log-level")))
+	}
+
 	// mode
 	if utils.Settings.GetBool("debug") {
 		fmt.Println("run in debug mode")
 		utils.SetupLogger("debug")
+		utils.Settings.Set("log-level", "debug")
 	} else { // prod mode
 		fmt.Println("run in prod mode")
-		utils.SetupLogger("info")
+		utils.SetupLogger(utils.Settings.GetString("log-level"))
 	}
 
 	// env
@@ -39,6 +49,7 @@ func SetupArgs() {
 	pflag.String("config", "/etc/go-ramjet/settings", "config file directory path")
 	pflag.String("addr", "localhost:8080", "like `localhost:8080`")
 	pflag.String("env", "nil", "environment `sit/perf/uat/prod`")
+	pflag.String("log-level", "info", "`debug/info/error`")
 	pflag.Int("heartbeat", 60, "heartbeat seconds")
 	pflag.Parse()
 	viper.BindPFlags(pflag.CommandLine)

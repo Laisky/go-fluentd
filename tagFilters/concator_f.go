@@ -105,7 +105,16 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			pmsg, ok = c.slot[identifier]
 			// new identifier
 			if !ok {
-				utils.Logger.Debug("got new identifier", zap.String("identifier", identifier), zap.ByteString("log", msg.Message[c.MsgKey].([]byte)))
+				// new line with incorrect format, discard
+				if !c.Regexp.Match(log) {
+					c.OutChan <- msg
+					continue
+				}
+
+				// new line with correct format, set as first line
+				utils.Logger.Debug("got new identifier",
+					zap.String("identifier", identifier),
+					zap.ByteString("log", msg.Message[c.MsgKey].([]byte)))
 				pmsg = c.PMsgPool.Get().(*PendingMsg)
 				pmsg.lastT = now
 				pmsg.msg = msg

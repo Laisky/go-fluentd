@@ -70,6 +70,7 @@ func (f *Connector) Run() {
 					zap.Error(err),
 					zap.ByteString("args", msg.Message["args"].([]byte)))
 			}
+		case nil:
 		default:
 			utils.Logger.Warn("unknown args type")
 		}

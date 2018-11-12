@@ -65,8 +65,12 @@ func (f *Connector) Run() {
 		switch msg.Message["args"].(type) {
 		case []byte:
 			if err := json.Unmarshal(msg.Message["args"].([]byte), &msg.Message); err != nil {
-				utils.Logger.Error("unmarshal connector args got error", zap.Error(err))
+				utils.Logger.Warn("json unmarshal connector args got error",
+					zap.Error(err),
+					zap.ByteString("args", msg.Message["args"].([]byte)))
 			}
+		default:
+			utils.Logger.Warn("unknown args type")
 		}
 
 		f.OutChan <- msg

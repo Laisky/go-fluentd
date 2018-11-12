@@ -52,7 +52,7 @@ func (f *SparkFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 		zap.String("tag", f.Tag),
 		zap.ByteString("log", msg.Message[f.MsgKey].([]byte)))
 	if f.IgnoreRegex.Match(msg.Message[f.MsgKey].([]byte)) {
-		f.msgPool.Put(msg)
+		f.DiscardMsg(msg)
 		return nil
 	}
 

@@ -91,8 +91,9 @@ func (c *Controllor) initAcceptor(journal *Journal, receivers []libs.AcceptorRec
 }
 
 func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorPipeline {
-	return acceptorFilters.NewAcceptorPipeline(
-		c.msgPool,
+	return acceptorFilters.NewAcceptorPipeline(&acceptorFilters.AcceptorPipelineCfg{
+		MsgPool: c.msgPool,
+	},
 		acceptorFilters.NewSparkFilter(&acceptorFilters.SparkFilterCfg{
 			Tag:         "spark." + env,
 			MsgKey:      utils.Settings.GetString("settings.acceptor_filters.spark.msg_key"),
@@ -109,9 +110,12 @@ func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorP
 	)
 }
 
-func (c *Controllor) initTagPipeline(env string) *tagFilters.TagPipeline {
-	return tagFilters.NewTagPipeline(
-		&tagFilters.TagPipelineCfg{DefaultInternalChanSize: 1000},
+func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *tagFilters.TagPipeline {
+	return tagFilters.NewTagPipeline(&tagFilters.TagPipelineCfg{
+		MsgPool:                 c.msgPool,
+		CommitedChan:            waitCommitChan,
+		DefaultInternalChanSize: 1000,
+	},
 		tagFilters.NewConcatorFact(&tagFilters.ConcatorFactCfg{
 			ConcatorCfgs: libs.LoadConcatorTagConfigs(),
 		}),
@@ -142,9 +146,11 @@ func (c *Controllor) initDispatcher(waitDispatchChan chan *libs.FluentMsg, tagPi
 	return dispatcher
 }
 
-func (c *Controllor) initPostPipeline(env string) *postFilters.PostPipeline {
-	return postFilters.NewPostPipeline(
-		c.msgPool,
+func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- int64) *postFilters.PostPipeline {
+	return postFilters.NewPostPipeline(&postFilters.PostPipelineCfg{
+		MsgPool:       c.msgPool,
+		CommittedChan: waitCommitChan,
+	},
 		// set the DefaultFilter as first filter
 		postFilters.NewDefaultFilter(&postFilters.DefaultFilterCfg{
 			MsgKey: utils.Settings.GetString("settings.post_filters.default.msg_key"),
@@ -180,23 +186,24 @@ func (c *Controllor) Run() {
 	env := utils.Settings.GetString("env")
 
 	journal := c.initJournal()
+
 	receivers := c.initRecvs(env)
 	acceptor := c.initAcceptor(journal, receivers)
 	acceptorPipeline := c.initAcceptorPipeline(env)
 
+	waitCommitChan := journal.GetCommitChan()
 	waitAccepPipelineChan := acceptor.MessageChan()
 	waitDumpChan := acceptorPipeline.Wrap(waitAccepPipelineChan)
+
+	// after `journal.DumpMsgFlow`, every discarded msg should commit to waitCommitChan
 	waitDispatchChan := journal.DumpMsgFlow(c.msgPool, waitDumpChan)
 
-	tagPipeline := c.initTagPipeline(env)
+	tagPipeline := c.initTagPipeline(env, waitCommitChan)
 	dispatcher := c.initDispatcher(waitDispatchChan, tagPipeline)
-
 	waitPostPipelineChan := dispatcher.GetOutChan()
-	postPipeline := c.initPostPipeline(env)
+	postPipeline := c.initPostPipeline(env, waitCommitChan)
 	waitProduceChan := postPipeline.Wrap(waitPostPipelineChan)
-
 	producer := c.initProducer(waitProduceChan)
-	waitCommitChan := journal.GetCommitChan()
 
 	// heartbeat
 	go c.runHeartBeat()

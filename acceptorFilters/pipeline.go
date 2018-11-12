@@ -7,19 +7,30 @@ import (
 	"github.com/Laisky/go-utils"
 )
 
+type AcceptorPipelineCfg struct {
+	MsgPool *sync.Pool
+}
+
 type AcceptorPipeline struct {
+	*AcceptorPipelineCfg
 	filters     []AcceptorFilterItf
-	msgPool     *sync.Pool
 	reEnterChan chan *libs.FluentMsg
 }
 
-func NewAcceptorPipeline(msgPool *sync.Pool, filters ...AcceptorFilterItf) *AcceptorPipeline {
+func NewAcceptorPipeline(cfg *AcceptorPipelineCfg, filters ...AcceptorFilterItf) *AcceptorPipeline {
 	utils.Logger.Info("NewAcceptorPipeline")
-	return &AcceptorPipeline{
-		filters:     filters,
-		msgPool:     msgPool,
-		reEnterChan: make(chan *libs.FluentMsg, 1000),
+	a := &AcceptorPipeline{
+		AcceptorPipelineCfg: cfg,
+		filters:             filters,
+		reEnterChan:         make(chan *libs.FluentMsg, 1000),
 	}
+
+	for _, filter := range a.filters {
+		filter.SetUpstream(a.reEnterChan)
+		filter.SetMsgPool(a.MsgPool)
+	}
+
+	return a
 }
 
 func (f *AcceptorPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan chan *libs.FluentMsg) {
@@ -28,11 +39,6 @@ func (f *AcceptorPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan chan *libs
 		filter AcceptorFilterItf
 		msg    *libs.FluentMsg
 	)
-
-	for _, filter = range f.filters {
-		filter.SetUpstream(f.reEnterChan)
-		filter.SetMsgPool(f.msgPool)
-	}
 
 	go func() {
 		defer utils.Logger.Error("quit acceptor pipeline")

@@ -10,6 +10,7 @@ import (
 )
 
 type GeelyCfg struct {
+	Cf              *GeelyFact
 	Tag, MsgKey     string
 	Regexp          *regexp.Regexp
 	OutChan         chan<- *libs.FluentMsg
@@ -50,7 +51,7 @@ func (f *Geely) Run() {
 			utils.Logger.Warn("message format not matched",
 				zap.String("tag", msg.Tag),
 				zap.ByteString("log", msg.Message[f.MsgKey].([]byte)))
-			f.MsgPool.Put(msg)
+			f.Cf.DiscardMsg(msg)
 			continue
 		}
 
@@ -71,13 +72,15 @@ type GeelyFactCfg struct {
 }
 
 type GeelyFact struct {
+	*BaseTagFilterFactory
 	*GeelyFactCfg
 }
 
 func NewGeelyFact(cfg *GeelyFactCfg) *GeelyFact {
 	utils.Logger.Info("create new Geelyfactory")
 	return &GeelyFact{
-		GeelyFactCfg: cfg,
+		BaseTagFilterFactory: &BaseTagFilterFactory{},
+		GeelyFactCfg:         cfg,
 	}
 }
 
@@ -93,6 +96,7 @@ func (cf *GeelyFact) Spawn(tag string, outChan chan<- *libs.FluentMsg) chan<- *l
 	utils.Logger.Info("spawn Geely tagfilter", zap.String("tag", tag))
 	inChan := make(chan *libs.FluentMsg, 1000)
 	f := NewGeely(&GeelyCfg{
+		Cf:              cf,
 		Tag:             tag,
 		InChan:          inChan,
 		OutChan:         outChan,

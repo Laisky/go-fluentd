@@ -11,6 +11,7 @@ import (
 )
 
 type ConnectorCfg struct {
+	Cf              *ConnectorFact
 	Tag, MsgKey     string
 	Regexp          *regexp.Regexp
 	OutChan         chan<- *libs.FluentMsg
@@ -51,7 +52,7 @@ func (f *Connector) Run() {
 			utils.Logger.Warn("message format not matched",
 				zap.String("tag", msg.Tag),
 				zap.ByteString("log", msg.Message[f.MsgKey].([]byte)))
-			f.MsgPool.Put(msg)
+			f.Cf.DiscardMsg(msg)
 			continue
 		}
 
@@ -85,13 +86,15 @@ type ConnectorFactCfg struct {
 }
 
 type ConnectorFact struct {
+	*BaseTagFilterFactory
 	*ConnectorFactCfg
 }
 
 func NewConnectorFact(cfg *ConnectorFactCfg) *ConnectorFact {
 	utils.Logger.Info("create new connectorfactory")
 	return &ConnectorFact{
-		ConnectorFactCfg: cfg,
+		BaseTagFilterFactory: &BaseTagFilterFactory{},
+		ConnectorFactCfg:     cfg,
 	}
 }
 
@@ -107,6 +110,7 @@ func (cf *ConnectorFact) Spawn(tag string, outChan chan<- *libs.FluentMsg) chan<
 	utils.Logger.Info("spawn connector tagfilter", zap.String("tag", tag))
 	inChan := make(chan *libs.FluentMsg, 1000)
 	f := NewConnector(&ConnectorCfg{
+		Cf:              cf,
 		Tag:             tag,
 		InChan:          inChan,
 		OutChan:         outChan,

@@ -21,8 +21,7 @@ type ConcatorCfg struct {
 // Concator work for one tag, contains many identifier("container_id")
 type Concator struct {
 	*ConcatorCfg
-	slot   map[string]*PendingMsg
-	maxLen int
+	slot map[string]*PendingMsg
 }
 
 // PendingMsg is the message wait tobe concatenate
@@ -41,7 +40,6 @@ func NewConcator(cfg *ConcatorCfg) *Concator {
 	return &Concator{
 		ConcatorCfg: cfg,
 		slot:        map[string]*PendingMsg{},
-		maxLen:      utils.Settings.GetInt("settings.max_msg_length"),
 	}
 }
 
@@ -147,7 +145,7 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			c.slot[identifier].lastT = now
 
 			// too long to send
-			if len(c.slot[identifier].msg.Message[c.MsgKey].([]byte)) >= c.maxLen {
+			if len(c.slot[identifier].msg.Message[c.MsgKey].([]byte)) >= c.Cf.MaxLen {
 				utils.Logger.Debug("too long to send", zap.String("msgKey", c.MsgKey), zap.String("tag", msg.Tag))
 				c.OutChan <- c.slot[identifier].msg
 				c.PMsgPool.Put(c.slot[identifier])
@@ -171,6 +169,7 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 }
 
 type ConcatorFactCfg struct {
+	MaxLen       int
 	ConcatorCfgs map[string]*libs.ConcatorTagCfg
 }
 
@@ -183,7 +182,12 @@ type ConcatorFactory struct {
 
 // NewConcatorFact create new ConcatorFactory
 func NewConcatorFact(cfg *ConcatorFactCfg) *ConcatorFactory {
-	utils.Logger.Info("create concatorFactory")
+	utils.Logger.Info("create concatorFactory", zap.Int("max_len", cfg.MaxLen))
+
+	if cfg.MaxLen < 10000 {
+		utils.Logger.Warn("concator max_length maybe too short", zap.Int("len", cfg.MaxLen))
+	}
+
 	return &ConcatorFactory{
 		BaseTagFilterFactory: &BaseTagFilterFactory{},
 		ConcatorFactCfg:      cfg,

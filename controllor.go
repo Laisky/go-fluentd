@@ -40,10 +40,12 @@ func NewControllor() *Controllor {
 }
 
 func (c *Controllor) initJournal() *Journal {
-	return NewJournal(
-		utils.Settings.GetString("settings.buf_dir_path"),
-		utils.Settings.GetInt64("settings.buf_file_bytes"),
-	)
+	return NewJournal(&JournalCfg{
+		CommitChanLen:     utils.Settings.GetInt("settings.journal.commit_buf_len"),
+		CommitChanBusyLen: utils.Settings.GetInt("settings.journal.commit_buf_busy_len"),
+		BufDirPath:        utils.Settings.GetString("settings.journal.buf_dir_path"),
+		BufSizeBytes:      utils.Settings.GetInt64("settings.journal.buf_file_bytes"),
+	})
 }
 
 func (c *Controllor) initRecvs(env string) []libs.AcceptorRecvItf {
@@ -92,18 +94,19 @@ func (c *Controllor) initAcceptor(journal *Journal, receivers []libs.AcceptorRec
 
 func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorPipeline {
 	return acceptorFilters.NewAcceptorPipeline(&acceptorFilters.AcceptorPipelineCfg{
-		MsgPool: c.msgPool,
+		OutBufSize: utils.Settings.GetInt("settings.acceptor_filters.config.out_buf_len"),
+		MsgPool:    c.msgPool,
 	},
 		acceptorFilters.NewSparkFilter(&acceptorFilters.SparkFilterCfg{
 			Tag:         "spark." + env,
-			MsgKey:      utils.Settings.GetString("settings.acceptor_filters.spark.msg_key"),
-			Identifier:  utils.Settings.GetString("settings.acceptor_filters.spark.identifier"),
-			IgnoreRegex: regexp.MustCompile(utils.Settings.GetString("settings.acceptor_filters.spark.ignore_regex")),
+			MsgKey:      utils.Settings.GetString("settings.acceptor_filters.tenants.spark.msg_key"),
+			Identifier:  utils.Settings.GetString("settings.acceptor_filters.tenants.spark.identifier"),
+			IgnoreRegex: regexp.MustCompile(utils.Settings.GetString("settings.acceptor_filters.tenants.spark.ignore_regex")),
 		}),
 		acceptorFilters.NewSpringFilter(&acceptorFilters.SpringFilterCfg{
 			Tag:   "spring." + env,
 			Env:   env,
-			Rules: acceptorFilters.ParseSpringRules(utils.Settings.Get("settings.acceptor_filters.spring.rules").([]interface{})),
+			Rules: acceptorFilters.ParseSpringRules(utils.Settings.Get("settings.acceptor_filters.tenants.spring.rules").([]interface{})),
 		}),
 		// set the DefaultFilter as last filter
 		acceptorFilters.NewDefaultFilter(acceptorFilters.NewDefaultFilterCfg()),
@@ -117,6 +120,7 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 		DefaultInternalChanSize: 1000,
 	},
 		tagFilters.NewConcatorFact(&tagFilters.ConcatorFactCfg{
+			MaxLen:       utils.Settings.GetInt("settings.tag_filters.concator.config.max_length"),
 			ConcatorCfgs: libs.LoadConcatorTagConfigs(),
 		}),
 		tagFilters.NewConnectorFact(&tagFilters.ConnectorFactCfg{

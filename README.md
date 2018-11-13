@@ -24,7 +24,7 @@ run:
 docker run -itd --rm --name=go-concator -p 24225:24225 -p 8080:8080 \
     -v /opt/configs/go-concator:/etc/go-concator \
     -v /data/log/fluentd/go-concator:/data/log/fluentd/go-concator
-    ppcelery/go-concator:latest \
+    ppcelery/go-concator:latest go-concator \
         --config=/etc/go-concator \
         --env=perf \
         --addr=0.0.0.0:8080
@@ -36,7 +36,7 @@ docker run -itd --rm --name=go-concator -p 24225:24225 -p 8080:8080 \
 - stable
 - release
 - dev
-- <feature task id>
+- `<feature taskid>`
 
 
 ## Roles

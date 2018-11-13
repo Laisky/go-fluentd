@@ -7,19 +7,32 @@ import (
 	"github.com/Laisky/go-utils"
 )
 
+type PostPipelineCfg struct {
+	MsgPool       *sync.Pool
+	CommittedChan chan<- int64
+}
+
 type PostPipeline struct {
+	*PostPipelineCfg
 	filters     []PostFilterItf
-	msgPool     *sync.Pool
 	reEnterChan chan *libs.FluentMsg
 }
 
-func NewPostPipeline(msgPool *sync.Pool, filters ...PostFilterItf) *PostPipeline {
+func NewPostPipeline(cfg *PostPipelineCfg, filters ...PostFilterItf) *PostPipeline {
 	utils.Logger.Info("NewPostPipeline")
-	return &PostPipeline{
-		filters:     filters,
-		msgPool:     msgPool,
-		reEnterChan: make(chan *libs.FluentMsg, 1000),
+	pp := &PostPipeline{
+		PostPipelineCfg: cfg,
+		filters:         filters,
+		reEnterChan:     make(chan *libs.FluentMsg, 1000),
 	}
+
+	for _, filter := range pp.filters {
+		filter.SetUpstream(pp.reEnterChan)
+		filter.SetMsgPool(pp.MsgPool)
+		filter.SetCommittedChan(pp.CommittedChan)
+	}
+
+	return pp
 }
 
 func (f *PostPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan chan *libs.FluentMsg) {
@@ -28,11 +41,6 @@ func (f *PostPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan chan *libs.Flu
 		filter PostFilterItf
 		msg    *libs.FluentMsg
 	)
-
-	for _, filter = range f.filters {
-		filter.SetUpstream(f.reEnterChan)
-		filter.SetMsgPool(f.msgPool)
-	}
 
 	go func() {
 	NEXT_MSG:

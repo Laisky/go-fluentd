@@ -11,6 +11,7 @@ import (
 )
 
 type ConcatorCfg struct {
+	Cf                      *ConcatorFactory
 	Tag, MsgKey, Identifier string
 	OutChan                 chan<- *libs.FluentMsg
 	PMsgPool                *sync.Pool
@@ -175,6 +176,7 @@ type ConcatorFactCfg struct {
 
 // ConcatorFactory can spawn new Concator
 type ConcatorFactory struct {
+	*BaseTagFilterFactory
 	*ConcatorFactCfg
 	pMsgPool *sync.Pool
 }
@@ -183,7 +185,8 @@ type ConcatorFactory struct {
 func NewConcatorFact(cfg *ConcatorFactCfg) *ConcatorFactory {
 	utils.Logger.Info("create concatorFactory")
 	return &ConcatorFactory{
-		ConcatorFactCfg: cfg,
+		BaseTagFilterFactory: &BaseTagFilterFactory{},
+		ConcatorFactCfg:      cfg,
 		pMsgPool: &sync.Pool{
 			New: func() interface{} {
 				return &PendingMsg{}
@@ -206,6 +209,7 @@ func (cf *ConcatorFactory) IsTagSupported(tag string) bool {
 func (cf *ConcatorFactory) Spawn(tag string, outChan chan<- *libs.FluentMsg) chan<- *libs.FluentMsg {
 	inChan := make(chan *libs.FluentMsg, 1000)
 	concator := NewConcator(&ConcatorCfg{
+		Cf:         cf,
 		Tag:        tag,
 		OutChan:    outChan,
 		MsgKey:     cf.ConcatorCfgs[tag].MsgKey,

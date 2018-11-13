@@ -117,6 +117,7 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 		DefaultInternalChanSize: 1000,
 	},
 		tagFilters.NewConcatorFact(&tagFilters.ConcatorFactCfg{
+			MaxLen:       utils.Settings.GetInt("settings.tag_filters.concator.config.max_length"),
 			ConcatorCfgs: libs.LoadConcatorTagConfigs(),
 		}),
 		tagFilters.NewConnectorFact(&tagFilters.ConnectorFactCfg{

@@ -13,32 +13,39 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	outChanCap     = 5000
-	outChanBusyLen = 3500
-)
+type JournalCfg struct {
+	BufDirPath        string
+	BufSizeBytes      int64
+	CommitChanLen     int
+	CommitChanBusyLen int
+}
 
 // Journal dumps all messages to files,
 // then check every msg with commited id to make sure no msg lost
 type Journal struct {
-	bufDirPath string
+	*JournalCfg
 	j          *journal.Journal
 	legacyLock uint32
 	outChan    chan *libs.FluentMsg
 }
 
-// NewJournal create new Journal with `bufDirPath` and `bufFileSize`
-func NewJournal(bufDirPath string, bufFileSize int64) *Journal {
-	cfg := &journal.JournalConfig{
-		BufDirPath:   bufDirPath,
-		BufSizeBytes: bufFileSize,
+// NewJournal create new Journal with `bufDirPath` and `BufSizeBytes`
+func NewJournal(cfg *JournalCfg) *Journal {
+	utils.Logger.Info("create new journal",
+		zap.String("filepath", cfg.BufDirPath),
+		zap.Int64("size", cfg.BufSizeBytes))
+	if cfg.BufSizeBytes < 10485760 { // 10MB
+		utils.Logger.Warn("journal buf file size too small", zap.Int64("size", cfg.BufSizeBytes))
 	}
 
 	return &Journal{
-		bufDirPath: bufDirPath,
-		j:          journal.NewJournal(cfg),
+		JournalCfg: cfg,
+		j: journal.NewJournal(&journal.JournalConfig{
+			BufDirPath:   cfg.BufDirPath,
+			BufSizeBytes: cfg.BufSizeBytes,
+		}),
 		legacyLock: 0,
-		outChan:    make(chan *libs.FluentMsg, outChanCap),
+		outChan:    make(chan *libs.FluentMsg, cfg.CommitChanLen),
 	}
 }
 
@@ -147,7 +154,7 @@ func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, msgChan <-chan *libs.FluentMsg
 			utils.Logger.Debug("success write data journal", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id))
 
 			// give chan to legacy processing
-			if j.j.IsLegacyRunning() && len(j.outChan) > outChanBusyLen {
+			if j.j.IsLegacyRunning() && len(j.outChan) > j.CommitChanBusyLen {
 				continue
 			}
 

@@ -8,7 +8,8 @@ import (
 )
 
 type AcceptorPipelineCfg struct {
-	MsgPool *sync.Pool
+	MsgPool    *sync.Pool
+	OutBufSize int
 }
 
 type AcceptorPipeline struct {
@@ -34,7 +35,7 @@ func NewAcceptorPipeline(cfg *AcceptorPipelineCfg, filters ...AcceptorFilterItf)
 }
 
 func (f *AcceptorPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan chan *libs.FluentMsg) {
-	outChan = make(chan *libs.FluentMsg, 5000)
+	outChan = make(chan *libs.FluentMsg, f.OutBufSize)
 	var (
 		filter AcceptorFilterItf
 		msg    *libs.FluentMsg

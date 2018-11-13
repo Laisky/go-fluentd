@@ -23,7 +23,7 @@ func SetupSettings() {
 		utils.SetupLogger("debug")
 	} else { // prod mode
 		fmt.Println("run in prod mode")
-		utils.SetupLogger("info")
+		utils.SetupLogger("error")
 	}
 
 	// env

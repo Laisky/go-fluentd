@@ -17,13 +17,24 @@ func SetupSettings() {
 		panic(err)
 	}
 
-	// check --log-level
+	// check `--log-level`
 	switch utils.Settings.GetString("log-level") {
-	case "info":
 	case "debug":
+	case "info":
+	case "warn":
 	case "error":
 	default:
 		panic(fmt.Sprintf("unknown value `--log-level=%v`", utils.Settings.GetString("log-level")))
+	}
+
+	// check `--env`
+	switch utils.Settings.GetString("env") {
+	case "sit":
+	case "perf":
+	case "uat":
+	case "prod":
+	default:
+		panic(fmt.Sprintf("unknown value `--env=%v`", utils.Settings.GetString("env")))
 	}
 
 	// mode
@@ -35,11 +46,6 @@ func SetupSettings() {
 		fmt.Println("run in prod mode")
 		utils.SetupLogger(utils.Settings.GetString("log-level"))
 	}
-
-	// env
-	if utils.Settings.GetString("env") == "nil" {
-		panic(fmt.Errorf("must set `--env`"))
-	}
 }
 
 func SetupArgs() {
@@ -48,7 +54,7 @@ func SetupArgs() {
 	pflag.Bool("pprof", false, "run in prof mode")
 	pflag.String("config", "/etc/go-ramjet/settings", "config file directory path")
 	pflag.String("addr", "localhost:8080", "like `localhost:8080`")
-	pflag.String("env", "nil", "environment `sit/perf/uat/prod`")
+	pflag.String("env", "", "environment `sit/perf/uat/prod`")
 	pflag.String("log-level", "info", "`debug/info/error`")
 	pflag.Int("heartbeat", 60, "heartbeat seconds")
 	pflag.Parse()

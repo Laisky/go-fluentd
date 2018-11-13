@@ -19,3 +19,15 @@ func RegexNamedSubMatch(r *regexp.Regexp, log []byte, subMatchMap map[string]int
 	}
 	return nil
 }
+
+func FlattenMap(data map[string]interface{}) {
+	for k, vi := range data {
+		if v2i, ok := vi.(map[string]interface{}); ok {
+			FlattenMap(v2i)
+			for k3, v3i := range v2i {
+				data[k+"."+k3] = v3i
+			}
+			delete(data, k)
+		}
+	}
+}

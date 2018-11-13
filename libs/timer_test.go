@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	concator "github.com/Laisky/go-concator"
+	"github.com/Laisky/go-concator/libs"
 	utils "github.com/Laisky/go-utils"
 )
 
@@ -15,8 +15,8 @@ var (
 	nWaits         = 0
 	nWaitsToDouble = 2
 	timeoutTs      = 5 * time.Second
-	timer          = concator.NewTimer(
-		concator.NewTimerConfig(
+	timer          = libs.NewTimer(
+		libs.NewTimerConfig(
 			initWaitTs,
 			maxWaitTs,
 			waitTs,

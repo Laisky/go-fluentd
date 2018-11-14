@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/Laisky/go-concator/libs"
+	"github.com/Laisky/go-concator/monitor"
 	utils "github.com/Laisky/go-utils"
-	"github.com/kataras/iris"
 	"go.uber.org/zap"
 )
 
@@ -37,20 +37,19 @@ func NewProducer(cfg *ProducerCfg) *Producer {
 		producerTagChanMap: map[string]chan<- *libs.FluentMsg{},
 		retryMsgChan:       make(chan *libs.FluentMsg, 500),
 	}
-	p.BindMonitor()
+	p.registerMonitor()
 	return p
 }
 
-// BindMonitor bind monitor for producer
-func (p *Producer) BindMonitor() {
-	utils.Logger.Info("bind `/monitor/producer`")
-	Server.Get("/monitor/producer", func(ctx iris.Context) {
-		cnt := "producerTagChanMap tag:chan\n"
+// registerMonitor bind monitor for producer
+func (p *Producer) registerMonitor() {
+	monitor.AddMetric("producer", func() map[string]interface{} {
+		metrics := map[string]interface{}{}
 		for tag, c := range p.producerTagChanMap {
-			cnt += fmt.Sprintf("> %v: %v\n", tag, len(c))
+			metrics[tag+".ChanLen"] = len(c)
+			metrics[tag+".ChanCap"] = cap(c)
 		}
-		cnt += fmt.Sprintf("> retryMsgChan: %v\n", len(p.retryMsgChan))
-		ctx.Writef(cnt)
+		return metrics
 	})
 }
 

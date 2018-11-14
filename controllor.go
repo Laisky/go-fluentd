@@ -1,7 +1,6 @@
 package concator
 
 import (
-	"fmt"
 	"regexp"
 	"runtime"
 	"sync"
@@ -9,12 +8,12 @@ import (
 
 	"github.com/Laisky/go-concator/acceptorFilters"
 	"github.com/Laisky/go-concator/libs"
+	"github.com/Laisky/go-concator/monitor"
 	"github.com/Laisky/go-concator/postFilters"
 	"github.com/Laisky/go-concator/recvs"
 	"github.com/Laisky/go-concator/tagFilters"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/go-utils/kafka"
-	"github.com/kataras/iris"
 	"go.uber.org/zap"
 )
 
@@ -213,25 +212,25 @@ func (c *Controllor) Run() {
 	// heartbeat
 	go c.runHeartBeat()
 
-	// monitor server
-	Server.Get("/monitor/controllor", func(ctx iris.Context) {
-		ctx.WriteString(fmt.Sprintf(`
-goroutine: %v
-waitAccepPipelineChan: %v / %v
-waitDumpChan: %v / %v
-waitDispatchChan: %v / %v
-waitPostPipelineChan: %v / %v
-waitProduceChan: %v / %v
-waitCommitChan: %v / %v`,
-			runtime.NumGoroutine(),
-			len(waitAccepPipelineChan), cap(waitAccepPipelineChan),
-			len(waitDumpChan), cap(waitDumpChan),
-			len(waitDispatchChan), cap(waitDispatchChan),
-			len(waitPostPipelineChan), cap(waitPostPipelineChan),
-			len(waitProduceChan), cap(waitProduceChan),
-			len(waitCommitChan), cap(waitCommitChan),
-		))
+	// monitor
+	monitor.AddMetric("controllor", func() map[string]interface{} {
+		return map[string]interface{}{
+			"goroutine":                runtime.NumGoroutine(),
+			"waitAccepPipelineChanLen": len(waitAccepPipelineChan),
+			"waitAccepPipelineChanCap": cap(waitAccepPipelineChan),
+			"waitDumpChanLen":          len(waitDumpChan),
+			"waitDumpChanCap":          cap(waitDumpChan),
+			"waitDispatchChanLen":      len(waitDispatchChan),
+			"waitDispatchChanCap":      cap(waitDispatchChan),
+			"waitPostPipelineChanLen":  len(waitPostPipelineChan),
+			"waitPostPipelineChanCap":  cap(waitPostPipelineChan),
+			"waitProduceChanLen":       len(waitProduceChan),
+			"waitProduceChanCap":       cap(waitProduceChan),
+			"waitCommitChanLen":        len(waitCommitChan),
+			"waitCommitChanCap":        cap(waitCommitChan),
+		}
 	})
+	monitor.BindHTTP(Server)
 
 	go producer.Run(
 		utils.Settings.GetInt("settings.producer_forks"),

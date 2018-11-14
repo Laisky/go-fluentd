@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/Laisky/go-concator/libs"
+	"github.com/Laisky/go-concator/monitor"
 	utils "github.com/Laisky/go-utils"
 	"go.uber.org/zap"
 )
@@ -18,6 +19,7 @@ type TagPipelineCfg struct {
 type TagPipeline struct {
 	*TagPipelineCfg
 	TagFilterFactoryItfs []TagFilterFactoryItf
+	monitorChans         map[string]chan<- *libs.FluentMsg
 }
 
 // NewTagPipeline create new TagPipeline
@@ -32,10 +34,13 @@ func NewTagPipeline(cfg *TagPipelineCfg, itfs ...TagFilterFactoryItf) *TagPipeli
 		itf.SetCommittedChan(cfg.CommitedChan)
 	}
 
-	return &TagPipeline{
+	tp := &TagPipeline{
 		TagPipelineCfg:       cfg,
 		TagFilterFactoryItfs: itfs,
+		monitorChans:         map[string]chan<- *libs.FluentMsg{},
 	}
+	tp.registryMonitor()
+	return tp
 }
 
 // Spawn create and run new Concator for new tag
@@ -54,6 +59,7 @@ func (p *TagPipeline) Spawn(tag string, outChan chan<- *libs.FluentMsg) (chan<- 
 				zap.String("name", f.GetName()),
 				zap.String("tag", tag))
 			isTagSupported = true
+			p.monitorChans[tag+"."+f.GetName()] = downstreamChan
 			downstreamChan = f.Spawn(tag, downstreamChan) // downstream outChan is upstream's inChan
 		}
 	}
@@ -63,4 +69,15 @@ func (p *TagPipeline) Spawn(tag string, outChan chan<- *libs.FluentMsg) (chan<- 
 	}
 
 	return downstreamChan, nil
+}
+
+func (p *TagPipeline) registryMonitor() {
+	monitor.AddMetric("tagpipeline", func() map[string]interface{} {
+		metrics := map[string]interface{}{}
+		for k, c := range p.monitorChans {
+			metrics[k+".ChanLen"] = len(c)
+			metrics[k+".ChanCap"] = cap(c)
+		}
+		return metrics
+	})
 }

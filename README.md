@@ -10,6 +10,35 @@ Replace most of fluentd's functions except string parsing
  and can be easy to horizontal scaling).
 
 
+ ## Run
+
+build:
+
+```sh
+docker build . -t ppcelery/go-concator:latest
+```
+
+run:
+
+```sh
+docker run -itd --rm --name=go-concator -p 24225:24225 -p 8080:8080 \
+    -v /opt/configs/go-concator:/etc/go-concator \
+    -v /data/log/fluentd/go-concator:/data/log/fluentd/go-concator
+    ppcelery/go-concator:latest go-concator \
+        --config=/etc/go-concator \
+        --env=perf \
+        --addr=0.0.0.0:8080
+```
+
+
+### docker images version
+
+- stable
+- release
+- dev
+- `<feature taskid>`
+
+
 ## Roles
 
 - Acceptor (consists of Recvs)

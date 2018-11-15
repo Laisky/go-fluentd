@@ -1,7 +1,6 @@
 package concator
 
 import (
-	"fmt"
 	"regexp"
 	"runtime"
 	"sync"
@@ -9,12 +8,12 @@ import (
 
 	"github.com/Laisky/go-concator/acceptorFilters"
 	"github.com/Laisky/go-concator/libs"
+	"github.com/Laisky/go-concator/monitor"
 	"github.com/Laisky/go-concator/postFilters"
 	"github.com/Laisky/go-concator/recvs"
 	"github.com/Laisky/go-concator/tagFilters"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/go-utils/kafka"
-	"github.com/kataras/iris"
 	"go.uber.org/zap"
 )
 
@@ -40,10 +39,12 @@ func NewControllor() *Controllor {
 }
 
 func (c *Controllor) initJournal() *Journal {
-	return NewJournal(
-		utils.Settings.GetString("settings.buf_dir_path"),
-		utils.Settings.GetInt64("settings.buf_file_bytes"),
-	)
+	return NewJournal(&JournalCfg{
+		CommitChanLen:     utils.Settings.GetInt("settings.journal.commit_buf_len"),
+		CommitChanBusyLen: utils.Settings.GetInt("settings.journal.commit_buf_busy_len"),
+		BufDirPath:        utils.Settings.GetString("settings.journal.buf_dir_path"),
+		BufSizeBytes:      utils.Settings.GetInt64("settings.journal.buf_file_bytes"),
+	})
 }
 
 func (c *Controllor) initRecvs(env string) []libs.AcceptorRecvItf {
@@ -92,18 +93,19 @@ func (c *Controllor) initAcceptor(journal *Journal, receivers []libs.AcceptorRec
 
 func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorPipeline {
 	return acceptorFilters.NewAcceptorPipeline(&acceptorFilters.AcceptorPipelineCfg{
-		MsgPool: c.msgPool,
+		OutBufSize: utils.Settings.GetInt("settings.acceptor_filters.config.out_buf_len"),
+		MsgPool:    c.msgPool,
 	},
 		acceptorFilters.NewSparkFilter(&acceptorFilters.SparkFilterCfg{
 			Tag:         "spark." + env,
-			MsgKey:      utils.Settings.GetString("settings.acceptor_filters.spark.msg_key"),
-			Identifier:  utils.Settings.GetString("settings.acceptor_filters.spark.identifier"),
-			IgnoreRegex: regexp.MustCompile(utils.Settings.GetString("settings.acceptor_filters.spark.ignore_regex")),
+			MsgKey:      utils.Settings.GetString("settings.acceptor_filters.tenants.spark.msg_key"),
+			Identifier:  utils.Settings.GetString("settings.acceptor_filters.tenants.spark.identifier"),
+			IgnoreRegex: regexp.MustCompile(utils.Settings.GetString("settings.acceptor_filters.tenants.spark.ignore_regex")),
 		}),
 		acceptorFilters.NewSpringFilter(&acceptorFilters.SpringFilterCfg{
 			Tag:   "spring." + env,
 			Env:   env,
-			Rules: acceptorFilters.ParseSpringRules(utils.Settings.Get("settings.acceptor_filters.spring.rules").([]interface{})),
+			Rules: acceptorFilters.ParseSpringRules(utils.Settings.Get("settings.acceptor_filters.tenants.spring.rules").([]interface{})),
 		}),
 		// set the DefaultFilter as last filter
 		acceptorFilters.NewDefaultFilter(acceptorFilters.NewDefaultFilterCfg()),
@@ -117,10 +119,12 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 		DefaultInternalChanSize: 1000,
 	},
 		tagFilters.NewConcatorFact(&tagFilters.ConcatorFactCfg{
+			MaxLen:       utils.Settings.GetInt("settings.tag_filters.concator.config.max_length"),
 			ConcatorCfgs: libs.LoadConcatorTagConfigs(),
 		}),
 		tagFilters.NewConnectorFact(&tagFilters.ConnectorFactCfg{
-			Tag:             utils.Settings.GetString("settings.tag_filters.connector.tag") + "." + env,
+			Env:             env,
+			Tags:            utils.Settings.GetStringSlice("settings.tag_filters.connector.tags"),
 			MsgKey:          utils.Settings.GetString("settings.tag_filters.connector.msg_key"),
 			Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.connector.pattern")),
 			IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.connector.is_remove_orig_log"),
@@ -208,25 +212,25 @@ func (c *Controllor) Run() {
 	// heartbeat
 	go c.runHeartBeat()
 
-	// monitor server
-	Server.Get("/monitor/controllor", func(ctx iris.Context) {
-		ctx.WriteString(fmt.Sprintf(`
-goroutine: %v
-waitAccepPipelineChan: %v / %v
-waitDumpChan: %v / %v
-waitDispatchChan: %v / %v
-waitPostPipelineChan: %v / %v
-waitProduceChan: %v / %v
-waitCommitChan: %v / %v`,
-			runtime.NumGoroutine(),
-			len(waitAccepPipelineChan), cap(waitAccepPipelineChan),
-			len(waitDumpChan), cap(waitDumpChan),
-			len(waitDispatchChan), cap(waitDispatchChan),
-			len(waitPostPipelineChan), cap(waitPostPipelineChan),
-			len(waitProduceChan), cap(waitProduceChan),
-			len(waitCommitChan), cap(waitCommitChan),
-		))
+	// monitor
+	monitor.AddMetric("controllor", func() map[string]interface{} {
+		return map[string]interface{}{
+			"goroutine":                runtime.NumGoroutine(),
+			"waitAccepPipelineChanLen": len(waitAccepPipelineChan),
+			"waitAccepPipelineChanCap": cap(waitAccepPipelineChan),
+			"waitDumpChanLen":          len(waitDumpChan),
+			"waitDumpChanCap":          cap(waitDumpChan),
+			"waitDispatchChanLen":      len(waitDispatchChan),
+			"waitDispatchChanCap":      cap(waitDispatchChan),
+			"waitPostPipelineChanLen":  len(waitPostPipelineChan),
+			"waitPostPipelineChanCap":  cap(waitPostPipelineChan),
+			"waitProduceChanLen":       len(waitProduceChan),
+			"waitProduceChanCap":       cap(waitProduceChan),
+			"waitCommitChanLen":        len(waitCommitChan),
+			"waitCommitChanCap":        cap(waitCommitChan),
+		}
 	})
+	monitor.BindHTTP(Server)
 
 	go producer.Run(
 		utils.Settings.GetInt("settings.producer_forks"),

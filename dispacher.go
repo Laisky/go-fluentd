@@ -1,14 +1,13 @@
 package concator
 
 import (
-	"fmt"
 	"regexp"
 	"sync"
 
 	"github.com/Laisky/go-concator/libs"
+	"github.com/Laisky/go-concator/monitor"
 	"github.com/Laisky/go-concator/tagFilters"
 	utils "github.com/Laisky/go-utils"
-	"github.com/kataras/iris"
 	"go.uber.org/zap"
 )
 
@@ -44,7 +43,7 @@ func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 // Run dispacher to distrubute messages to different concators
 func (d *Dispatcher) Run() {
 	utils.Logger.Info("run dispacher...")
-	d.BindMonitor()
+	d.registerMonitor()
 	go func() {
 		var (
 			inChanForEachTagi interface{}
@@ -76,16 +75,15 @@ func (d *Dispatcher) Run() {
 	}()
 }
 
-func (d *Dispatcher) BindMonitor() {
-	utils.Logger.Info("bind `/monitor/dispatcher`")
-	Server.Get("/monitor/dispatcher", func(ctx iris.Context) {
-		cnt := "concatorMap tag:chan\n"
+func (d *Dispatcher) registerMonitor() {
+	monitor.AddMetric("dispatcher", func() map[string]interface{} {
+		metrics := map[string]interface{}{}
 		d.concatorMap.Range(func(tagi interface{}, ci interface{}) bool {
-			cnt += fmt.Sprintf("> %v: %v\n", tagi.(string), len(ci.(chan<- *libs.FluentMsg)))
+			metrics[tagi.(string)+".ChanLen"] = len(ci.(chan<- *libs.FluentMsg))
+			metrics[tagi.(string)+".ChanCap"] = cap(ci.(chan<- *libs.FluentMsg))
 			return true
 		})
-
-		ctx.Writef(cnt)
+		return metrics
 	})
 }
 

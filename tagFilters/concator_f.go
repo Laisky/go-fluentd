@@ -58,8 +58,8 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 		ok         bool
 
 		now             time.Time
-		initWaitTs      = 20 * time.Millisecond
-		maxWaitTs       = 500 * time.Millisecond
+		initWaitTs      = 1 * time.Millisecond
+		maxWaitTs       = 40 * time.Millisecond
 		waitTs          = initWaitTs
 		nWaits          = 0
 		nWaitsToDouble  = 2
@@ -68,102 +68,107 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 	)
 
 	for {
-		select {
-		case msg = <-inChan:
-			now = time.Now()
-			timer.Reset(now)
-
-			// unknown identifier
-			switch msg.Message[c.Identifier].(type) {
-			case []byte:
-				identifier = string(msg.Message[c.Identifier].([]byte))
-			case string:
-				identifier = msg.Message[c.Identifier].(string)
+		now = time.Now()
+		if len(c.slot) == 0 { // no msg waitting in slot
+			utils.Logger.Debug("slot clear, waitting for new msg")
+			msg = <-inChan
+		} else {
+			select {
+			case msg = <-inChan:
 			default:
-				utils.Logger.Warn("unknown identifier or unknown type",
-					zap.String("tag", msg.Tag),
-					zap.String("identifier", c.Identifier))
-				c.OutChan <- msg
-				continue
-			}
-
-			// unknon msg key
-			switch msg.Message[c.MsgKey].(type) {
-			case []byte:
-				log = msg.Message[c.MsgKey].([]byte)
-			case string:
-				log = []byte(msg.Message[c.MsgKey].(string))
-			default:
-				utils.Logger.Warn("unknown msg key or unknown type",
-					zap.String("tag", msg.Tag),
-					zap.String("msg_key", c.MsgKey))
-				c.OutChan <- msg
-				continue
-			}
-
-			pmsg, ok = c.slot[identifier]
-			// new identifier
-			if !ok {
-				// new line with incorrect format, discard
-				if !c.Regexp.Match(log) {
-					c.OutChan <- msg
-					continue
+				for identifier, pmsg = range c.slot {
+					if now.Sub(pmsg.lastT) > concatTimeoutTs { // timeout to flush
+						utils.Logger.Debug("timeout flush", zap.ByteString("log", pmsg.msg.Message[c.MsgKey].([]byte)))
+						c.OutChan <- pmsg.msg
+						c.PMsgPool.Put(pmsg)
+						delete(c.slot, identifier)
+					}
 				}
 
-				// new line with correct format, set as first line
-				utils.Logger.Debug("got new identifier",
-					zap.String("identifier", identifier),
-					zap.ByteString("log", msg.Message[c.MsgKey].([]byte)))
-				pmsg = c.PMsgPool.Get().(*PendingMsg)
-				pmsg.lastT = now
-				pmsg.msg = msg
-				c.slot[identifier] = pmsg
+				timer.Sleep()
+				continue
+			}
+		}
+
+		timer.Reset(time.Now())
+
+		// unknown identifier
+		switch msg.Message[c.Identifier].(type) {
+		case []byte:
+			identifier = string(msg.Message[c.Identifier].([]byte))
+		case string:
+			identifier = msg.Message[c.Identifier].(string)
+		default:
+			utils.Logger.Warn("unknown identifier or unknown type",
+				zap.String("tag", msg.Tag),
+				zap.String("identifier", c.Identifier))
+			c.OutChan <- msg
+			continue
+		}
+
+		// unknon msg key
+		switch msg.Message[c.MsgKey].(type) {
+		case []byte:
+			log = msg.Message[c.MsgKey].([]byte)
+		case string:
+			log = []byte(msg.Message[c.MsgKey].(string))
+		default:
+			utils.Logger.Warn("unknown msg key or unknown type",
+				zap.String("tag", msg.Tag),
+				zap.String("msg_key", c.MsgKey))
+			c.OutChan <- msg
+			continue
+		}
+
+		pmsg, ok = c.slot[identifier]
+		// new identifier
+		if !ok {
+			// new line with incorrect format, discard
+			if !c.Regexp.Match(log) {
+				c.OutChan <- msg
 				continue
 			}
 
-			// old identifer
-			if c.Regexp.Match(log) { // new line
-				utils.Logger.Debug("got new line",
-					zap.ByteString("log", msg.Message[c.MsgKey].([]byte)),
-					zap.String("tag", msg.Tag))
-				c.OutChan <- c.slot[identifier].msg
-				c.slot[identifier].msg = msg
-				c.slot[identifier].lastT = now
-				continue
-			}
+			// new line with correct format, set as first line
+			utils.Logger.Debug("got new identifier",
+				zap.String("identifier", identifier),
+				zap.ByteString("log", msg.Message[c.MsgKey].([]byte)))
+			pmsg = c.PMsgPool.Get().(*PendingMsg)
+			pmsg.lastT = now
+			pmsg.msg = msg
+			c.slot[identifier] = pmsg
+			continue
+		}
 
-			// need to concat
-			utils.Logger.Debug("concat lines", zap.ByteString("log", msg.Message[c.MsgKey].([]byte)))
-			c.slot[identifier].msg.Message[c.MsgKey] =
-				append(c.slot[identifier].msg.Message[c.MsgKey].([]byte), '\n')
-			c.slot[identifier].msg.Message[c.MsgKey] =
-				append(c.slot[identifier].msg.Message[c.MsgKey].([]byte), msg.Message[c.MsgKey].([]byte)...)
-			if c.slot[identifier].msg.ExtIds == nil {
-				c.slot[identifier].msg.ExtIds = []int64{} // create ids, wait to append tail-msg's id
-			}
-			c.slot[identifier].msg.ExtIds = append(c.slot[identifier].msg.ExtIds, msg.Id)
+		// old identifer
+		if c.Regexp.Match(log) { // new line
+			utils.Logger.Debug("got new line",
+				zap.ByteString("log", msg.Message[c.MsgKey].([]byte)),
+				zap.String("tag", msg.Tag))
+			c.OutChan <- c.slot[identifier].msg
+			c.slot[identifier].msg = msg
 			c.slot[identifier].lastT = now
+			continue
+		}
 
-			// too long to send
-			if len(c.slot[identifier].msg.Message[c.MsgKey].([]byte)) >= c.Cf.MaxLen {
-				utils.Logger.Debug("too long to send", zap.String("msgKey", c.MsgKey), zap.String("tag", msg.Tag))
-				c.OutChan <- c.slot[identifier].msg
-				c.PMsgPool.Put(c.slot[identifier])
-				delete(c.slot, identifier)
-			}
+		// need to concat
+		utils.Logger.Debug("concat lines", zap.ByteString("log", msg.Message[c.MsgKey].([]byte)))
+		c.slot[identifier].msg.Message[c.MsgKey] =
+			append(c.slot[identifier].msg.Message[c.MsgKey].([]byte), '\n')
+		c.slot[identifier].msg.Message[c.MsgKey] =
+			append(c.slot[identifier].msg.Message[c.MsgKey].([]byte), msg.Message[c.MsgKey].([]byte)...)
+		if c.slot[identifier].msg.ExtIds == nil {
+			c.slot[identifier].msg.ExtIds = []int64{} // create ids, wait to append tail-msg's id
+		}
+		c.slot[identifier].msg.ExtIds = append(c.slot[identifier].msg.ExtIds, msg.Id)
+		c.slot[identifier].lastT = now
 
-		default: // check timeout
-			now = time.Now()
-			for identifier, pmsg = range c.slot {
-				if now.Sub(pmsg.lastT) > concatTimeoutTs { // timeout to flush
-					utils.Logger.Debug("timeout flush", zap.ByteString("log", pmsg.msg.Message[c.MsgKey].([]byte)))
-					c.OutChan <- pmsg.msg
-					c.PMsgPool.Put(pmsg)
-					delete(c.slot, identifier)
-				}
-			}
-
-			timer.Sleep()
+		// too long to send
+		if len(c.slot[identifier].msg.Message[c.MsgKey].([]byte)) >= c.Cf.MaxLen {
+			utils.Logger.Debug("too long to send", zap.String("msgKey", c.MsgKey), zap.String("tag", msg.Tag))
+			c.OutChan <- c.slot[identifier].msg
+			c.PMsgPool.Put(c.slot[identifier])
+			delete(c.slot, identifier)
 		}
 	}
 }

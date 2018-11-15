@@ -40,12 +40,12 @@ func SetupSettings() {
 	// mode
 	if utils.Settings.GetBool("debug") {
 		fmt.Println("run in debug mode")
-		utils.SetupLogger("debug")
-		utils.Settings.Set("log-level", "debug")
 	} else { // prod mode
 		fmt.Println("run in prod mode")
-		utils.SetupLogger(utils.Settings.GetString("log-level"))
 	}
+
+	// log
+	utils.SetupLogger(utils.Settings.GetString("log-level"))
 }
 
 func SetupArgs() {

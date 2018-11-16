@@ -34,8 +34,9 @@ func NewAcceptorPipeline(cfg *AcceptorPipelineCfg, filters ...AcceptorFilterItf)
 	return a
 }
 
-func (f *AcceptorPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan chan *libs.FluentMsg) {
+func (f *AcceptorPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan, skipDumpChan chan *libs.FluentMsg) {
 	outChan = make(chan *libs.FluentMsg, f.OutBufSize)
+	skipDumpChan = make(chan *libs.FluentMsg, f.OutBufSize)
 	var (
 		filter AcceptorFilterItf
 		msg    *libs.FluentMsg
@@ -56,11 +57,14 @@ func (f *AcceptorPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan chan *libs
 				}
 			}
 
-			outChan <- msg
+			select {
+			case outChan <- msg:
+			case skipDumpChan <- msg:
+			}
 
 		NEXT_MSG:
 		}
 	}()
 
-	return outChan
+	return outChan, skipDumpChan
 }

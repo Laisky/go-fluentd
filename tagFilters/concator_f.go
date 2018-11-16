@@ -19,6 +19,7 @@ type ConcatorCfg struct {
 }
 
 // Concator work for one tag, contains many identifier("container_id")
+// Warn: Concator should not blocking
 type Concator struct {
 	*ConcatorCfg
 	slot map[string]*PendingMsg
@@ -79,7 +80,7 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 				for identifier, pmsg = range c.slot {
 					if now.Sub(pmsg.lastT) > concatTimeoutTs { // timeout to flush
 						utils.Logger.Debug("timeout flush", zap.ByteString("log", pmsg.msg.Message[c.MsgKey].([]byte)))
-						c.OutChan <- pmsg.msg
+						c.PutDownstream(pmsg.msg)
 						c.PMsgPool.Put(pmsg)
 						delete(c.slot, identifier)
 					}
@@ -102,7 +103,7 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			utils.Logger.Warn("unknown identifier or unknown type",
 				zap.String("tag", msg.Tag),
 				zap.String("identifier", c.Identifier))
-			c.OutChan <- msg
+			c.PutDownstream(msg)
 			continue
 		}
 
@@ -116,16 +117,16 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			utils.Logger.Warn("unknown msg key or unknown type",
 				zap.String("tag", msg.Tag),
 				zap.String("msg_key", c.MsgKey))
-			c.OutChan <- msg
+			c.PutDownstream(msg)
 			continue
 		}
 
 		pmsg, ok = c.slot[identifier]
 		// new identifier
 		if !ok {
-			// new line with incorrect format, discard
+			// new line with incorrect format, skip
 			if !c.Regexp.Match(log) {
-				c.OutChan <- msg
+				c.PutDownstream(msg)
 				continue
 			}
 
@@ -145,7 +146,7 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			utils.Logger.Debug("got new line",
 				zap.ByteString("log", msg.Message[c.MsgKey].([]byte)),
 				zap.String("tag", msg.Tag))
-			c.OutChan <- c.slot[identifier].msg
+			c.PutDownstream(c.slot[identifier].msg)
 			c.slot[identifier].msg = msg
 			c.slot[identifier].lastT = now
 			continue
@@ -166,10 +167,17 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 		// too long to send
 		if len(c.slot[identifier].msg.Message[c.MsgKey].([]byte)) >= c.Cf.MaxLen {
 			utils.Logger.Debug("too long to send", zap.String("msgKey", c.MsgKey), zap.String("tag", msg.Tag))
-			c.OutChan <- c.slot[identifier].msg
+			c.PutDownstream(c.slot[identifier].msg)
 			c.PMsgPool.Put(c.slot[identifier])
 			delete(c.slot, identifier)
 		}
+	}
+}
+
+func (c *Concator) PutDownstream(msg *libs.FluentMsg) {
+	select {
+	case c.OutChan <- msg:
+	default:
 	}
 }
 

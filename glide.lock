@@ -1,5 +1,5 @@
 hash: 36823ab516dc120e85c4cf51fd11d8e8772e9bd4938ad7de26c3b30ef02588eb
-updated: 2018-11-15T21:02:40.246818087+08:00
+updated: 2018-11-16T15:23:32.289906301+08:00
 imports:
 - name: github.com/aymerick/raymond
   version: b565731e1464263de0bda75f2e45d97b54b60110
@@ -113,7 +113,7 @@ imports:
 - name: github.com/Laisky/go-chaining
   version: 43dcdc5a21be9b79f2b7ee0d8ba67ed8a7158cda
 - name: github.com/Laisky/go-utils
-  version: 540e6eb3b834c443a0d1d8da91a8767b6b10c860
+  version: 01a7e8584f57cdd3b8ca890813110b28574ce87d
   vcs: git
   subpackages:
   - journal

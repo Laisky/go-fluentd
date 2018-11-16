@@ -9,7 +9,6 @@ import (
 	"github.com/Laisky/go-concator/libs"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/go-utils/journal"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -90,13 +89,17 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan chan *libs.Fluent
 
 		if err = j.j.LoadLegacyBuf(&data); err == io.EOF {
 			utils.Logger.Info("load legacy buf done", zap.Int("n", i), zap.Float64("sec", time.Now().Sub(startTs).Seconds()))
+			msgPool.Put(msg)
 			return maxId, nil
 		} else if err != nil {
-			return 0, errors.Wrap(err, "try to load legacy data got error")
+			utils.Logger.Error("load legacy data got error", zap.Error(err))
+			msgPool.Put(msg)
+			continue
 		}
 
 		if data["message"] == nil {
 			utils.Logger.Warn("lost message")
+			msgPool.Put(msg)
 			continue
 		}
 
@@ -111,7 +114,7 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan chan *libs.Fluent
 	}
 }
 
-func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, msgChan <-chan *libs.FluentMsg) chan *libs.FluentMsg {
+func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, dumpChan, skipDumpChan <-chan *libs.FluentMsg) chan *libs.FluentMsg {
 	// deal with legacy
 	go func() {
 		var err error
@@ -124,13 +127,19 @@ func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, msgChan <-chan *libs.FluentMsg
 	}()
 
 	go func() {
+		for msg := range skipDumpChan {
+			j.outChan <- msg
+		}
+	}()
+
+	go func() {
 		var (
 			err      error
 			data     = map[string]interface{}{}
 			nRetry   = 0
 			maxRetry = 5
 		)
-		for msg := range msgChan {
+		for msg := range dumpChan {
 			data["id"] = msg.Id
 			data["tag"] = msg.Tag
 			data["message"] = msg.Message
@@ -173,7 +182,7 @@ func (j *Journal) GetCommitChan() chan<- int64 {
 		err        error
 		nRetry     = 0
 		maxRetry   = 5
-		commitChan = make(chan int64, 5000)
+		commitChan = make(chan int64, 50000)
 	)
 	go func() {
 		for id := range commitChan {

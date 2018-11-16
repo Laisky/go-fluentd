@@ -148,5 +148,9 @@ func (r *TcpRecv) decodeMsg(conn net.Conn) {
 
 func (r *TcpRecv) SendMsg(msg *libs.FluentMsg) {
 	msg.Id = r.counter.Count()
-	r.outChan <- msg
+	select {
+	case r.outChan <- msg:
+	default:
+		utils.Logger.Error("discard log", zap.String("tag", msg.Tag))
+	}
 }

@@ -84,7 +84,7 @@ func (p *Producer) Run(fork int, commitChan chan<- int64) {
 func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) chan<- *libs.FluentMsg {
 	utils.Logger.Info("SpawnForTag", zap.Int("fork", fork), zap.String("tag", tag))
 	var (
-		inChan = make(chan *libs.FluentMsg, 1000) // for each tag
+		inChan = make(chan *libs.FluentMsg, 10000) // for each tag
 	)
 
 	for i := 0; i < fork; i++ { // parallel to each tag
@@ -109,7 +109,6 @@ func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) ch
 			conn, err = net.DialTimeout("tcp", p.Addr, 10*time.Second)
 			if err != nil {
 				utils.Logger.Error("try to connect to backend got error", zap.Error(err), zap.String("tag", tag))
-				time.Sleep(1 * time.Second)
 				goto RECONNECT
 			}
 			utils.Logger.Info("connected to backend",
@@ -156,7 +155,6 @@ func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) ch
 							goto RECONNECT
 						}
 
-						time.Sleep(100 * time.Millisecond)
 						continue
 					}
 

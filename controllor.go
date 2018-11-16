@@ -118,10 +118,12 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 		CommitedChan:            waitCommitChan,
 		DefaultInternalChanSize: 1000,
 	},
+		// set ConcatorFact as first tagfilter
 		tagFilters.NewConcatorFact(&tagFilters.ConcatorFactCfg{
 			MaxLen:       utils.Settings.GetInt("settings.tag_filters.concator.config.max_length"),
 			ConcatorCfgs: libs.LoadConcatorTagConfigs(),
 		}),
+		// another tagfilters
 		tagFilters.NewConnectorFact(&tagFilters.ConnectorFactCfg{
 			Env:             env,
 			Tags:            utils.Settings.GetStringSlice("settings.tag_filters.connector.tags"),
@@ -220,6 +222,8 @@ func (c *Controllor) Run() {
 			"waitAccepPipelineChanCap": cap(waitAccepPipelineChan),
 			"waitDumpChanLen":          len(waitDumpChan),
 			"waitDumpChanCap":          cap(waitDumpChan),
+			"skipDumpChanLen":          len(skipDumpChan),
+			"skipDumpChanCap":          cap(skipDumpChan),
 			"waitDispatchChanLen":      len(waitDispatchChan),
 			"waitDispatchChanCap":      cap(waitDispatchChan),
 			"waitPostPipelineChanLen":  len(waitPostPipelineChan),

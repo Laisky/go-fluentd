@@ -43,7 +43,7 @@ func NewTagPipeline(cfg *TagPipelineCfg, itfs ...TagFilterFactoryItf) *TagPipeli
 	return tp
 }
 
-// Spawn create and run new Concator for new tag
+// Spawn create and run new Concator for new tag, return inchan
 func (p *TagPipeline) Spawn(tag string, outChan chan<- *libs.FluentMsg) (chan<- *libs.FluentMsg, error) {
 	var (
 		lastI          = len(p.TagFilterFactoryItfs) - 1
@@ -59,8 +59,8 @@ func (p *TagPipeline) Spawn(tag string, outChan chan<- *libs.FluentMsg) (chan<- 
 				zap.String("name", f.GetName()),
 				zap.String("tag", tag))
 			isTagSupported = true
-			p.monitorChans[tag+"."+f.GetName()] = downstreamChan
-			downstreamChan = f.Spawn(tag, downstreamChan) // downstream outChan is upstream's inChan
+			downstreamChan = f.Spawn(tag, downstreamChan)        // downstream outChan is upstream's inChan
+			p.monitorChans[tag+"."+f.GetName()] = downstreamChan // instream
 		}
 	}
 

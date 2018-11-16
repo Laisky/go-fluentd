@@ -55,6 +55,7 @@ func (d *Dispatcher) Run() {
 		for msg := range d.InChan {
 			inChanForEachTagi, ok = d.concatorMap.Load(msg.Tag)
 			if ok {
+				// tagfilters should not blocking
 				inChanForEachTagi.(chan<- *libs.FluentMsg) <- msg
 				continue
 			}

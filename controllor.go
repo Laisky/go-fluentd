@@ -197,10 +197,10 @@ func (c *Controllor) Run() {
 
 	waitCommitChan := journal.GetCommitChan()
 	waitAccepPipelineChan := acceptor.MessageChan()
-	waitDumpChan := acceptorPipeline.Wrap(waitAccepPipelineChan)
+	waitDumpChan, skipDumpChan := acceptorPipeline.Wrap(waitAccepPipelineChan)
 
 	// after `journal.DumpMsgFlow`, every discarded msg should commit to waitCommitChan
-	waitDispatchChan := journal.DumpMsgFlow(c.msgPool, waitDumpChan)
+	waitDispatchChan := journal.DumpMsgFlow(c.msgPool, waitDumpChan, skipDumpChan)
 
 	tagPipeline := c.initTagPipeline(env, waitCommitChan)
 	dispatcher := c.initDispatcher(waitDispatchChan, tagPipeline)

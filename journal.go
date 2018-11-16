@@ -111,7 +111,7 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan chan *libs.Fluent
 	}
 }
 
-func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, msgChan <-chan *libs.FluentMsg) chan *libs.FluentMsg {
+func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, dumpChan, skipDumpChan <-chan *libs.FluentMsg) chan *libs.FluentMsg {
 	// deal with legacy
 	go func() {
 		var err error
@@ -124,13 +124,19 @@ func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, msgChan <-chan *libs.FluentMsg
 	}()
 
 	go func() {
+		for msg := range skipDumpChan {
+			j.outChan <- msg
+		}
+	}()
+
+	go func() {
 		var (
 			err      error
 			data     = map[string]interface{}{}
 			nRetry   = 0
 			maxRetry = 5
 		)
-		for msg := range msgChan {
+		for msg := range dumpChan {
 			data["id"] = msg.Id
 			data["tag"] = msg.Tag
 			data["message"] = msg.Message

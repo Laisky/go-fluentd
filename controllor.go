@@ -40,10 +40,10 @@ func NewControllor() *Controllor {
 
 func (c *Controllor) initJournal() *Journal {
 	return NewJournal(&JournalCfg{
-		CommitChanLen:     utils.Settings.GetInt("settings.journal.commit_buf_len"),
-		CommitChanBusyLen: utils.Settings.GetInt("settings.journal.commit_buf_busy_len"),
 		BufDirPath:        utils.Settings.GetString("settings.journal.buf_dir_path"),
 		BufSizeBytes:      utils.Settings.GetInt64("settings.journal.buf_file_bytes"),
+		JournalOutChanLen: utils.Settings.GetInt("settings.journal.journal_out_chan_len"),
+		CommitIdChanLen:   utils.Settings.GetInt("settings.journal.commit_id_chan_len"),
 	})
 }
 
@@ -81,9 +81,12 @@ func (c *Controllor) initRecvs(env string) []libs.AcceptorRecvItf {
 }
 
 func (c *Controllor) initAcceptor(journal *Journal, receivers []libs.AcceptorRecvItf) *Acceptor {
-	acceptor := NewAcceptor(
-		c.msgPool,
-		journal,
+	acceptor := NewAcceptor(&AcceptorCfg{
+		MsgPool:     c.msgPool,
+		Journal:     journal,
+		MaxRotateId: utils.Settings.GetInt64("settings.acceptor.max_rotate_id"),
+		OutChanSize: utils.Settings.GetInt("settings.acceptor.out_chan_size"),
+	},
 		receivers...,
 	)
 
@@ -93,8 +96,9 @@ func (c *Controllor) initAcceptor(journal *Journal, receivers []libs.AcceptorRec
 
 func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorPipeline {
 	return acceptorFilters.NewAcceptorPipeline(&acceptorFilters.AcceptorPipelineCfg{
-		OutBufSize: utils.Settings.GetInt("settings.acceptor_filters.config.out_buf_len"),
-		MsgPool:    c.msgPool,
+		OutChanSize:     utils.Settings.GetInt("settings.acceptor_filters.out_buf_len"),
+		MsgPool:         c.msgPool,
+		ReEnterChanSize: utils.Settings.GetInt("settings.acceptor_filters.reenter_chan_len"),
 	},
 		acceptorFilters.NewSparkFilter(&acceptorFilters.SparkFilterCfg{
 			Tag:         "spark." + env,
@@ -116,27 +120,27 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 	return tagFilters.NewTagPipeline(&tagFilters.TagPipelineCfg{
 		MsgPool:                 c.msgPool,
 		CommitedChan:            waitCommitChan,
-		DefaultInternalChanSize: 1000,
+		DefaultInternalChanSize: utils.Settings.GetInt("settings.tag_filters.internal_chan_size"),
 	},
 		// set ConcatorFact as first tagfilter
 		tagFilters.NewConcatorFact(&tagFilters.ConcatorFactCfg{
-			MaxLen:       utils.Settings.GetInt("settings.tag_filters.concator.config.max_length"),
+			MaxLen:       utils.Settings.GetInt("settings.tag_filters.tenants.concator.config.max_length"),
 			ConcatorCfgs: libs.LoadConcatorTagConfigs(),
 		}),
 		// another tagfilters
 		tagFilters.NewConnectorFact(&tagFilters.ConnectorFactCfg{
 			Env:             env,
-			Tags:            utils.Settings.GetStringSlice("settings.tag_filters.connector.tags"),
-			MsgKey:          utils.Settings.GetString("settings.tag_filters.connector.msg_key"),
-			Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.connector.pattern")),
-			IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.connector.is_remove_orig_log"),
+			Tags:            utils.Settings.GetStringSlice("settings.tag_filters.tenants.connector.tags"),
+			MsgKey:          utils.Settings.GetString("settings.tag_filters.tenants.connector.msg_key"),
+			Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.tenants.connector.pattern")),
+			IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.tenants.connector.is_remove_orig_log"),
 			MsgPool:         c.msgPool,
 		}),
 		tagFilters.NewGeelyFact(&tagFilters.GeelyFactCfg{
-			Tag:             utils.Settings.GetString("settings.tag_filters.geely.tag") + "." + env,
-			MsgKey:          utils.Settings.GetString("settings.tag_filters.geely.msg_key"),
-			Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.geely.pattern")),
-			IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.geely.is_remove_orig_log"),
+			Tag:             utils.Settings.GetString("settings.tag_filters.tenants.geely.tag") + "." + env,
+			MsgKey:          utils.Settings.GetString("settings.tag_filters.tenants.geely.msg_key"),
+			Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.tenants.geely.pattern")),
+			IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.tenants.geely.is_remove_orig_log"),
 			MsgPool:         c.msgPool,
 		}),
 	)
@@ -146,6 +150,7 @@ func (c *Controllor) initDispatcher(waitDispatchChan chan *libs.FluentMsg, tagPi
 	dispatcher := NewDispatcher(&DispatcherCfg{
 		InChan:      waitDispatchChan,
 		TagPipeline: tagPipeline,
+		OutChanSize: utils.Settings.GetInt("settings.dispatcher.out_chan_size"),
 	})
 	dispatcher.Run()
 
@@ -154,13 +159,15 @@ func (c *Controllor) initDispatcher(waitDispatchChan chan *libs.FluentMsg, tagPi
 
 func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- int64) *postFilters.PostPipeline {
 	return postFilters.NewPostPipeline(&postFilters.PostPipelineCfg{
-		MsgPool:       c.msgPool,
-		CommittedChan: waitCommitChan,
+		MsgPool:         c.msgPool,
+		CommittedChan:   waitCommitChan,
+		ReEnterChanSize: utils.Settings.GetInt("settings.post_filters.reenter_chan_len"),
+		OutChanSize:     utils.Settings.GetInt("settings.post_filters.out_chan_size"),
 	},
 		// set the DefaultFilter as first filter
 		postFilters.NewDefaultFilter(&postFilters.DefaultFilterCfg{
-			MsgKey: utils.Settings.GetString("settings.post_filters.default.msg_key"),
-			MaxLen: utils.Settings.GetInt("settings.post_filters.default.max_len"),
+			MsgKey: utils.Settings.GetString("settings.post_filters.tenants.default.msg_key"),
+			MaxLen: utils.Settings.GetInt("settings.post_filters.tenants.default.max_len"),
 		}),
 		// custom filters...
 	)
@@ -168,11 +175,13 @@ func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- int64) *
 
 func (c *Controllor) initProducer(waitProduceChan chan *libs.FluentMsg) *Producer {
 	return NewProducer(&ProducerCfg{
-		Addr:      utils.Settings.GetString("settings.producer.backend_addr"),
-		BatchSize: utils.Settings.GetInt("settings.producer.msg_batch_size"),
-		MaxWait:   utils.Settings.GetDuration("settings.producer.max_wait_sec") * time.Second,
-		InChan:    waitProduceChan,
-		MsgPool:   c.msgPool,
+		Addr:            utils.Settings.GetString("settings.producer.backend_addr"),
+		BatchSize:       utils.Settings.GetInt("settings.producer.msg_batch_size"),
+		MaxWait:         utils.Settings.GetDuration("settings.producer.max_wait_sec") * time.Second,
+		InChan:          waitProduceChan,
+		MsgPool:         c.msgPool,
+		EachTagChanSize: utils.Settings.GetInt("settings.producer.each_tag_chan_len"),
+		RetryChanSize:   utils.Settings.GetInt("settings.producer.retry_chan_len"),
 	})
 }
 

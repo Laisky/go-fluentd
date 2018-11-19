@@ -8,8 +8,8 @@ import (
 )
 
 type AcceptorPipelineCfg struct {
-	MsgPool    *sync.Pool
-	OutBufSize int
+	MsgPool                      *sync.Pool
+	OutChanSize, ReEnterChanSize int
 }
 
 type AcceptorPipeline struct {
@@ -23,7 +23,7 @@ func NewAcceptorPipeline(cfg *AcceptorPipelineCfg, filters ...AcceptorFilterItf)
 	a := &AcceptorPipeline{
 		AcceptorPipelineCfg: cfg,
 		filters:             filters,
-		reEnterChan:         make(chan *libs.FluentMsg, 1000),
+		reEnterChan:         make(chan *libs.FluentMsg, cfg.ReEnterChanSize),
 	}
 
 	for _, filter := range a.filters {
@@ -35,8 +35,8 @@ func NewAcceptorPipeline(cfg *AcceptorPipelineCfg, filters ...AcceptorFilterItf)
 }
 
 func (f *AcceptorPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan, skipDumpChan chan *libs.FluentMsg) {
-	outChan = make(chan *libs.FluentMsg, f.OutBufSize)
-	skipDumpChan = make(chan *libs.FluentMsg, f.OutBufSize)
+	outChan = make(chan *libs.FluentMsg, f.OutChanSize)
+	skipDumpChan = make(chan *libs.FluentMsg, f.OutChanSize)
 	var (
 		filter AcceptorFilterItf
 		msg    *libs.FluentMsg

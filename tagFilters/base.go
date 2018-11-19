@@ -13,12 +13,14 @@ type TagFilterFactoryItf interface {
 
 	SetMsgPool(*sync.Pool)
 	SetCommittedChan(chan<- int64)
+	SetDefaultIntervalChanSize(int)
 	DiscardMsg(*libs.FluentMsg)
 }
 
 type BaseTagFilterFactory struct {
-	msgPool       *sync.Pool
-	committedChan chan<- int64
+	msgPool                 *sync.Pool
+	committedChan           chan<- int64
+	defaultInternalChanSize int
 }
 
 func (f *BaseTagFilterFactory) SetMsgPool(msgPool *sync.Pool) {
@@ -27,6 +29,10 @@ func (f *BaseTagFilterFactory) SetMsgPool(msgPool *sync.Pool) {
 
 func (f *BaseTagFilterFactory) SetCommittedChan(committedChan chan<- int64) {
 	f.committedChan = committedChan
+}
+
+func (f *BaseTagFilterFactory) SetDefaultIntervalChanSize(size int) {
+	f.defaultInternalChanSize = size
 }
 
 func (f *BaseTagFilterFactory) DiscardMsg(msg *libs.FluentMsg) {

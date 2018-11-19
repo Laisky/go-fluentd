@@ -9,47 +9,48 @@ import (
 	"go.uber.org/zap"
 )
 
+type AcceptorCfg struct {
+	MsgPool     *sync.Pool
+	Journal     *Journal
+	OutChanSize int
+	MaxRotateId int64
+}
+
 // Acceptor listening tcp connection, and decode messages
 type Acceptor struct {
+	*AcceptorCfg
 	addr    string
 	msgChan chan *libs.FluentMsg
-	msgPool *sync.Pool
-	journal *Journal
 	recvs   []libs.AcceptorRecvItf
 }
 
 // NewAcceptor create new Acceptor
-func NewAcceptor(msgpool *sync.Pool, journal *Journal, recvs ...libs.AcceptorRecvItf) *Acceptor {
+func NewAcceptor(cfg *AcceptorCfg, recvs ...libs.AcceptorRecvItf) *Acceptor {
 	utils.Logger.Info("create Acceptor")
 	return &Acceptor{
-		msgChan: make(chan *libs.FluentMsg, 5000),
-		msgPool: msgpool,
-		journal: journal,
-		recvs:   recvs,
+		AcceptorCfg: cfg,
+		msgChan:     make(chan *libs.FluentMsg, cfg.OutChanSize),
+		recvs:       recvs,
 	}
 }
 
 // Run starting acceptor to listening and receive messages,
 // you can use `acceptor.MessageChan()` to load messages`
 func (a *Acceptor) Run() {
-	var (
-		maxIDToRotate int64 = 100000000
-	)
-
 	// got exists max id from legacy
 	utils.Logger.Info("process legacy data...")
-	maxId, err := a.journal.LoadMaxId()
+	maxId, err := a.Journal.LoadMaxId()
 	if err != nil {
 		panic(fmt.Errorf("try to process legacy messages got error: %+v", err))
 	}
-	couter, err := utils.NewRotateCounterFromN(maxId+1, maxIDToRotate)
+	couter, err := utils.NewRotateCounterFromN(maxId+1, a.MaxRotateId)
 	if err != nil {
 		panic(fmt.Errorf("try to create counter got error: %+v", err))
 	}
 
 	for _, recv := range a.recvs {
 		utils.Logger.Info("enable recv", zap.String("name", recv.GetName()))
-		recv.Setup(a.msgPool, a.msgChan, couter)
+		recv.Setup(a.MsgPool, a.msgChan, couter)
 		go recv.Run()
 	}
 

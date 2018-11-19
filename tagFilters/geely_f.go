@@ -94,7 +94,7 @@ func (cf *GeelyFact) IsTagSupported(tag string) bool {
 
 func (cf *GeelyFact) Spawn(tag string, outChan chan<- *libs.FluentMsg) chan<- *libs.FluentMsg {
 	utils.Logger.Info("spawn Geely tagfilter", zap.String("tag", tag))
-	inChan := make(chan *libs.FluentMsg, 1000)
+	inChan := make(chan *libs.FluentMsg, cf.defaultInternalChanSize)
 	f := NewGeely(&GeelyCfg{
 		Cf:              cf,
 		Tag:             tag,

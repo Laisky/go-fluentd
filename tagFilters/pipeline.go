@@ -32,6 +32,7 @@ func NewTagPipeline(cfg *TagPipelineCfg, itfs ...TagFilterFactoryItf) *TagPipeli
 	for _, itf := range itfs {
 		itf.SetMsgPool(cfg.MsgPool)
 		itf.SetCommittedChan(cfg.CommitedChan)
+		itf.SetDefaultIntervalChanSize(cfg.DefaultInternalChanSize)
 	}
 
 	tp := &TagPipeline{

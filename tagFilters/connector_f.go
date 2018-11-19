@@ -124,7 +124,7 @@ func (cf *ConnectorFact) IsTagSupported(tag string) (ok bool) {
 
 func (cf *ConnectorFact) Spawn(tag string, outChan chan<- *libs.FluentMsg) chan<- *libs.FluentMsg {
 	utils.Logger.Info("spawn connector tagfilter", zap.String("tag", tag))
-	inChan := make(chan *libs.FluentMsg, 1000)
+	inChan := make(chan *libs.FluentMsg, cf.defaultInternalChanSize)
 	f := NewConnector(&ConnectorCfg{
 		Cf:              cf,
 		Tag:             tag,

@@ -8,8 +8,9 @@ import (
 )
 
 type PostPipelineCfg struct {
-	MsgPool       *sync.Pool
-	CommittedChan chan<- int64
+	MsgPool                      *sync.Pool
+	CommittedChan                chan<- int64
+	ReEnterChanSize, OutChanSize int
 }
 
 type PostPipeline struct {
@@ -23,7 +24,7 @@ func NewPostPipeline(cfg *PostPipelineCfg, filters ...PostFilterItf) *PostPipeli
 	pp := &PostPipeline{
 		PostPipelineCfg: cfg,
 		filters:         filters,
-		reEnterChan:     make(chan *libs.FluentMsg, 1000),
+		reEnterChan:     make(chan *libs.FluentMsg, cfg.ReEnterChanSize),
 	}
 
 	for _, filter := range pp.filters {
@@ -36,7 +37,7 @@ func NewPostPipeline(cfg *PostPipelineCfg, filters ...PostFilterItf) *PostPipeli
 }
 
 func (f *PostPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan chan *libs.FluentMsg) {
-	outChan = make(chan *libs.FluentMsg, 1000)
+	outChan = make(chan *libs.FluentMsg, f.OutChanSize)
 	var (
 		filter PostFilterItf
 		msg    *libs.FluentMsg

@@ -19,7 +19,6 @@ type AcceptorCfg struct {
 // Acceptor listening tcp connection, and decode messages
 type Acceptor struct {
 	*AcceptorCfg
-	addr    string
 	msgChan chan *libs.FluentMsg
 	recvs   []libs.AcceptorRecvItf
 }
@@ -53,7 +52,6 @@ func (a *Acceptor) Run() {
 		recv.Setup(a.MsgPool, a.msgChan, couter)
 		go recv.Run()
 	}
-
 }
 
 // MessageChan return the message chan that received by acceptor

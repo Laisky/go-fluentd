@@ -13,11 +13,12 @@ import (
 )
 
 type ProducerCfg struct {
-	Addr      string
-	InChan    chan *libs.FluentMsg
-	MsgPool   *sync.Pool
-	BatchSize int
-	MaxWait   time.Duration
+	Addr                           string
+	InChan                         chan *libs.FluentMsg
+	MsgPool                        *sync.Pool
+	BatchSize                      int
+	MaxWait                        time.Duration
+	EachTagChanSize, RetryChanSize int
 }
 
 // Producer send messages to downstream
@@ -35,7 +36,7 @@ func NewProducer(cfg *ProducerCfg) *Producer {
 	p := &Producer{
 		ProducerCfg:        cfg,
 		producerTagChanMap: map[string]chan<- *libs.FluentMsg{},
-		retryMsgChan:       make(chan *libs.FluentMsg, 500),
+		retryMsgChan:       make(chan *libs.FluentMsg, cfg.RetryChanSize),
 	}
 	p.registerMonitor()
 	return p
@@ -84,7 +85,7 @@ func (p *Producer) Run(fork int, commitChan chan<- int64) {
 func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) chan<- *libs.FluentMsg {
 	utils.Logger.Info("SpawnForTag", zap.Int("fork", fork), zap.String("tag", tag))
 	var (
-		inChan = make(chan *libs.FluentMsg, 10000) // for each tag
+		inChan = make(chan *libs.FluentMsg, p.EachTagChanSize) // for each tag
 	)
 
 	for i := 0; i < fork; i++ { // parallel to each tag

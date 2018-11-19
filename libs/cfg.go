@@ -16,7 +16,7 @@ type ConcatorTagCfg struct {
 func LoadConcatorTagConfigs() (concatorcfgs map[string]*ConcatorTagCfg) {
 	concatorcfgs = map[string]*ConcatorTagCfg{}
 	env := utils.Settings.GetString("env")
-	for tag, tagcfgI := range utils.Settings.Get("settings.tag_filters.concator.tenants").(map[string]interface{}) {
+	for tag, tagcfgI := range utils.Settings.Get("settings.tag_filters.tenants.concator.tenants").(map[string]interface{}) {
 		cfg := tagcfgI.(map[string]interface{})
 		concatorcfgs[tag+"."+env] = &ConcatorTagCfg{
 			MsgKey:     cfg["msg_key"].(string),

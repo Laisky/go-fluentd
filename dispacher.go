@@ -14,6 +14,7 @@ import (
 type DispatcherCfg struct {
 	InChan      chan *libs.FluentMsg
 	TagPipeline *tagFilters.TagPipeline
+	OutChanSize int
 }
 
 // Dispatcher dispatch messages by tag to different concator
@@ -35,7 +36,7 @@ func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 	utils.Logger.Info("create Dispatcher")
 	return &Dispatcher{
 		DispatcherCfg: cfg,
-		outChan:       make(chan *libs.FluentMsg, 5000),
+		outChan:       make(chan *libs.FluentMsg, cfg.OutChanSize),
 		concatorMap:   &sync.Map{},
 	}
 }

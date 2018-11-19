@@ -13,10 +13,9 @@ import (
 )
 
 type JournalCfg struct {
-	BufDirPath        string
-	BufSizeBytes      int64
-	CommitChanLen     int
-	CommitChanBusyLen int
+	BufDirPath                         string
+	BufSizeBytes                       int64
+	JournalOutChanLen, CommitIdChanLen int
 }
 
 // Journal dumps all messages to files,
@@ -44,7 +43,7 @@ func NewJournal(cfg *JournalCfg) *Journal {
 			BufSizeBytes: cfg.BufSizeBytes,
 		}),
 		legacyLock: 0,
-		outChan:    make(chan *libs.FluentMsg, cfg.CommitChanLen),
+		outChan:    make(chan *libs.FluentMsg, cfg.JournalOutChanLen),
 	}
 }
 
@@ -162,11 +161,6 @@ func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, dumpChan, skipDumpChan <-chan 
 
 			utils.Logger.Debug("success write data journal", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id))
 
-			// give chan to legacy processing
-			if j.j.IsLegacyRunning() && len(j.outChan) > j.CommitChanBusyLen {
-				continue
-			}
-
 			select {
 			case j.outChan <- msg:
 			default:
@@ -182,7 +176,7 @@ func (j *Journal) GetCommitChan() chan<- int64 {
 		err        error
 		nRetry     = 0
 		maxRetry   = 5
-		commitChan = make(chan int64, 50000)
+		commitChan = make(chan int64, j.CommitIdChanLen)
 	)
 	go func() {
 		for id := range commitChan {

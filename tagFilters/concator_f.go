@@ -224,7 +224,7 @@ func (cf *ConcatorFactory) IsTagSupported(tag string) bool {
 
 // Spawn create and run new Concator for new tag
 func (cf *ConcatorFactory) Spawn(tag string, outChan chan<- *libs.FluentMsg) chan<- *libs.FluentMsg {
-	inChan := make(chan *libs.FluentMsg, 1000)
+	inChan := make(chan *libs.FluentMsg, cf.defaultInternalChanSize)
 	concator := NewConcator(&ConcatorCfg{
 		Cf:         cf,
 		Tag:        tag,

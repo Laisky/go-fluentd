@@ -45,6 +45,7 @@ func (f *AcceptorPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan, skipDumpC
 	go func() {
 		defer utils.Logger.Error("quit acceptor pipeline")
 		for {
+		NEW_MSG:
 			select {
 			case msg = <-f.reEnterChan: // CAUTION: do not put msg into reEnterChan forever
 			case msg = <-inChan:
@@ -53,7 +54,7 @@ func (f *AcceptorPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan, skipDumpC
 			utils.Logger.Debug("AcceptorPipeline got msg")
 			for _, filter = range f.filters {
 				if msg = filter.Filter(msg); msg == nil { // quit filters for this msg
-					goto NEXT_MSG
+					goto NEW_MSG
 				}
 			}
 
@@ -62,7 +63,6 @@ func (f *AcceptorPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan, skipDumpC
 			case skipDumpChan <- msg:
 			}
 
-		NEXT_MSG:
 		}
 	}()
 

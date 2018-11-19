@@ -44,8 +44,8 @@ func (f *PostPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan chan *libs.Flu
 	)
 
 	go func() {
-	NEXT_MSG:
 		for {
+		NEW_MSG:
 			select {
 			case msg = <-f.reEnterChan:
 			case msg = <-inChan:
@@ -53,7 +53,7 @@ func (f *PostPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan chan *libs.Flu
 
 			for _, filter = range f.filters {
 				if msg = filter.Filter(msg); msg == nil { // quit filters for this msg
-					goto NEXT_MSG
+					goto NEW_MSG
 				}
 			}
 

@@ -20,10 +20,10 @@ type ProducerCfg struct {
 // Producer send messages to downstream
 type Producer struct {
 	*ProducerCfg
-	producerTagChanMap map[string]map[string]chan<- *libs.FluentMsg
+	producerTagChanMap *sync.Map
 	senders            []senders.SenderItf
 	discardChan        chan *libs.FluentMsg
-	discardMsgCountMap map[int64]int
+	discardMsgCountMap *sync.Map
 }
 
 // NewProducer create new producer
@@ -33,9 +33,9 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) *Producer {
 	p := &Producer{
 		ProducerCfg:        cfg,
 		senders:            senders,
-		producerTagChanMap: map[string]map[string]chan<- *libs.FluentMsg{},
+		producerTagChanMap: &sync.Map{},
 		discardChan:        make(chan *libs.FluentMsg, cfg.DiscardChanSize),
-		discardMsgCountMap: map[int64]int{},
+		discardMsgCountMap: &sync.Map{},
 	}
 	p.registerMonitor()
 
@@ -53,15 +53,24 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) *Producer {
 func (p *Producer) registerMonitor() {
 	monitor.AddMetric("producer", func() map[string]interface{} {
 		metrics := map[string]interface{}{}
-		for tag, cm := range p.producerTagChanMap {
-			for name, c := range cm {
-				metrics[tag+"."+name+".ChanLen"] = len(c)
-				metrics[tag+"."+name+".ChanCap"] = cap(c)
-			}
-		}
+		p.producerTagChanMap.Range(func(tagi, smi interface{}) bool {
+			smi.(*sync.Map).Range(func(namei, ci interface{}) bool {
+				metrics[tagi.(string)+"."+namei.(string)+".ChanLen"] = len(ci.(chan<- *libs.FluentMsg))
+				metrics[tagi.(string)+"."+namei.(string)+".ChanCap"] = cap(ci.(chan<- *libs.FluentMsg))
+				return true
+			})
+			return true
+		})
 		metrics["discardChanLen"] = len(p.discardChan)
 		metrics["discardChanCap"] = cap(p.discardChan)
-		metrics["waitToDiscardMsgNum"] = len(p.discardMsgCountMap)
+
+		// get discardMsgCountMap length
+		nMsg := 0
+		p.discardMsgCountMap.Range(func(k, v interface{}) bool {
+			nMsg++
+			return true
+		})
+		metrics["waitToDiscardMsgNum"] = nMsg
 		return metrics
 	})
 }
@@ -78,18 +87,23 @@ func (p *Producer) DiscardMsg(msg *libs.FluentMsg) {
 	p.MsgPool.Put(msg)
 }
 
-func (p *Producer) RunDiscard(nSenderForTagMap map[string]int, discardChan chan *libs.FluentMsg) {
+func (p *Producer) RunDiscard(nSenderForTagMap *sync.Map, discardChan chan *libs.FluentMsg) {
 	var (
-		ok bool
+		cnt int
+		ok  bool
+		itf interface{}
 	)
 	for msg := range discardChan {
-		if _, ok = p.discardMsgCountMap[msg.Id]; !ok {
-			p.discardMsgCountMap[msg.Id] = 0
+		itf, _ = p.discardMsgCountMap.LoadOrStore(msg.Id, 0)
+		cnt = itf.(int)
+		cnt++
+		if itf, ok = nSenderForTagMap.Load(msg.Tag); !ok {
+			utils.Logger.Error("nSenderForTagMap should contains tag", zap.String("tag", msg.Tag))
+			continue
 		}
 
-		p.discardMsgCountMap[msg.Id]++
-		if p.discardMsgCountMap[msg.Id] == nSenderForTagMap[msg.Tag] {
-			delete(p.discardMsgCountMap, msg.Id)
+		if cnt == itf.(int) {
+			p.discardMsgCountMap.Delete(msg.Id)
 			p.DiscardMsg(msg)
 		}
 	}
@@ -103,11 +117,12 @@ func (p *Producer) Run() {
 		msg              *libs.FluentMsg
 		ok               bool
 		s                senders.SenderItf
-		c                chan<- *libs.FluentMsg
 		unSupportedTags  = map[string]struct{}{}
-		nSenderForTagMap = map[string]int{} // map[tag]nSender
+		nSenderForTagMap = &sync.Map{} // map[tag]nSender
 		isSkip           = true
-		name             string
+		itf              interface{}
+		senderChanMap    *sync.Map
+		nSender          int
 	)
 
 	go p.RunDiscard(nSenderForTagMap, p.discardChan)
@@ -120,18 +135,19 @@ func (p *Producer) Run() {
 		}
 
 		msg.Message["tag"] = msg.Tag // set tag
-		if _, ok = p.producerTagChanMap[msg.Tag]; !ok {
+
+		if _, ok = p.producerTagChanMap.Load(msg.Tag); !ok {
 			isSkip = true
-			p.producerTagChanMap[msg.Tag] = map[string]chan<- *libs.FluentMsg{}
-			nSenderForTagMap[msg.Tag] = 0
+			nSender = 0
+			senderChanMap = &sync.Map{}
 			for _, s = range p.senders {
 				if s.IsTagSupported(msg.Tag) {
 					isSkip = false
-					nSenderForTagMap[msg.Tag]++
+					nSender++
 					utils.Logger.Info("spawn new producer sender",
 						zap.String("name", s.GetName()),
 						zap.String("tag", msg.Tag))
-					p.producerTagChanMap[msg.Tag][s.GetName()] = s.Spawn(msg.Tag)
+					senderChanMap.Store(s.GetName(), s.Spawn(msg.Tag))
 				}
 			}
 
@@ -141,16 +157,27 @@ func (p *Producer) Run() {
 				p.DiscardMsg(msg)
 				continue
 			}
+
+			nSenderForTagMap.Store(msg.Tag, nSender)
+			p.producerTagChanMap.Store(msg.Tag, senderChanMap)
 		}
 
-		for name, c = range p.producerTagChanMap[msg.Tag] {
+		if itf, ok = p.producerTagChanMap.Load(msg.Tag); !ok {
+			utils.Logger.Error("producerTagChanMap should contains tag", zap.String("tag", msg.Tag))
+			continue
+		}
+
+		senderChanMap = itf.(*sync.Map)
+		senderChanMap.Range(func(key, val interface{}) bool {
 			select {
-			case c <- msg:
+			case val.(chan<- *libs.FluentMsg) <- msg:
 			default:
 				utils.Logger.Warn("skip sender",
-					zap.String("name", name),
+					zap.String("name", key.(string)),
 					zap.String("tag", msg.Tag))
 			}
-		}
+
+			return true
+		})
 	}
 }

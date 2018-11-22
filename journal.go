@@ -16,6 +16,7 @@ type JournalCfg struct {
 	BufDirPath                         string
 	BufSizeBytes                       int64
 	JournalOutChanLen, CommitIdChanLen int
+	MsgPool                            *sync.Pool
 }
 
 // Journal dumps all messages to files,
@@ -164,6 +165,7 @@ func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, dumpChan, skipDumpChan <-chan 
 			select {
 			case j.outChan <- msg:
 			default:
+				j.MsgPool.Put(msg)
 			}
 		}
 	}()

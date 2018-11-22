@@ -152,5 +152,6 @@ func (r *TcpRecv) SendMsg(msg *libs.FluentMsg) {
 	case r.outChan <- msg:
 	default:
 		utils.Logger.Error("discard log", zap.String("tag", msg.Tag))
+		r.msgPool.Put(msg)
 	}
 }

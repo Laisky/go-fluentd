@@ -11,6 +11,7 @@ import (
 	"github.com/Laisky/go-concator/monitor"
 	"github.com/Laisky/go-concator/postFilters"
 	"github.com/Laisky/go-concator/recvs"
+	"github.com/Laisky/go-concator/senders"
 	"github.com/Laisky/go-concator/tagFilters"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/go-utils/kafka"
@@ -40,6 +41,7 @@ func NewControllor() *Controllor {
 
 func (c *Controllor) initJournal() *Journal {
 	return NewJournal(&JournalCfg{
+		MsgPool:           c.msgPool,
 		BufDirPath:        utils.Settings.GetString("settings.journal.buf_dir_path"),
 		BufSizeBytes:      utils.Settings.GetInt64("settings.journal.buf_file_bytes"),
 		JournalOutChanLen: utils.Settings.GetInt("settings.journal.journal_out_chan_len"),
@@ -128,20 +130,72 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 			ConcatorCfgs: libs.LoadConcatorTagConfigs(),
 		}),
 		// another tagfilters
-		tagFilters.NewConnectorFact(&tagFilters.ConnectorFactCfg{
+		tagFilters.NewParserFact(&tagFilters.ParserFactCfg{ // connector
+			Name:            "connector",
 			Env:             env,
 			Tags:            utils.Settings.GetStringSlice("settings.tag_filters.tenants.connector.tags"),
 			MsgKey:          utils.Settings.GetString("settings.tag_filters.tenants.connector.msg_key"),
 			Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.tenants.connector.pattern")),
 			IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.tenants.connector.is_remove_orig_log"),
 			MsgPool:         c.msgPool,
+			ParseJsonKey:    utils.Settings.GetString("settings.tag_filters.tenants.connector.parse_json_key"),
+			Add:             tagFilters.ParseAddCfg(env, utils.Settings.Get("settings.tag_filters.tenants.connector.add")),
+			MustInclude:     utils.Settings.GetString("settings.tag_filters.tenants.connector.must_include"),
 		}),
-		tagFilters.NewGeelyFact(&tagFilters.GeelyFactCfg{
-			Tag:             utils.Settings.GetString("settings.tag_filters.tenants.geely.tag") + "." + env,
+		tagFilters.NewParserFact(&tagFilters.ParserFactCfg{ // spring
+			Name:            "spring",
+			Env:             env,
+			Tags:            utils.Settings.GetStringSlice("settings.tag_filters.tenants.spring.tags"),
+			MsgKey:          utils.Settings.GetString("settings.tag_filters.tenants.spring.msg_key"),
+			Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.tenants.spring.pattern")),
+			IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.tenants.spring.is_remove_orig_log"),
+			MsgPool:         c.msgPool,
+			Add:             tagFilters.ParseAddCfg(env, utils.Settings.Get("settings.tag_filters.tenants.spring.add")),
+			MustInclude:     utils.Settings.GetString("settings.tag_filters.tenants.spring.must_include"),
+		}),
+		tagFilters.NewParserFact(&tagFilters.ParserFactCfg{ // geely
+			Name:            "geely",
+			Env:             env,
+			Tags:            utils.Settings.GetStringSlice("settings.tag_filters.tenants.geely.tags"),
 			MsgKey:          utils.Settings.GetString("settings.tag_filters.tenants.geely.msg_key"),
 			Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.tenants.geely.pattern")),
 			IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.tenants.geely.is_remove_orig_log"),
 			MsgPool:         c.msgPool,
+			Add:             tagFilters.ParseAddCfg(env, utils.Settings.Get("settings.tag_filters.tenants.geely.add")),
+			MustInclude:     utils.Settings.GetString("settings.tag_filters.tenants.geely.must_include"),
+		}),
+		tagFilters.NewParserFact(&tagFilters.ParserFactCfg{ // ptdeloyer
+			Name:            "ptdeloyer",
+			Env:             env,
+			Tags:            utils.Settings.GetStringSlice("settings.tag_filters.tenants.ptdeployer.tags"),
+			MsgKey:          utils.Settings.GetString("settings.tag_filters.tenants.ptdeployer.msg_key"),
+			Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.tenants.ptdeployer.pattern")),
+			IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.tenants.ptdeployer.is_remove_orig_log"),
+			MsgPool:         c.msgPool,
+			Add:             tagFilters.ParseAddCfg(env, utils.Settings.Get("settings.tag_filters.tenants.ptdeployer.add")),
+			MustInclude:     utils.Settings.GetString("settings.tag_filters.tenants.ptdeployer.must_include"),
+		}),
+		tagFilters.NewParserFact(&tagFilters.ParserFactCfg{ // cp
+			Name:            "cp",
+			Env:             env,
+			Tags:            utils.Settings.GetStringSlice("settings.tag_filters.tenants.cp.tags"),
+			MsgKey:          utils.Settings.GetString("settings.tag_filters.tenants.cp.msg_key"),
+			Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.tenants.cp.pattern")),
+			IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.tenants.cp.is_remove_orig_log"),
+			MsgPool:         c.msgPool,
+			Add:             tagFilters.ParseAddCfg(env, utils.Settings.Get("settings.tag_filters.tenants.cp.add")),
+			MustInclude:     utils.Settings.GetString("settings.tag_filters.tenants.cp.must_include"),
+		}),
+		tagFilters.NewParserFact(&tagFilters.ParserFactCfg{ // spark
+			Name:            "spark",
+			Env:             env,
+			Tags:            utils.Settings.GetStringSlice("settings.tag_filters.tenants.spark.tags"),
+			MsgKey:          utils.Settings.GetString("settings.tag_filters.tenants.spark.msg_key"),
+			Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.tenants.spark.pattern")),
+			IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.tenants.spark.is_remove_orig_log"),
+			MsgPool:         c.msgPool,
+			Add:             tagFilters.ParseAddCfg(env, utils.Settings.Get("settings.tag_filters.tenants.spark.add")),
+			MustInclude:     utils.Settings.GetString("settings.tag_filters.tenants.spark.must_include"),
 		}),
 	)
 }
@@ -173,16 +227,47 @@ func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- int64) *
 	)
 }
 
-func (c *Controllor) initProducer(waitProduceChan chan *libs.FluentMsg) *Producer {
-	return NewProducer(&ProducerCfg{
-		Addr:            utils.Settings.GetString("settings.producer.backend_addr"),
-		BatchSize:       utils.Settings.GetInt("settings.producer.msg_batch_size"),
-		MaxWait:         utils.Settings.GetDuration("settings.producer.max_wait_sec") * time.Second,
-		InChan:          waitProduceChan,
-		MsgPool:         c.msgPool,
-		EachTagChanSize: utils.Settings.GetInt("settings.producer.each_tag_chan_len"),
-		RetryChanSize:   utils.Settings.GetInt("settings.producer.retry_chan_len"),
-	})
+func (c *Controllor) initProducer(env string, waitProduceChan chan *libs.FluentMsg, commitChan chan<- int64) *Producer {
+	return NewProducer(
+		&ProducerCfg{
+			InChan:          waitProduceChan,
+			MsgPool:         c.msgPool,
+			CommitChan:      commitChan,
+			DiscardChanSize: utils.Settings.GetInt("settings.producer.discard_chan_size"),
+		},
+		// senders...
+		// senders.NewFluentSender(&senders.FluentSenderCfg{ // fluentd backend
+		// 	Addr:          utils.Settings.GetString("settings.producer.tenants.fluentd.addr"),
+		// 	BatchSize:     utils.Settings.GetInt("settings.producer.tenants.fluentd.msg_batch_size"),
+		// 	MaxWait:       utils.Settings.GetDuration("settings.producer.tenants.fluentd.max_wait_sec") * time.Second,
+		// 	RetryChanSize: utils.Settings.GetInt("settings.producer.tenants.fluentd.retry_chan_len"),
+		// 	InChanSize:    utils.Settings.GetInt("settings.producer.sender_inchan_size"),
+		// 	NFork:         utils.Settings.GetInt("settings.producer.tenants.fluentd.forks"),
+		// 	Tags:          senders.TagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.tenants.fluentd.tags")),
+		// }),
+		senders.NewKafkaSender(&senders.KafkaSenderCfg{ // kafka backend
+			Name:          "KafkaSender",
+			Brokers:       utils.Settings.GetStringSlice("settings.producer.tenants.kafka.brokers"),
+			Topic:         utils.Settings.GetString("settings.producer.tenants.kafka.topic." + env),
+			BatchSize:     utils.Settings.GetInt("settings.producer.tenants.kafka.msg_batch_size"),
+			MaxWait:       utils.Settings.GetDuration("settings.producer.tenants.kafka.max_wait_sec") * time.Second,
+			RetryChanSize: utils.Settings.GetInt("settings.producer.tenants.kafka.retry_chan_len"),
+			InChanSize:    utils.Settings.GetInt("settings.producer.sender_inchan_size"),
+			NFork:         utils.Settings.GetInt("settings.producer.tenants.kafka.forks"),
+			Tags:          senders.TagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.tenants.kafka.tags")),
+		}),
+		senders.NewKafkaSender(&senders.KafkaSenderCfg{ // cp kafka backend
+			Name:          "KafkaCpSender",
+			Brokers:       utils.Settings.GetStringSlice("settings.producer.tenants.kafka_cp.brokers." + env),
+			Topic:         utils.Settings.GetString("settings.producer.tenants.kafka_cp.topic"),
+			BatchSize:     utils.Settings.GetInt("settings.producer.tenants.kafka_cp.msg_batch_size"),
+			MaxWait:       utils.Settings.GetDuration("settings.producer.tenants.kafka_cp.max_wait_sec") * time.Second,
+			RetryChanSize: utils.Settings.GetInt("settings.producer.tenants.kafka_cp.retry_chan_len"),
+			InChanSize:    utils.Settings.GetInt("settings.producer.sender_inchan_size"),
+			NFork:         utils.Settings.GetInt("settings.producer.tenants.kafka_cp.forks"),
+			Tags:          senders.TagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.tenants.kafka_cp.tags")),
+		}),
+	)
 }
 
 func (c *Controllor) runHeartBeat() {
@@ -218,7 +303,7 @@ func (c *Controllor) Run() {
 	waitPostPipelineChan := dispatcher.GetOutChan()
 	postPipeline := c.initPostPipeline(env, waitCommitChan)
 	waitProduceChan := postPipeline.Wrap(waitPostPipelineChan)
-	producer := c.initProducer(waitProduceChan)
+	producer := c.initProducer(env, waitProduceChan, waitCommitChan)
 
 	// heartbeat
 	go c.runHeartBeat()
@@ -245,9 +330,7 @@ func (c *Controllor) Run() {
 	})
 	monitor.BindHTTP(Server)
 
-	go producer.Run(
-		utils.Settings.GetInt("settings.producer_forks"),
-		waitCommitChan)
+	go producer.Run()
 
 	RunServer(utils.Settings.GetString("addr"))
 }

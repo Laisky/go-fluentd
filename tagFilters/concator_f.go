@@ -114,6 +114,7 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			log = msg.Message[c.MsgKey].([]byte)
 		case string:
 			log = []byte(msg.Message[c.MsgKey].(string))
+			msg.Message[c.MsgKey] = log
 		default:
 			utils.Logger.Warn("unknown msg key or unknown type",
 				zap.String("tag", msg.Tag),
@@ -132,7 +133,7 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			// new line with correct format, set as first line
 			utils.Logger.Debug("got new identifier",
 				zap.String("identifier", identifier),
-				zap.ByteString("log", msg.Message[c.MsgKey].([]byte)))
+				zap.ByteString("log", log))
 			pmsg = c.PMsgPool.Get().(*PendingMsg)
 			pmsg.lastT = now
 			pmsg.msg = msg
@@ -140,10 +141,10 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			continue
 		}
 
-		// old identifer
+		// replace exists msg in slot
 		if c.Regexp.Match(log) { // new line
 			utils.Logger.Debug("got new line",
-				zap.ByteString("log", msg.Message[c.MsgKey].([]byte)),
+				zap.ByteString("log", log),
 				zap.String("tag", msg.Tag))
 			c.PutDownstream(c.slot[identifier].msg)
 			c.slot[identifier].msg = msg

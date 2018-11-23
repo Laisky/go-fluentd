@@ -46,7 +46,7 @@ func (f *AcceptorPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan, skipDumpC
 
 	for i := 0; i < f.NFork; i++ {
 		go func() {
-			defer panic(fmt.Errorf("quit acceptor pipeline"))
+			defer panic(fmt.Errorf("quit acceptorPipeline"))
 
 			var (
 				filter AcceptorFilterItf

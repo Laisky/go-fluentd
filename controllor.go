@@ -217,6 +217,7 @@ func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- int64) *
 	return postFilters.NewPostPipeline(&postFilters.PostPipelineCfg{
 		MsgPool:         c.msgPool,
 		CommittedChan:   waitCommitChan,
+		NFork:           utils.Settings.GetInt("settings.post_filters.fork"),
 		ReEnterChanSize: utils.Settings.GetInt("settings.post_filters.reenter_chan_len"),
 		OutChanSize:     utils.Settings.GetInt("settings.post_filters.out_chan_size"),
 	},

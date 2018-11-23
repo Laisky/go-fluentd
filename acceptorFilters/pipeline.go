@@ -21,6 +21,11 @@ type AcceptorPipeline struct {
 
 func NewAcceptorPipeline(cfg *AcceptorPipelineCfg, filters ...AcceptorFilterItf) *AcceptorPipeline {
 	utils.Logger.Info("NewAcceptorPipeline")
+
+	if cfg.NFork < 1 {
+		panic(fmt.Errorf("NFork should greater than 1, got: %v", cfg.NFork))
+	}
+
 	a := &AcceptorPipeline{
 		AcceptorPipelineCfg: cfg,
 		filters:             filters,

@@ -101,6 +101,7 @@ func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorP
 		OutChanSize:     utils.Settings.GetInt("settings.acceptor_filters.out_buf_len"),
 		MsgPool:         c.msgPool,
 		ReEnterChanSize: utils.Settings.GetInt("settings.acceptor_filters.reenter_chan_len"),
+		NFork:           utils.Settings.GetInt("settings.acceptor_filters.fork"),
 	},
 		acceptorFilters.NewSparkFilter(&acceptorFilters.SparkFilterCfg{
 			Tag:         "spark." + env,
@@ -109,9 +110,10 @@ func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorP
 			IgnoreRegex: regexp.MustCompile(utils.Settings.GetString("settings.acceptor_filters.tenants.spark.ignore_regex")),
 		}),
 		acceptorFilters.NewSpringFilter(&acceptorFilters.SpringFilterCfg{
-			Tag:   "spring." + env,
-			Env:   env,
-			Rules: acceptorFilters.ParseSpringRules(utils.Settings.Get("settings.acceptor_filters.tenants.spring.rules").([]interface{})),
+			Tag:    "spring." + env,
+			Env:    env,
+			MsgKey: utils.Settings.GetString("settings.acceptor_filters.tenants.spring.msg_key"),
+			Rules:  acceptorFilters.ParseSpringRules(env, utils.Settings.Get("settings.acceptor_filters.tenants.spring.rules").([]interface{})),
 		}),
 		// set the DefaultFilter as last filter
 		acceptorFilters.NewDefaultFilter(acceptorFilters.NewDefaultFilterCfg()),

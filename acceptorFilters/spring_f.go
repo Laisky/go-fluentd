@@ -3,7 +3,6 @@ package acceptorFilters
 import (
 	"regexp"
 	"strings"
-	"sync"
 
 	"github.com/Laisky/go-concator/libs"
 	utils "github.com/Laisky/go-utils"
@@ -11,14 +10,13 @@ import (
 )
 
 type SpringReTagRule struct {
-	MsgKey, NewTag string
-	Regexp         *regexp.Regexp
+	NewTag string
+	Regexp *regexp.Regexp
 }
 
 type SpringFilterCfg struct {
-	MsgPool  *sync.Pool
-	Tag, Env string
-	Rules    []*SpringReTagRule
+	Tag, Env, MsgKey string
+	Rules            []*SpringReTagRule
 }
 
 type SpringFilter struct {
@@ -27,13 +25,12 @@ type SpringFilter struct {
 }
 
 // ParseSpringRules parse settings to rules
-func ParseSpringRules(cfg []interface{}) []*SpringReTagRule {
+func ParseSpringRules(env string, cfg []interface{}) []*SpringReTagRule {
 	rules := []*SpringReTagRule{}
 	for _, ruleI := range cfg {
 		rule := ruleI.(map[interface{}]interface{})
 		rules = append(rules, &SpringReTagRule{
-			MsgKey: rule["msg_key"].(string),
-			NewTag: rule["new_tag"].(string),
+			NewTag: strings.Replace(rule["new_tag"].(string), "{env}", env, -1),
 			Regexp: regexp.MustCompile(rule["regexp"].(string)),
 		})
 	}
@@ -45,17 +42,10 @@ func NewSpringFilter(cfg *SpringFilterCfg) *SpringFilter {
 	utils.Logger.Info("NewSpringFilter",
 		zap.String("tag", cfg.Tag))
 
-	f := &SpringFilter{
+	return &SpringFilter{
 		BaseFilter:      &BaseFilter{},
 		SpringFilterCfg: cfg,
 	}
-
-	// prepare rules new tag
-	for _, rule := range f.Rules {
-		rule.NewTag = strings.Replace(rule.NewTag, "{env}", f.Env, -1)
-	}
-
-	return f
 }
 
 func (f *SpringFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
@@ -63,15 +53,17 @@ func (f *SpringFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 		return msg
 	}
 
+	switch msg.Message[f.MsgKey].(type) {
+	case []byte:
+	default:
+		return msg
+	}
 	// retag spring to cp/bot/app.spring
 	for _, rule := range f.Rules {
-		switch msg.Message[rule.MsgKey].(type) {
-		case []byte:
-			if rule.Regexp.Match(msg.Message[rule.MsgKey].([]byte)) {
-				msg.Tag = rule.NewTag
-				f.upstreamChan <- msg
-				return nil
-			}
+		if rule.Regexp.Match(msg.Message[f.MsgKey].([]byte)) {
+			msg.Tag = rule.NewTag
+			f.upstreamChan <- msg
+			return nil
 		}
 	}
 

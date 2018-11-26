@@ -233,6 +233,7 @@ func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- int64) *
 func (c *Controllor) initSenders(env string) []senders.SenderItf {
 	ss := []senders.SenderItf{
 		// senders.NewFluentSender(&senders.FluentSenderCfg{ // fluentd backend
+		// 	Name:          "FluentdSender",
 		// 	Addr:          utils.Settings.GetString("settings.producer.tenants.fluentd.addr"),
 		// 	BatchSize:     utils.Settings.GetInt("settings.producer.tenants.fluentd.msg_batch_size"),
 		// 	MaxWait:       utils.Settings.GetDuration("settings.producer.tenants.fluentd.max_wait_sec") * time.Second,
@@ -268,6 +269,7 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 	if env == "prod" {
 		ss = append(ss,
 			senders.NewFluentSender(&senders.FluentSenderCfg{ // fluentd backend
+				Name:          "FluentdBackupSender",
 				Addr:          utils.Settings.GetString("settings.producer.tenants.fluentd_backup.addr"),
 				BatchSize:     utils.Settings.GetInt("settings.producer.tenants.fluentd_backup.msg_batch_size"),
 				MaxWait:       utils.Settings.GetDuration("settings.producer.tenants.fluentd_backup.max_wait_sec") * time.Second,

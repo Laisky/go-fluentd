@@ -11,7 +11,7 @@ import (
 )
 
 type FluentSenderCfg struct {
-	Addr                                        string
+	Name, Addr                                  string
 	Tags                                        []string
 	BatchSize, InChanSize, RetryChanSize, NFork int
 	MaxWait                                     time.Duration
@@ -42,7 +42,7 @@ func NewFluentSender(cfg *FluentSenderCfg) *FluentSender {
 }
 
 func (s *FluentSender) GetName() string {
-	return "FluentSender"
+	return s.Name
 }
 
 func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {

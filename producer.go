@@ -103,8 +103,11 @@ func (p *Producer) RunDiscard(nSenderForTagMap *sync.Map, discardChan chan *libs
 		}
 
 		if cnt == itf.(int) {
+			// msg already sent by all sender
 			p.discardMsgCountMap.Delete(msg.Id)
 			p.DiscardMsg(msg)
+		} else {
+			p.discardMsgCountMap.Store(msg.Id, cnt)
 		}
 	}
 }

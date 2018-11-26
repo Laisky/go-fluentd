@@ -230,15 +230,8 @@ func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- int64) *
 	)
 }
 
-func (c *Controllor) initProducer(env string, waitProduceChan chan *libs.FluentMsg, commitChan chan<- int64) *Producer {
-	return NewProducer(
-		&ProducerCfg{
-			InChan:          waitProduceChan,
-			MsgPool:         c.msgPool,
-			CommitChan:      commitChan,
-			DiscardChanSize: utils.Settings.GetInt("settings.producer.discard_chan_size"),
-		},
-		// senders...
+func (c *Controllor) initSenders(env string) []senders.SenderItf {
+	ss := []senders.SenderItf{
 		// senders.NewFluentSender(&senders.FluentSenderCfg{ // fluentd backend
 		// 	Addr:          utils.Settings.GetString("settings.producer.tenants.fluentd.addr"),
 		// 	BatchSize:     utils.Settings.GetInt("settings.producer.tenants.fluentd.msg_batch_size"),
@@ -270,6 +263,35 @@ func (c *Controllor) initProducer(env string, waitProduceChan chan *libs.FluentM
 			NFork:         utils.Settings.GetInt("settings.producer.tenants.kafka_cp.forks"),
 			Tags:          senders.TagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.tenants.kafka_cp.tags")),
 		}),
+	}
+
+	if env == "prod" {
+		ss = append(ss,
+			senders.NewFluentSender(&senders.FluentSenderCfg{ // fluentd backend
+				Addr:          utils.Settings.GetString("settings.producer.tenants.fluentd_backup.addr"),
+				BatchSize:     utils.Settings.GetInt("settings.producer.tenants.fluentd_backup.msg_batch_size"),
+				MaxWait:       utils.Settings.GetDuration("settings.producer.tenants.fluentd_backup.max_wait_sec") * time.Second,
+				RetryChanSize: utils.Settings.GetInt("settings.producer.tenants.fluentd_backup.retry_chan_len"),
+				InChanSize:    utils.Settings.GetInt("settings.producer.sender_inchan_size"),
+				NFork:         utils.Settings.GetInt("settings.producer.tenants.fluentd_backup.forks"),
+				Tags:          senders.TagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.tenants.fluentd_backup.tags")),
+			}),
+		)
+	}
+
+	return ss
+}
+
+func (c *Controllor) initProducer(env string, waitProduceChan chan *libs.FluentMsg, commitChan chan<- int64, senders []senders.SenderItf) *Producer {
+	return NewProducer(
+		&ProducerCfg{
+			InChan:          waitProduceChan,
+			MsgPool:         c.msgPool,
+			CommitChan:      commitChan,
+			DiscardChanSize: utils.Settings.GetInt("settings.producer.discard_chan_size"),
+		},
+		// senders...
+		senders...,
 	)
 }
 
@@ -306,7 +328,8 @@ func (c *Controllor) Run() {
 	waitPostPipelineChan := dispatcher.GetOutChan()
 	postPipeline := c.initPostPipeline(env, waitCommitChan)
 	waitProduceChan := postPipeline.Wrap(waitPostPipelineChan)
-	producer := c.initProducer(env, waitProduceChan, waitCommitChan)
+	producerSenders := c.initSenders(env)
+	producer := c.initProducer(env, waitProduceChan, waitCommitChan, producerSenders)
 
 	// heartbeat
 	go c.runHeartBeat()

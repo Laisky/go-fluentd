@@ -1,6 +1,7 @@
 package postFilters
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/Laisky/go-concator/libs"
@@ -8,9 +9,9 @@ import (
 )
 
 type PostPipelineCfg struct {
-	MsgPool                      *sync.Pool
-	CommittedChan                chan<- int64
-	ReEnterChanSize, OutChanSize int
+	MsgPool                             *sync.Pool
+	CommittedChan                       chan<- int64
+	ReEnterChanSize, OutChanSize, NFork int
 }
 
 type PostPipeline struct {
@@ -21,6 +22,11 @@ type PostPipeline struct {
 
 func NewPostPipeline(cfg *PostPipelineCfg, filters ...PostFilterItf) *PostPipeline {
 	utils.Logger.Info("NewPostPipeline")
+
+	if cfg.NFork < 1 {
+		panic(fmt.Errorf("NFork should greater than 1, got: %v", cfg.NFork))
+	}
+
 	pp := &PostPipeline{
 		PostPipelineCfg: cfg,
 		filters:         filters,
@@ -38,28 +44,32 @@ func NewPostPipeline(cfg *PostPipelineCfg, filters ...PostFilterItf) *PostPipeli
 
 func (f *PostPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan chan *libs.FluentMsg) {
 	outChan = make(chan *libs.FluentMsg, f.OutChanSize)
-	var (
-		filter PostFilterItf
-		msg    *libs.FluentMsg
-	)
 
-	go func() {
-	NEXT_MSG:
-		for {
-			select {
-			case msg = <-f.reEnterChan:
-			case msg = <-inChan:
-			}
+	for i := 0; i < f.NFork; i++ {
+		go func() {
+			defer panic(fmt.Errorf("quit postPipeline"))
 
-			for _, filter = range f.filters {
-				if msg = filter.Filter(msg); msg == nil { // quit filters for this msg
-					goto NEXT_MSG
+			var (
+				filter PostFilterItf
+				msg    *libs.FluentMsg
+			)
+			for {
+			NEW_MSG:
+				select {
+				case msg = <-f.reEnterChan:
+				case msg = <-inChan:
 				}
-			}
 
-			outChan <- msg
-		}
-	}()
+				for _, filter = range f.filters {
+					if msg = filter.Filter(msg); msg == nil { // quit filters for this msg
+						goto NEW_MSG
+					}
+				}
+
+				outChan <- msg
+			}
+		}()
+	}
 
 	return outChan
 }

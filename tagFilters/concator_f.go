@@ -11,10 +11,11 @@ import (
 )
 
 type ConcatorCfg struct {
-	Cf                      *ConcatorFactory
+	Cf                      TagFilterFactoryItf
+	MaxLen                  int
 	Tag, MsgKey, Identifier string
 	OutChan                 chan<- *libs.FluentMsg
-	PMsgPool                *sync.Pool
+	MsgPool, PMsgPool       *sync.Pool
 	Regexp                  *regexp.Regexp
 }
 
@@ -113,6 +114,7 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			log = msg.Message[c.MsgKey].([]byte)
 		case string:
 			log = []byte(msg.Message[c.MsgKey].(string))
+			msg.Message[c.MsgKey] = log
 		default:
 			utils.Logger.Warn("unknown msg key or unknown type",
 				zap.String("tag", msg.Tag),
@@ -121,9 +123,7 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			continue
 		}
 
-		pmsg, ok = c.slot[identifier]
-		// new identifier
-		if !ok {
+		if pmsg, ok = c.slot[identifier]; !ok { // new identifier
 			// new line with incorrect format, skip
 			if !c.Regexp.Match(log) {
 				c.PutDownstream(msg)
@@ -133,7 +133,7 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			// new line with correct format, set as first line
 			utils.Logger.Debug("got new identifier",
 				zap.String("identifier", identifier),
-				zap.ByteString("log", msg.Message[c.MsgKey].([]byte)))
+				zap.ByteString("log", log))
 			pmsg = c.PMsgPool.Get().(*PendingMsg)
 			pmsg.lastT = now
 			pmsg.msg = msg
@@ -141,10 +141,10 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			continue
 		}
 
-		// old identifer
+		// replace exists msg in slot
 		if c.Regexp.Match(log) { // new line
 			utils.Logger.Debug("got new line",
-				zap.ByteString("log", msg.Message[c.MsgKey].([]byte)),
+				zap.ByteString("log", log),
 				zap.String("tag", msg.Tag))
 			c.PutDownstream(c.slot[identifier].msg)
 			c.slot[identifier].msg = msg
@@ -165,20 +165,18 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 		c.slot[identifier].lastT = now
 
 		// too long to send
-		if len(c.slot[identifier].msg.Message[c.MsgKey].([]byte)) >= c.Cf.MaxLen {
+		if len(c.slot[identifier].msg.Message[c.MsgKey].([]byte)) >= c.MaxLen {
 			utils.Logger.Debug("too long to send", zap.String("msgKey", c.MsgKey), zap.String("tag", msg.Tag))
 			c.PutDownstream(c.slot[identifier].msg)
 			c.PMsgPool.Put(c.slot[identifier])
 			delete(c.slot, identifier)
 		}
+		c.Cf.DiscardMsg(msg)
 	}
 }
 
 func (c *Concator) PutDownstream(msg *libs.FluentMsg) {
-	select {
-	case c.OutChan <- msg:
-	default:
-	}
+	c.OutChan <- msg
 }
 
 type ConcatorFactCfg struct {
@@ -227,6 +225,7 @@ func (cf *ConcatorFactory) Spawn(tag string, outChan chan<- *libs.FluentMsg) cha
 	inChan := make(chan *libs.FluentMsg, cf.defaultInternalChanSize)
 	concator := NewConcator(&ConcatorCfg{
 		Cf:         cf,
+		MaxLen:     cf.MaxLen,
 		Tag:        tag,
 		OutChan:    outChan,
 		MsgKey:     cf.ConcatorCfgs[tag].MsgKey,

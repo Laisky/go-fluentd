@@ -49,7 +49,7 @@ docker run -itd --rm --name=go-concator -p 24225:24225 -p 8080:8080 \
     - Concator
     - Parser for each tag
 - PostPipeline (consists of PostFilters)
-- Producer
+- Producer (consists of Senders)
 
 
 ![architecture](docs/architecture.jpg)

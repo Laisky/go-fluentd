@@ -46,6 +46,7 @@ func NewTagPipeline(cfg *TagPipelineCfg, itfs ...TagFilterFactoryItf) *TagPipeli
 
 // Spawn create and run new Concator for new tag, return inchan
 func (p *TagPipeline) Spawn(tag string, outChan chan<- *libs.FluentMsg) (chan<- *libs.FluentMsg, error) {
+	utils.Logger.Info("spawn tagpipeline", zap.String("tag", tag))
 	var (
 		lastI          = len(p.TagFilterFactoryItfs) - 1
 		f              TagFilterFactoryItf

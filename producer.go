@@ -1,44 +1,51 @@
 package concator
 
 import (
-	"fmt"
-	"net"
 	"sync"
-	"time"
 
 	"github.com/Laisky/go-concator/libs"
 	"github.com/Laisky/go-concator/monitor"
+	"github.com/Laisky/go-concator/senders"
 	utils "github.com/Laisky/go-utils"
 	"go.uber.org/zap"
 )
 
 type ProducerCfg struct {
-	Addr                           string
-	InChan                         chan *libs.FluentMsg
-	MsgPool                        *sync.Pool
-	BatchSize                      int
-	MaxWait                        time.Duration
-	EachTagChanSize, RetryChanSize int
+	InChan          chan *libs.FluentMsg
+	MsgPool         *sync.Pool
+	CommitChan      chan<- int64
+	DiscardChanSize int
 }
 
 // Producer send messages to downstream
 type Producer struct {
 	*ProducerCfg
-	producerTagChanMap map[string]chan<- *libs.FluentMsg
-	retryMsgChan       chan *libs.FluentMsg
+	producerTagChanMap *sync.Map
+	senders            []senders.SenderItf
+	discardChan        chan *libs.FluentMsg
+	discardMsgCountMap *sync.Map
 }
 
 // NewProducer create new producer
-func NewProducer(cfg *ProducerCfg) *Producer {
-	utils.Logger.Info("create Producer",
-		zap.String("backend", cfg.Addr),
-		zap.Duration("maxWait", cfg.MaxWait))
+func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) *Producer {
+	utils.Logger.Info("create Producer")
+
 	p := &Producer{
 		ProducerCfg:        cfg,
-		producerTagChanMap: map[string]chan<- *libs.FluentMsg{},
-		retryMsgChan:       make(chan *libs.FluentMsg, cfg.RetryChanSize),
+		senders:            senders,
+		producerTagChanMap: &sync.Map{},
+		discardChan:        make(chan *libs.FluentMsg, cfg.DiscardChanSize),
+		discardMsgCountMap: &sync.Map{},
 	}
 	p.registerMonitor()
+
+	for _, s := range senders {
+		utils.Logger.Info("enable sender", zap.String("name", s.GetName()))
+		s.SetCommitChan(cfg.CommitChan)
+		s.SetMsgPool(cfg.MsgPool)
+		s.SetDiscardChan(p.discardChan)
+	}
+
 	return p
 }
 
@@ -46,140 +53,134 @@ func NewProducer(cfg *ProducerCfg) *Producer {
 func (p *Producer) registerMonitor() {
 	monitor.AddMetric("producer", func() map[string]interface{} {
 		metrics := map[string]interface{}{}
-		for tag, c := range p.producerTagChanMap {
-			metrics[tag+".ChanLen"] = len(c)
-			metrics[tag+".ChanCap"] = cap(c)
-		}
+		p.producerTagChanMap.Range(func(tagi, smi interface{}) bool {
+			smi.(*sync.Map).Range(func(namei, ci interface{}) bool {
+				metrics[tagi.(string)+"."+namei.(string)+".ChanLen"] = len(ci.(chan<- *libs.FluentMsg))
+				metrics[tagi.(string)+"."+namei.(string)+".ChanCap"] = cap(ci.(chan<- *libs.FluentMsg))
+				return true
+			})
+			return true
+		})
+		metrics["discardChanLen"] = len(p.discardChan)
+		metrics["discardChanCap"] = cap(p.discardChan)
+
+		// get discardMsgCountMap length
+		nMsg := 0
+		p.discardMsgCountMap.Range(func(k, v interface{}) bool {
+			nMsg++
+			return true
+		})
+		metrics["waitToDiscardMsgNum"] = nMsg
 		return metrics
 	})
 }
 
-// Run starting <n> Producer to send messages
-func (p *Producer) Run(fork int, commitChan chan<- int64) {
-	utils.Logger.Info("start producer", zap.String("addr", p.Addr))
-
-	var (
-		msg *libs.FluentMsg
-		ok  bool
-	)
-
-	for {
-		select {
-		case msg = <-p.retryMsgChan:
-		case msg = <-p.InChan:
+func (p *Producer) DiscardMsg(msg *libs.FluentMsg) {
+	utils.Logger.Debug("recycle msg", zap.Int64("id", msg.Id), zap.String("tag", msg.Tag))
+	p.CommitChan <- msg.Id
+	if msg.ExtIds != nil {
+		for _, id := range msg.ExtIds {
+			p.CommitChan <- id
 		}
-
-		if _, ok = p.producerTagChanMap[msg.Tag]; !ok {
-			p.producerTagChanMap[msg.Tag] = p.SpawnForTag(fork, msg.Tag, commitChan)
-		}
-
-		select {
-		case p.producerTagChanMap[msg.Tag] <- msg:
-		default:
-		}
+		msg.ExtIds = nil
 	}
-
+	p.MsgPool.Put(msg)
 }
 
-// SpawnForTag spawn `fork` numbers connections to downstream for each tag
-func (p *Producer) SpawnForTag(fork int, tag string, commitChan chan<- int64) chan<- *libs.FluentMsg {
-	utils.Logger.Info("SpawnForTag", zap.Int("fork", fork), zap.String("tag", tag))
+func (p *Producer) RunDiscard(nSenderForTagMap *sync.Map, discardChan chan *libs.FluentMsg) {
 	var (
-		inChan = make(chan *libs.FluentMsg, p.EachTagChanSize) // for each tag
+		cnt int
+		ok  bool
+		itf interface{}
+	)
+	for msg := range discardChan {
+		itf, _ = p.discardMsgCountMap.LoadOrStore(msg.Id, 0)
+		cnt = itf.(int)
+		cnt++
+		if itf, ok = nSenderForTagMap.Load(msg.Tag); !ok {
+			utils.Logger.Error("nSenderForTagMap should contains tag", zap.String("tag", msg.Tag))
+			continue
+		}
+
+		if cnt == itf.(int) {
+			// msg already sent by all sender
+			p.discardMsgCountMap.Delete(msg.Id)
+			p.DiscardMsg(msg)
+		} else {
+			p.discardMsgCountMap.Store(msg.Id, cnt)
+		}
+	}
+}
+
+// Run starting <n> Producer to send messages
+func (p *Producer) Run() {
+	utils.Logger.Info("start producer")
+
+	var (
+		msg              *libs.FluentMsg
+		ok               bool
+		s                senders.SenderItf
+		unSupportedTags  = map[string]struct{}{}
+		nSenderForTagMap = &sync.Map{} // map[tag]nSender
+		isSkip           = true
+		itf              interface{}
+		senderChanMap    *sync.Map
+		nSender          int
 	)
 
-	for i := 0; i < fork; i++ { // parallel to each tag
-		go func() {
-			defer utils.Logger.Error("producer exits", zap.String("tag", tag))
+	go p.RunDiscard(nSenderForTagMap, p.discardChan)
 
-			var (
-				nRetry           = 0
-				maxRetry         = 3
-				id               int64
-				msg              *libs.FluentMsg
-				msgBatch         = make([]*libs.FluentMsg, p.BatchSize)
-				msgBatchDelivery []*libs.FluentMsg
-				iBatch           = 0
-				lastT            = time.Unix(0, 0)
-				encoder          *Encoder
-				conn             net.Conn
-				err              error
-			)
+	for msg = range p.InChan {
+		if _, ok = unSupportedTags[msg.Tag]; ok {
+			utils.Logger.Warn("do not produce since of unsupported tag", zap.String("tag", msg.Tag))
+			p.DiscardMsg(msg)
+			continue
+		}
 
-		RECONNECT: // reconnect to downstream
-			conn, err = net.DialTimeout("tcp", p.Addr, 10*time.Second)
-			if err != nil {
-				utils.Logger.Error("try to connect to backend got error", zap.Error(err), zap.String("tag", tag))
-				goto RECONNECT
-			}
-			utils.Logger.Info("connected to backend",
-				zap.String("backend", conn.RemoteAddr().String()),
-				zap.String("tag", tag))
+		msg.Message["tag"] = msg.Tag // set tag
 
-			encoder = NewEncoder(conn) // one encoder for each connection
-			for msg = range inChan {
-				msgBatch[iBatch] = msg
-				iBatch++
-				if iBatch < p.BatchSize &&
-					time.Now().Sub(lastT) < p.MaxWait {
-					continue
-				}
-				lastT = time.Now()
-				msgBatchDelivery = msgBatch[:iBatch]
-				iBatch = 0
-
-				nRetry = 0
-				for {
-					if utils.Settings.GetBool("dry") {
-						utils.Logger.Info("send message to backend",
-							zap.String("tag", tag),
-							zap.String("log", fmt.Sprint(msgBatch[0].Message)))
-						goto FINISHED
-					}
-
-					if err = encoder.EncodeBatch(tag, msgBatchDelivery); err != nil {
-						nRetry++
-						if nRetry > maxRetry {
-							utils.Logger.Error("try send message got error", zap.Error(err), zap.String("tag", tag))
-
-							for _, msg = range msgBatchDelivery { // put back
-								select {
-								case p.retryMsgChan <- msg:
-								default:
-								}
-							}
-
-							if err = conn.Close(); err != nil {
-								utils.Logger.Error("try to close connection got error", zap.Error(err))
-							}
-							utils.Logger.Info("connection closed, try to reconnect...")
-							goto RECONNECT
-						}
-
-						continue
-					}
-
-					utils.Logger.Debug("success sent message to backend",
-						zap.String("backend", p.Addr),
-						zap.String("tag", tag))
-					goto FINISHED
-				}
-
-			FINISHED:
-				for _, msg = range msgBatchDelivery {
-					commitChan <- msg.Id
-					if msg.ExtIds != nil {
-						for _, id = range msg.ExtIds {
-							commitChan <- id
-						}
-					}
-
-					msg.ExtIds = nil
-					p.MsgPool.Put(msg)
+		if _, ok = p.producerTagChanMap.Load(msg.Tag); !ok {
+			isSkip = true
+			nSender = 0
+			senderChanMap = &sync.Map{}
+			for _, s = range p.senders {
+				if s.IsTagSupported(msg.Tag) {
+					isSkip = false
+					nSender++
+					utils.Logger.Info("spawn new producer sender",
+						zap.String("name", s.GetName()),
+						zap.String("tag", msg.Tag))
+					senderChanMap.Store(s.GetName(), s.Spawn(msg.Tag))
 				}
 			}
-		}()
+
+			if isSkip {
+				utils.Logger.Warn("do not produce since of unsupported tag", zap.String("tag", msg.Tag))
+				unSupportedTags[msg.Tag] = struct{}{}
+				p.DiscardMsg(msg)
+				continue
+			}
+
+			nSenderForTagMap.Store(msg.Tag, nSender)
+			p.producerTagChanMap.Store(msg.Tag, senderChanMap)
+		}
+
+		if itf, ok = p.producerTagChanMap.Load(msg.Tag); !ok {
+			utils.Logger.Error("producerTagChanMap should contains tag", zap.String("tag", msg.Tag))
+			continue
+		}
+
+		senderChanMap = itf.(*sync.Map)
+		senderChanMap.Range(func(key, val interface{}) bool {
+			select {
+			case val.(chan<- *libs.FluentMsg) <- msg:
+			default:
+				utils.Logger.Warn("skip sender",
+					zap.String("name", key.(string)),
+					zap.String("tag", msg.Tag))
+			}
+
+			return true
+		})
 	}
-
-	return inChan
 }

@@ -2,6 +2,7 @@ package concator
 
 import (
 	"sync"
+	"time"
 
 	"github.com/Laisky/go-concator/libs"
 	"github.com/Laisky/go-concator/monitor"
@@ -24,6 +25,7 @@ type Producer struct {
 	senders            []senders.SenderItf
 	discardChan        chan *libs.FluentMsg
 	discardMsgCountMap *sync.Map
+	counter            *utils.Counter
 }
 
 // NewProducer create new producer
@@ -36,6 +38,7 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) *Producer {
 		producerTagChanMap: &sync.Map{},
 		discardChan:        make(chan *libs.FluentMsg, cfg.DiscardChanSize),
 		discardMsgCountMap: &sync.Map{},
+		counter:            utils.NewCounter(),
 	}
 	p.registerMonitor()
 
@@ -51,8 +54,14 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) *Producer {
 
 // registerMonitor bind monitor for producer
 func (p *Producer) registerMonitor() {
+	lastT := time.Now()
 	monitor.AddMetric("producer", func() map[string]interface{} {
-		metrics := map[string]interface{}{}
+		metrics := map[string]interface{}{
+			"msgPerSec": utils.Round(float64(p.counter.Get())/(time.Now().Sub(lastT).Seconds()), .5, 1),
+		}
+		p.counter.Set(0)
+		lastT = time.Now()
+
 		p.producerTagChanMap.Range(func(tagi, smi interface{}) bool {
 			smi.(*sync.Map).Range(func(namei, ci interface{}) bool {
 				metrics[tagi.(string)+"."+namei.(string)+".ChanLen"] = len(ci.(chan<- *libs.FluentMsg))
@@ -131,6 +140,7 @@ func (p *Producer) Run() {
 	go p.RunDiscard(nSenderForTagMap, p.discardChan)
 
 	for msg = range p.InChan {
+		p.counter.Count()
 		if _, ok = unSupportedTags[msg.Tag]; ok {
 			utils.Logger.Warn("do not produce since of unsupported tag", zap.String("tag", msg.Tag))
 			p.DiscardMsg(msg)

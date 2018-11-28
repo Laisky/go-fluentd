@@ -5,7 +5,7 @@ Rewrite fluentd by Golang.
 
 ## Description
 
-LogAggregator + Concator + Parser + Dispatcher.
+LogAggregator + Concator + Parser + Producer.
 
 Origin logs emitted from docker look like:
 
@@ -20,7 +20,7 @@ Origin logs emitted from docker look like:
 '{"container_id": "xxxxx", "log": "\t... 1 more"}'
 ```
 
-After Concator(TagPipeline & TagFilters):
+After Concator(TagPipeline > concator_f):
 
 ```go
 &FluentMsg{
@@ -33,7 +33,7 @@ After Concator(TagPipeline & TagFilters):
 }
 ```
 
-After Parser(TagPipeline & TagFilters):
+After Parser(TagPipeline > parser_f):
 
 ```go
 &FluentMsg{
@@ -52,6 +52,7 @@ After Parser(TagPipeline & TagFilters):
 }
 ```
 
+Then Producer can send logs to anywhere (depends on Senders).
 
 
 

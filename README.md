@@ -5,12 +5,57 @@ Rewrite fluentd by Golang.
 
 ## Description
 
-Replace most of fluentd's functions except string parsing
-(since of this part is too cumbersome to rewrite
- and can be easy to horizontal scaling).
+LogAggregator + Concator + Parser + Dispatcher.
+
+Origin logs emitted from docker look like:
+
+```
+'{"container_id": "xxxxx", "log": "2018-03-06 16:56:22.514 | mscparea | ERROR  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84:'
+'{"container_id": "xxxxx", "log": "Exception in thread "main" java.lang.IllegalStateException: A book has a null property"}'
+'{"container_id": "xxxxx", "log": "\tat com.example.myproject.Author.getBookIds(Author.java:38)"}'
+'{"container_id": "xxxxx", "log": "\tat com.example.myproject.Bootstrap.main(Bootstrap.java:14)"}'
+'{"container_id": "xxxxx", "log": "Caused by: java.lang.NullPointerException"}'
+'{"container_id": "xxxxx", "log": "\tat com.example.myproject.Book.getId(Book.java:22)"}'
+'{"container_id": "xxxxx", "log": "\tat com.example.myproject.Author.getBookIds(Author.java:35)"}'
+'{"container_id": "xxxxx", "log": "\t... 1 more"}'
+```
+
+After Concator(TagPipeline & TagFilters):
+
+```go
+&FluentMsg{
+    Id: 12345,
+    Tag: "spring.sit",
+    Message: map[string]interface{
+        "container_id": "xxxxx",
+        "log": "2018-03-06 16:56:22.514 | mscparea | ERROR  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: Exception in thread "main" java.lang.IllegalStateException: A book has a null property\n\tat com.example.myproject.Author.getBookIds(Author.java:38)\n\tat com.example.myproject.Bootstrap.main(Bootstrap.java:14)\nCaused by: java.lang.NullPointerException\n\tat com.example.myproject.Book.getId(Book.java:22)\n\tat com.example.myproject.Author.getBookIds(Author.java:35)\n\t... 1 more",
+    },
+}
+```
+
+After Parser(TagPipeline & TagFilters):
+
+```go
+&FluentMsg{
+    Id: 12345,
+    Tag: "spring.sit",
+    Message: map[string]interface{
+        "container_id": "xxxxx",
+        "time": "2018-03-06 16:56:22.514",
+        "level": "ERROR",
+        "app": "mscparea",
+        "thread": "http-nio-8080-exec-1",
+        "class": "com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest",
+        "line": 84,
+        "message": "Exception in thread "main" java.lang.IllegalStateException: A book has a null property\n\tat com.example.myproject.Author.getBookIds(Author.java:38)\n\tat com.example.myproject.Bootstrap.main(Bootstrap.java:14)\nCaused by: java.lang.NullPointerException\n\tat com.example.myproject.Book.getId(Book.java:22)\n\tat com.example.myproject.Author.getBookIds(Author.java:35)\n\t... 1 more",
+    },
+}
+```
 
 
- ## Run
+
+
+## Run
 
 build:
 

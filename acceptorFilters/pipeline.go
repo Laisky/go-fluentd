@@ -3,8 +3,10 @@ package acceptorFilters
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/Laisky/go-concator/libs"
+	"github.com/Laisky/go-concator/monitor"
 	"github.com/Laisky/go-utils"
 )
 
@@ -17,6 +19,7 @@ type AcceptorPipeline struct {
 	*AcceptorPipelineCfg
 	filters     []AcceptorFilterItf
 	reEnterChan chan *libs.FluentMsg
+	counter     *utils.Counter
 }
 
 func NewAcceptorPipeline(cfg *AcceptorPipelineCfg, filters ...AcceptorFilterItf) *AcceptorPipeline {
@@ -30,14 +33,27 @@ func NewAcceptorPipeline(cfg *AcceptorPipelineCfg, filters ...AcceptorFilterItf)
 		AcceptorPipelineCfg: cfg,
 		filters:             filters,
 		reEnterChan:         make(chan *libs.FluentMsg, cfg.ReEnterChanSize),
+		counter:             utils.NewCounter(),
 	}
-
+	a.registerMonitor()
 	for _, filter := range a.filters {
 		filter.SetUpstream(a.reEnterChan)
 		filter.SetMsgPool(a.MsgPool)
 	}
 
 	return a
+}
+
+func (f *AcceptorPipeline) registerMonitor() {
+	lastT := time.Now()
+	monitor.AddMetric("acceptorPipeline", func() map[string]interface{} {
+		metrics := map[string]interface{}{
+			"msgPerSec": utils.Round(float64(f.counter.Get())/(time.Now().Sub(lastT).Seconds()), .5, 1),
+		}
+		f.counter.Set(0)
+		lastT = time.Now()
+		return metrics
+	})
 }
 
 func (f *AcceptorPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan, skipDumpChan chan *libs.FluentMsg) {
@@ -54,6 +70,7 @@ func (f *AcceptorPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan, skipDumpC
 			)
 			for {
 			NEXT_MSG:
+				f.counter.Count()
 				select {
 				case msg = <-f.reEnterChan: // CAUTION: do not put msg into reEnterChan forever
 				case msg = <-inChan:

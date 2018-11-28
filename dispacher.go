@@ -3,6 +3,7 @@ package concator
 import (
 	"regexp"
 	"sync"
+	"time"
 
 	"github.com/Laisky/go-concator/libs"
 	"github.com/Laisky/go-concator/monitor"
@@ -21,7 +22,9 @@ type DispatcherCfg struct {
 type Dispatcher struct {
 	*DispatcherCfg
 	concatorMap *sync.Map            // tag:msgchan
+	tagsCounter *sync.Map            // tag:counter
 	outChan     chan *libs.FluentMsg // skip concator, direct to producer
+	counter     *utils.Counter
 }
 
 // ConcatorFactoryItf interface of ConcatorFactory,
@@ -38,6 +41,8 @@ func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 		DispatcherCfg: cfg,
 		outChan:       make(chan *libs.FluentMsg, cfg.OutChanSize),
 		concatorMap:   &sync.Map{},
+		tagsCounter:   &sync.Map{},
+		counter:       utils.NewCounter(),
 	}
 }
 
@@ -51,13 +56,19 @@ func (d *Dispatcher) Run() {
 			inChanForEachTag  chan<- *libs.FluentMsg
 			ok                bool
 			err               error
+			counterI          interface{}
 		)
 		// send each message to appropriate concator by `tag`
 		for msg := range d.InChan {
+			d.counter.Count()
 			inChanForEachTagi, ok = d.concatorMap.Load(msg.Tag)
 			if ok {
 				// tagfilters should not blocking
 				inChanForEachTagi.(chan<- *libs.FluentMsg) <- msg
+				if counterI, ok = d.tagsCounter.Load(msg.Tag); !ok {
+					utils.Logger.Error("counter not exists", zap.String("tag", msg.Tag))
+				}
+				counterI.(*utils.Counter).Count()
 				continue
 			}
 
@@ -72,14 +83,26 @@ func (d *Dispatcher) Run() {
 			}
 
 			d.concatorMap.Store(msg.Tag, inChanForEachTag)
+			d.tagsCounter.Store(msg.Tag, utils.NewCounterFromN(1))
 			inChanForEachTag <- msg
 		}
 	}()
 }
 
 func (d *Dispatcher) registerMonitor() {
+	lastT := time.Now()
 	monitor.AddMetric("dispatcher", func() map[string]interface{} {
-		metrics := map[string]interface{}{}
+		metrics := map[string]interface{}{
+			"msgPerSec": utils.Round(float64(d.counter.Get())/(time.Now().Sub(lastT).Seconds()), .5, 1),
+		}
+		d.counter.Set(0)
+		d.tagsCounter.Range(func(tagi interface{}, ci interface{}) bool {
+			metrics[tagi.(string)+".MsgPerSec"] = utils.Round(float64(ci.(*utils.Counter).Get())/(time.Now().Sub(lastT).Seconds()), .5, 1)
+			ci.(*utils.Counter).Set(0)
+			return true
+		})
+		lastT = time.Now()
+
 		d.concatorMap.Range(func(tagi interface{}, ci interface{}) bool {
 			metrics[tagi.(string)+".ChanLen"] = len(ci.(chan<- *libs.FluentMsg))
 			metrics[tagi.(string)+".ChanCap"] = cap(ci.(chan<- *libs.FluentMsg))

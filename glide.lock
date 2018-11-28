@@ -1,5 +1,5 @@
-hash: 36823ab516dc120e85c4cf51fd11d8e8772e9bd4938ad7de26c3b30ef02588eb
-updated: 2018-11-27T17:44:56.120071585+08:00
+hash: c34224ca296c75287b80edadef715d86f4a9222579ef1189fb8fd0eea21408aa
+updated: 2018-11-28T09:54:42.812450544+08:00
 imports:
 - name: github.com/aymerick/raymond
   version: b565731e1464263de0bda75f2e45d97b54b60110
@@ -53,6 +53,8 @@ imports:
   - json/parser
   - json/scanner
   - json/token
+- name: github.com/iris-contrib/blackfriday
+  version: 48b3da6a6f3865c7eb1eba96d74cf0a16f63faca
 - name: github.com/iris-contrib/formBinder
   version: ad9fb86c356f971f30319c40ddbdcf72129a2791
 - name: github.com/iris-contrib/go.uuid
@@ -66,7 +68,7 @@ imports:
 - name: github.com/kataras/golog
   version: 03be101463868edc5a81f094fc68a5f6c1b5503a
 - name: github.com/kataras/iris
-  version: 2a08a0f1f7162b9e662d5ffdc28bc27376259453
+  version: 39b8b1eb00eae9914addee3dee3612ffa785817f
   subpackages:
   - cache
   - cache/cfg
@@ -152,6 +154,8 @@ imports:
   version: 3d677d3262197ee558b85029301eb69b8239f91a
 - name: github.com/ryanuber/columnize
   version: abc90934186a77966e2beeac62ed966aac0561d5
+- name: github.com/Shopify/goreferrer
+  version: ec9c9a553398739f0dcf817e0ad5e01c4e7dcd08
 - name: github.com/Shopify/sarama
   version: ec843464b50d4c8b56403ec9d589cf41ea30e722
 - name: github.com/shurcooL/sanitized_anchor_name
@@ -200,6 +204,7 @@ imports:
   subpackages:
   - html
   - html/atom
+  - publicsuffix
 - name: golang.org/x/sys
   version: bff228c7b664c5fce602223a05fb708fd8654986
   subpackages:
@@ -213,8 +218,6 @@ imports:
   version: 2caba252f4dc53eaf6b553000885530023f54623
 - name: gopkg.in/gomail.v2
   version: 81ebce5c23dfd25c6c67194b37d3dd3f338c98b1
-- name: gopkg.in/russross/blackfriday.v2
-  version: cadec560ec52d93835bf2f15bd794700d3a2473b
 - name: gopkg.in/yaml.v2
   version: 5420a8b6744d3b0345ab293f6fcba19c978f1183
 testImports: []

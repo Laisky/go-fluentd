@@ -24,15 +24,16 @@ type SenderItf interface {
 	SetCommitChan(chan<- int64)
 	SetSupportedTags([]string)
 	SetDiscardChan(chan<- *libs.FluentMsg)
+	SetDiscardWithoutCommitChan(chan<- *libs.FluentMsg)
 }
 
 // BaseSender
 // should not put msg into msgpool in sender
 type BaseSender struct {
-	msgPool     *sync.Pool
-	commitChan  chan<- int64
-	discardChan chan<- *libs.FluentMsg
-	tags        []string
+	msgPool                               *sync.Pool
+	commitChan                            chan<- int64
+	discardChan, discardWithoutCommitChan chan<- *libs.FluentMsg
+	tags                                  []string
 }
 
 func (s *BaseSender) SetMsgPool(msgPool *sync.Pool) {
@@ -45,6 +46,10 @@ func (s *BaseSender) SetCommitChan(commitChan chan<- int64) {
 
 func (s *BaseSender) SetDiscardChan(discardChan chan<- *libs.FluentMsg) {
 	s.discardChan = discardChan
+}
+
+func (s *BaseSender) SetDiscardWithoutCommitChan(discardWithoutCommitChan chan<- *libs.FluentMsg) {
+	s.discardWithoutCommitChan = discardWithoutCommitChan
 }
 
 func (s *BaseSender) SetSupportedTags(tags []string) {

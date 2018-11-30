@@ -126,7 +126,7 @@ func (s *KafkaSender) Spawn(tag string) chan<- *libs.FluentMsg {
 
 						for _, msg = range msgBatchDelivery {
 							utils.Logger.Error("discard msg since of sender err", zap.String("tag", msg.Tag))
-							s.discardChan <- msg
+							s.discardWithoutCommitChan <- msg
 						}
 
 						if err = producer.Close(); err != nil {

@@ -106,7 +106,7 @@ func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {
 						utils.Logger.Error("try send message got error", zap.Error(err), zap.String("tag", tag))
 						for _, msg = range msgBatchDelivery {
 							utils.Logger.Error("discard msg since of sender err", zap.String("tag", msg.Tag))
-							s.discardChan <- msg
+							s.discardWithoutCommitChan <- msg
 						}
 
 						if err = conn.Close(); err != nil {

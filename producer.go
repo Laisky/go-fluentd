@@ -21,11 +21,18 @@ type ProducerCfg struct {
 // Producer send messages to downstream
 type Producer struct {
 	*ProducerCfg
-	producerTagChanMap *sync.Map
-	senders            []senders.SenderItf
-	discardChan        chan *libs.FluentMsg
-	discardMsgCountMap *sync.Map
-	counter            *utils.Counter
+	producerTagChanMap                    *sync.Map
+	senders                               []senders.SenderItf
+	discardChan, discardWithoutCommitChan chan *libs.FluentMsg
+	discardMsgCountMap                    *sync.Map
+	counter                               *utils.Counter
+	pMsgPool                              *sync.Pool // pending msg pool
+}
+
+type ProducerPendingDiscardMsg struct {
+	Count    int
+	IsCommit bool
+	Msg      *libs.FluentMsg
 }
 
 // NewProducer create new producer
@@ -33,12 +40,20 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) *Producer {
 	utils.Logger.Info("create Producer")
 
 	p := &Producer{
-		ProducerCfg:        cfg,
-		senders:            senders,
-		producerTagChanMap: &sync.Map{},
-		discardChan:        make(chan *libs.FluentMsg, cfg.DiscardChanSize),
-		discardMsgCountMap: &sync.Map{},
-		counter:            utils.NewCounter(),
+		ProducerCfg:              cfg,
+		senders:                  senders,
+		producerTagChanMap:       &sync.Map{},
+		discardChan:              make(chan *libs.FluentMsg, cfg.DiscardChanSize),
+		discardWithoutCommitChan: make(chan *libs.FluentMsg, cfg.DiscardChanSize),
+		discardMsgCountMap:       &sync.Map{},
+		counter:                  utils.NewCounter(),
+		pMsgPool: &sync.Pool{
+			New: func() interface{} {
+				return &ProducerPendingDiscardMsg{
+					IsCommit: true,
+				}
+			},
+		},
 	}
 	p.registerMonitor()
 
@@ -47,6 +62,7 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) *Producer {
 		s.SetCommitChan(cfg.CommitChan)
 		s.SetMsgPool(cfg.MsgPool)
 		s.SetDiscardChan(p.discardChan)
+		s.SetDiscardWithoutCommitChan(p.discardWithoutCommitChan)
 	}
 
 	return p
@@ -84,39 +100,63 @@ func (p *Producer) registerMonitor() {
 	})
 }
 
-func (p *Producer) DiscardMsg(msg *libs.FluentMsg) {
-	utils.Logger.Debug("recycle msg", zap.Int64("id", msg.Id), zap.String("tag", msg.Tag))
-	p.CommitChan <- msg.Id
-	if msg.ExtIds != nil {
-		for _, id := range msg.ExtIds {
-			p.CommitChan <- id
+func (p *Producer) DiscardMsg(pmsg *ProducerPendingDiscardMsg) {
+	utils.Logger.Debug("recycle pmsg", zap.Int64("id", pmsg.Msg.Id), zap.String("tag", pmsg.Msg.Tag))
+	if pmsg.IsCommit {
+		p.CommitChan <- pmsg.Msg.Id
+		if pmsg.Msg.ExtIds != nil {
+			for _, id := range pmsg.Msg.ExtIds {
+				p.CommitChan <- id
+			}
 		}
-		msg.ExtIds = nil
 	}
-	p.MsgPool.Put(msg)
+
+	pmsg.Msg.ExtIds = nil
+	p.MsgPool.Put(pmsg.Msg)
+	p.pMsgPool.Put(pmsg)
 }
 
-func (p *Producer) RunDiscard(nSenderForTagMap *sync.Map, discardChan chan *libs.FluentMsg) {
+func (p *Producer) RunMsgCollector(nSenderForTagMap *sync.Map, discardChan chan *libs.FluentMsg) {
 	var (
-		cnt int
-		ok  bool
-		itf interface{}
+		targetCnt    int
+		ok, isCommit bool
+		itf          interface{}
+		msg          *libs.FluentMsg
+		pmsg         *ProducerPendingDiscardMsg
 	)
-	for msg := range discardChan {
-		itf, _ = p.discardMsgCountMap.LoadOrStore(msg.Id, 0)
-		cnt = itf.(int)
-		cnt++
+
+	for {
+		select {
+		case msg = <-p.discardChan:
+			isCommit = true
+		case msg = <-p.discardWithoutCommitChan:
+			isCommit = false
+		}
+
 		if itf, ok = nSenderForTagMap.Load(msg.Tag); !ok {
 			utils.Logger.Error("nSenderForTagMap should contains tag", zap.String("tag", msg.Tag))
 			continue
 		}
+		targetCnt = itf.(int)
 
-		if cnt == itf.(int) {
+		if itf, ok = p.discardMsgCountMap.Load(msg.Id); !ok {
+			// create new pmsg
+			pmsg = p.pMsgPool.Get().(*ProducerPendingDiscardMsg)
+			pmsg.IsCommit = isCommit
+			pmsg.Count = 1
+			pmsg.Msg = msg
+		} else {
+			pmsg = itf.(*ProducerPendingDiscardMsg)
+			pmsg.IsCommit = pmsg.IsCommit && isCommit
+			pmsg.Count++
+		}
+
+		if pmsg.Count == targetCnt {
 			// msg already sent by all sender
 			p.discardMsgCountMap.Delete(msg.Id)
-			p.DiscardMsg(msg)
+			p.DiscardMsg(pmsg)
 		} else {
-			p.discardMsgCountMap.Store(msg.Id, cnt)
+			p.discardMsgCountMap.Store(msg.Id, pmsg)
 		}
 	}
 }
@@ -137,17 +177,18 @@ func (p *Producer) Run() {
 		nSender          int
 	)
 
-	go p.RunDiscard(nSenderForTagMap, p.discardChan)
+	go p.RunMsgCollector(nSenderForTagMap, p.discardChan)
 
 	for msg = range p.InChan {
 		p.counter.Count()
 		if _, ok = unSupportedTags[msg.Tag]; ok {
 			utils.Logger.Warn("do not produce since of unsupported tag", zap.String("tag", msg.Tag))
-			p.DiscardMsg(msg)
+			p.discardChan <- msg
 			continue
 		}
 
-		msg.Message["tag"] = msg.Tag // set tag
+		msg.Message["tag"] = msg.Tag  // set tag
+		msg.Message["msgid"] = msg.Id // set id
 
 		if _, ok = p.producerTagChanMap.Load(msg.Tag); !ok {
 			isSkip = true
@@ -167,7 +208,7 @@ func (p *Producer) Run() {
 			if isSkip {
 				utils.Logger.Warn("do not produce since of unsupported tag", zap.String("tag", msg.Tag))
 				unSupportedTags[msg.Tag] = struct{}{}
-				p.DiscardMsg(msg)
+				p.discardChan <- msg
 				continue
 			}
 

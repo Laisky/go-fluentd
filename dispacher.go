@@ -65,10 +65,10 @@ func (d *Dispatcher) Run() {
 			if ok {
 				// tagfilters should not blocking
 				inChanForEachTagi.(chan<- *libs.FluentMsg) <- msg
-				if counterI, ok = d.tagsCounter.Load(msg.Tag); !ok {
-					utils.Logger.Error("counter not exists", zap.String("tag", msg.Tag))
+				if counterI, ok = d.tagsCounter.Load(msg.Tag); ok {
+					// sometimes counterI could be nil, I have no ideas how could it happened
+					counterI.(*utils.Counter).Count()
 				}
-				counterI.(*utils.Counter).Count()
 				continue
 			}
 

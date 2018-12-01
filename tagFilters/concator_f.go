@@ -80,7 +80,8 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			default:
 				for identifier, pmsg = range c.slot {
 					if now.Sub(pmsg.lastT) > concatTimeoutTs { // timeout to flush
-						utils.Logger.Debug("timeout flush", zap.ByteString("log", pmsg.msg.Message[c.MsgKey].([]byte)))
+						// PAAS-210: I have no idea why this line could throw error
+						// utils.Logger.Debug("timeout flush", zap.ByteString("log", pmsg.msg.Message[c.MsgKey].([]byte)))
 						c.PutDownstream(pmsg.msg)
 						c.PMsgPool.Put(pmsg)
 						delete(c.slot, identifier)
@@ -171,6 +172,7 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			c.PMsgPool.Put(c.slot[identifier])
 			delete(c.slot, identifier)
 		}
+
 		c.Cf.DiscardMsg(msg)
 	}
 }

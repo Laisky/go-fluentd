@@ -1,6 +1,7 @@
 package tagFilters
 
 import (
+	"fmt"
 	"regexp"
 	"sync"
 	"time"
@@ -82,6 +83,17 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 					if now.Sub(pmsg.lastT) > concatTimeoutTs { // timeout to flush
 						// PAAS-210: I have no idea why this line could throw error
 						// utils.Logger.Debug("timeout flush", zap.ByteString("log", pmsg.msg.Message[c.MsgKey].([]byte)))
+
+						switch pmsg.msg.Message[c.MsgKey].(type) {
+						case []byte:
+							utils.Logger.Debug("timeout flush", zap.ByteString("log", pmsg.msg.Message[c.MsgKey].([]byte)))
+						default:
+							utils.Logger.Error("[panic] unknown type of `pmsg.msg.Message[c.MsgKey]`",
+								zap.String("tag", pmsg.msg.Tag),
+								zap.String("log", fmt.Sprintf("%v", pmsg.msg.Message[c.MsgKey])),
+								zap.String("msg", fmt.Sprintf("%+v", pmsg.msg)))
+						}
+
 						c.PutDownstream(pmsg.msg)
 						c.PMsgPool.Put(pmsg)
 						delete(c.slot, identifier)

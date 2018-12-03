@@ -66,7 +66,6 @@ func (d *Dispatcher) Run() {
 				// tagfilters should not blocking
 				inChanForEachTagi.(chan<- *libs.FluentMsg) <- msg
 				if counterI, ok = d.tagsCounter.Load(msg.Tag); ok {
-					// sometimes counterI could be nil, I have no ideas how could it happened
 					counterI.(*utils.Counter).Count()
 				}
 				continue

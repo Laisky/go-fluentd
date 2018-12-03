@@ -104,8 +104,8 @@ func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {
 					nRetry++
 					if nRetry > maxRetry {
 						utils.Logger.Error("try send message got error", zap.Error(err), zap.String("tag", tag))
+						utils.Logger.Error("discard msg since of sender err", zap.String("tag", msg.Tag), zap.Int("num", len(msgBatchDelivery)))
 						for _, msg = range msgBatchDelivery {
-							utils.Logger.Error("discard msg since of sender err", zap.String("tag", msg.Tag))
 							s.discardWithoutCommitChan <- msg
 						}
 

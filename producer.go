@@ -1,6 +1,7 @@
 package concator
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -24,9 +25,12 @@ type Producer struct {
 	producerTagChanMap                    *sync.Map
 	senders                               []senders.SenderItf
 	discardChan, discardWithoutCommitChan chan *libs.FluentMsg
-	discardMsgCountMap                    *sync.Map
-	counter                               *utils.Counter
-	pMsgPool                              *sync.Pool // pending msg pool
+	// discardMsgCountMap = map[msgId]discardedCount
+	// stores the count of each msg, if msg's count equals to the number of sender,
+	// then put the msg into discardChan.
+	discardMsgCountMap *sync.Map
+	counter            *utils.Counter
+	pMsgPool           *sync.Pool // pending msg pool
 }
 
 type ProducerPendingDiscardMsg struct {
@@ -134,7 +138,9 @@ func (p *Producer) RunMsgCollector(nSenderForTagMap *sync.Map, discardChan chan 
 		}
 
 		if itf, ok = nSenderForTagMap.Load(msg.Tag); !ok {
-			utils.Logger.Error("nSenderForTagMap should contains tag", zap.String("tag", msg.Tag))
+			utils.Logger.Error("[panic] nSenderForTagMap should contains tag",
+				zap.String("tag", msg.Tag),
+				zap.String("msg", fmt.Sprintf("%+v", msg)))
 			continue
 		}
 		targetCnt = itf.(int)
@@ -146,6 +152,7 @@ func (p *Producer) RunMsgCollector(nSenderForTagMap *sync.Map, discardChan chan 
 			pmsg.Count = 1
 			pmsg.Msg = msg
 		} else {
+			// update existsing pmsg
 			pmsg = itf.(*ProducerPendingDiscardMsg)
 			pmsg.IsCommit = pmsg.IsCommit && isCommit
 			pmsg.Count++
@@ -191,6 +198,7 @@ func (p *Producer) Run() {
 		msg.Message["msgid"] = msg.Id // set id
 
 		if _, ok = p.producerTagChanMap.Load(msg.Tag); !ok {
+			// create sender chans for new tag
 			isSkip = true
 			nSender = 0
 			senderChanMap = &sync.Map{}
@@ -206,8 +214,9 @@ func (p *Producer) Run() {
 			}
 
 			if isSkip {
+				// no sender support this tag
 				utils.Logger.Warn("do not produce since of unsupported tag", zap.String("tag", msg.Tag))
-				unSupportedTags[msg.Tag] = struct{}{}
+				unSupportedTags[msg.Tag] = struct{}{} // mark as unsupported
 				p.discardChan <- msg
 				continue
 			}
@@ -217,10 +226,11 @@ func (p *Producer) Run() {
 		}
 
 		if itf, ok = p.producerTagChanMap.Load(msg.Tag); !ok {
-			utils.Logger.Error("producerTagChanMap should contains tag", zap.String("tag", msg.Tag))
+			utils.Logger.Error("[panic] producerTagChanMap should contains tag", zap.String("tag", msg.Tag))
 			continue
 		}
 
+		// put msg into every sender's chan
 		senderChanMap = itf.(*sync.Map)
 		senderChanMap.Range(func(key, val interface{}) bool {
 			select {
@@ -229,6 +239,7 @@ func (p *Producer) Run() {
 				utils.Logger.Warn("skip sender",
 					zap.String("name", key.(string)),
 					zap.String("tag", msg.Tag))
+				p.discardWithoutCommitChan <- msg // at least once
 			}
 
 			return true

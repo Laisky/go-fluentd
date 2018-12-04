@@ -25,9 +25,13 @@ type Producer struct {
 	producerTagChanMap                    *sync.Map
 	senders                               []senders.SenderItf
 	discardChan, discardWithoutCommitChan chan *libs.FluentMsg
-	// discardMsgCountMap = map[msgId]discardedCount
+	// discardMsgCountMap = map[&msg]discardedCount
+	// ⚠️Notify: cannot use `msgid` as key,
+	// since of there could be two msg with same msgid arrive to producer,
+	// the later one come from journal.
+	//
 	// stores the count of each msg, if msg's count equals to the number of sender,
-	// then put the msg into discardChan.
+	// will put the msg into discardChan.
 	discardMsgCountMap *sync.Map
 	counter            *utils.Counter
 	pMsgPool           *sync.Pool // pending msg pool
@@ -106,10 +110,11 @@ func (p *Producer) registerMonitor() {
 
 func (p *Producer) DiscardMsg(pmsg *ProducerPendingDiscardMsg) {
 	utils.Logger.Debug("recycle pmsg", zap.Int64("id", pmsg.Msg.Id), zap.String("tag", pmsg.Msg.Tag))
+	var id int64
 	if pmsg.IsCommit {
 		p.CommitChan <- pmsg.Msg.Id
 		if pmsg.Msg.ExtIds != nil {
-			for _, id := range pmsg.Msg.ExtIds {
+			for _, id = range pmsg.Msg.ExtIds {
 				p.CommitChan <- id
 			}
 		}
@@ -122,7 +127,7 @@ func (p *Producer) DiscardMsg(pmsg *ProducerPendingDiscardMsg) {
 
 func (p *Producer) RunMsgCollector(nSenderForTagMap *sync.Map, discardChan chan *libs.FluentMsg) {
 	var (
-		targetCnt    int
+		cntToDiscard int
 		ok, isCommit bool
 		itf          interface{}
 		msg          *libs.FluentMsg
@@ -143,9 +148,9 @@ func (p *Producer) RunMsgCollector(nSenderForTagMap *sync.Map, discardChan chan 
 				zap.String("msg", fmt.Sprintf("%+v", msg)))
 			continue
 		}
-		targetCnt = itf.(int)
+		cntToDiscard = itf.(int)
 
-		if itf, ok = p.discardMsgCountMap.Load(msg.Id); !ok {
+		if itf, ok = p.discardMsgCountMap.Load(msg); !ok {
 			// create new pmsg
 			pmsg = p.pMsgPool.Get().(*ProducerPendingDiscardMsg)
 			pmsg.IsCommit = isCommit
@@ -158,12 +163,12 @@ func (p *Producer) RunMsgCollector(nSenderForTagMap *sync.Map, discardChan chan 
 			pmsg.Count++
 		}
 
-		if pmsg.Count == targetCnt {
+		if pmsg.Count == cntToDiscard {
 			// msg already sent by all sender
-			p.discardMsgCountMap.Delete(msg.Id)
+			p.discardMsgCountMap.Delete(pmsg.Msg)
 			p.DiscardMsg(pmsg)
 		} else {
-			p.discardMsgCountMap.Store(msg.Id, pmsg)
+			p.discardMsgCountMap.Store(pmsg.Msg, pmsg)
 		}
 	}
 }

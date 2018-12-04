@@ -105,6 +105,7 @@ func (s *KafkaSender) Spawn(tag string) chan<- *libs.FluentMsg {
 						utils.Logger.Error("marashal msg got error",
 							zap.Error(err),
 							zap.String("msg", fmt.Sprintf("%+v", msg)))
+						// TODO(potential bug): should remove element in msgBatchDelivery
 						continue
 					}
 					kmsgBatchDelivery[j].Value = sarama.ByteEncoder(jb)

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Laisky/go-concator/libs"
+	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-utils"
 	"github.com/Shopify/sarama"
 	"go.uber.org/zap"

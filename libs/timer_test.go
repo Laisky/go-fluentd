@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Laisky/go-concator/libs"
+	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
 )
 
@@ -82,6 +82,6 @@ func TestTimerSleep(t *testing.T) {
 }
 
 func init() {
-	utils.Settings.Setup("/Users/laisky/repo/pateo/configs/go-concator")
+	utils.Settings.Setup("/Users/laisky/repo/pateo/configs/go-fluentd")
 	utils.SetupLogger("debug")
 }

@@ -5,7 +5,7 @@ import (
 	"os"
 	"runtime/pprof"
 
-	concator "github.com/Laisky/go-concator"
+	concator "github.com/Laisky/go-fluentd"
 	utils "github.com/Laisky/go-utils"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"

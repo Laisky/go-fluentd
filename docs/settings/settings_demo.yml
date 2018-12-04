@@ -101,7 +101,7 @@ settings:
         nconsumer: 10
         msg_key: log
         meta:
-          container_id: "go-concator"
+          container_id: "go-fluentd"
         groups:
           sit: paas_spark_log_sit_v2
           uat: paas_spark_log_uat_v2

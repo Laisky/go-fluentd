@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Laisky/go-concator/libs"
-	"github.com/Laisky/go-concator/tagFilters"
+	"github.com/Laisky/go-fluentd/libs"
+	"github.com/Laisky/go-fluentd/tagFilters"
 )
 
 type Factory struct {

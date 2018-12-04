@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/Laisky/go-concator/libs"
+	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
 	"go.uber.org/zap"
 )

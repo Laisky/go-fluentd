@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	utils "github.com/Laisky/go-utils"
-	concator "github.com/Laisky/go-concator"
+	concator "github.com/Laisky/go-fluentd"
 )
 
 func TestRefreshConfig(t *testing.T) {
@@ -15,5 +15,5 @@ func TestRefreshConfig(t *testing.T) {
 }
 
 func init() {
-	utils.Settings.Setup("/Users/laisky/repo/pateo/configs/go-concator")
+	utils.Settings.Setup("/Users/laisky/repo/pateo/configs/go-fluentd")
 }

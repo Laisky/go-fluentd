@@ -11,7 +11,7 @@ import (
 	"io"
 	"net"
 
-	"github.com/Laisky/go-concator/libs"
+	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
 	"github.com/ugorji/go/codec"
 	"go.uber.org/zap"

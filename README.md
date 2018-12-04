@@ -1,6 +1,6 @@
-# Go-Concator
+# Go-Fluentd
 
-Rewrite fluentd by Golang.
+Rewrite fluentd-server by Golang.
 
 
 ## Description
@@ -61,17 +61,17 @@ Then Producer can send logs to anywhere (depends on Senders).
 build:
 
 ```sh
-docker build . -t ppcelery/go-concator:latest
+docker build . -t ppcelery/go-fluentd:latest
 ```
 
 run:
 
 ```sh
-docker run -itd --rm --name=go-concator -p 24225:24225 -p 8080:8080 \
-    -v /opt/configs/go-concator:/etc/go-concator \
-    -v /data/log/fluentd/go-concator:/data/log/fluentd/go-concator
-    ppcelery/go-concator:latest go-concator \
-        --config=/etc/go-concator \
+docker run -itd --rm --name=go-fluentd -p 24225:24225 -p 8080:8080 \
+    -v /opt/configs/go-fluentd:/etc/go-fluentd \
+    -v /data/log/fluentd/go-fluentd:/data/log/fluentd/go-fluentd
+    ppcelery/go-fluentd:latest go-fluentd \
+        --config=/etc/go-fluentd \
         --env=perf \
         --addr=0.0.0.0:8080
 ```

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/Laisky/go-concator/libs"
+	"github.com/Laisky/go-fluentd/libs"
 )
 
 func TestFlattenMap(t *testing.T) {

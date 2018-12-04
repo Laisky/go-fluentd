@@ -3,7 +3,7 @@ package acceptorFilters
 import (
 	"sync"
 
-	"github.com/Laisky/go-concator/libs"
+	"github.com/Laisky/go-fluentd/libs"
 )
 
 type AcceptorFilterItf interface {

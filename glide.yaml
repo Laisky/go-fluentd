@@ -1,4 +1,4 @@
-package: github.com/Laisky/go-concator
+package: github.com/Laisky/go-fluentd
 import:
 - package: github.com/Laisky/go-utils
   version: ~0.7

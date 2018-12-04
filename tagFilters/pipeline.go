@@ -4,8 +4,8 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/Laisky/go-concator/libs"
-	"github.com/Laisky/go-concator/monitor"
+	"github.com/Laisky/go-fluentd/libs"
+	"github.com/Laisky/go-fluentd/monitor"
 	utils "github.com/Laisky/go-utils"
 	"go.uber.org/zap"
 )

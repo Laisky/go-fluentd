@@ -77,14 +77,7 @@ func (f *Parser) Run() {
 		}
 
 		// parse log string
-		err = libs.RegexNamedSubMatch(f.Regexp, msg.Message[f.MsgKey].([]byte), msg.Message)
-		// TODO(test): sometimes `msg.Message[f.MsgKey]` will be string, WHY?
-		switch msg.Message[f.MsgKey].(type) {
-		case string:
-			msg.Message[f.MsgKey] = []byte(msg.Message[f.MsgKey].(string))
-		}
-
-		if err != nil {
+		if err = libs.RegexNamedSubMatch(f.Regexp, msg.Message[f.MsgKey].([]byte), msg.Message); err != nil {
 			utils.Logger.Warn("message format not matched",
 				zap.String("tag", msg.Tag),
 				zap.ByteString("log", msg.Message[f.MsgKey].([]byte)))

@@ -3,6 +3,8 @@ import:
 - package: github.com/Laisky/go-utils
   version: ~0.7
   vcs: git
+- package: github.com/Laisky/go-syslog
+  version: ~v2.3
 - package: github.com/pkg/errors
   version: ~0.8.0
 - package: github.com/spf13/pflag

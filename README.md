@@ -103,7 +103,7 @@ docker run -itd --rm --name=go-fluentd -p 24225:24225 -p 8080:8080 \
 
 ### Acceptor
 
-Contains multiply Recvs (such as KafkRecv & TcpRecv),
+Contains multiply Recvs (such as KafkRecv & FluentdRecv),
 can listening tcp port or fetch msg from kafka brokers.
 
 

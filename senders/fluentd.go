@@ -15,6 +15,7 @@ type FluentSenderCfg struct {
 	Tags                                        []string
 	BatchSize, InChanSize, RetryChanSize, NFork int
 	MaxWait                                     time.Duration
+	IsDiscardWhenBlocked                        bool
 }
 
 type FluentSender struct {
@@ -33,7 +34,9 @@ func NewFluentSender(cfg *FluentSenderCfg) *FluentSender {
 	}
 
 	f := &FluentSender{
-		BaseSender:      &BaseSender{},
+		BaseSender: &BaseSender{
+			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
+		},
 		FluentSenderCfg: cfg,
 		retryMsgChan:    make(chan *libs.FluentMsg, cfg.RetryChanSize),
 	}

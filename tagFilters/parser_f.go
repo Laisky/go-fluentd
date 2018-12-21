@@ -2,8 +2,10 @@ package tagFilters
 
 import (
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"sync"
+	"time"
 
 	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
@@ -31,15 +33,17 @@ func ParseAddCfg(env string, cfg interface{}) map[string]map[string]string {
 }
 
 type ParserCfg struct {
-	Cf                        *ParserFact
-	Tag, MsgKey               string
-	Regexp                    *regexp.Regexp
-	OutChan                   chan<- *libs.FluentMsg
-	InChan                    <-chan *libs.FluentMsg
-	MsgPool                   *sync.Pool
-	IsRemoveOrigLog           bool
-	Add                       map[string]map[string]string
-	ParseJsonKey, MustInclude string
+	Cf                                                             *ParserFact
+	Tag, MsgKey                                                    string
+	Regexp                                                         *regexp.Regexp
+	OutChan                                                        chan<- *libs.FluentMsg
+	InChan                                                         <-chan *libs.FluentMsg
+	MsgPool                                                        *sync.Pool
+	IsRemoveOrigLog                                                bool
+	Add                                                            map[string]map[string]string
+	ParseJsonKey, MustInclude                                      string
+	TimeKey, TimeFormat, NewTimeKey, AppendTimeZone, NewTimeFormat string
+	ReservedTimeKey                                                bool
 }
 
 // Parser is generanal parser
@@ -60,34 +64,42 @@ func (f *Parser) Run() {
 		ok   bool
 		msg  *libs.FluentMsg
 		k, v string
+		t    time.Time
 	)
 	for msg = range f.InChan {
 		if !f.Cf.IsTagSupported(msg.Tag) {
 			f.OutChan <- msg
 		}
 
-		switch msg.Message[f.MsgKey].(type) {
-		case []byte:
-		default:
-			utils.Logger.Warn("msg key not exists",
-				zap.String("tag", msg.Tag),
-				zap.String("msg_key", f.MsgKey))
-			f.OutChan <- msg
-			continue
-		}
+		if f.MsgKey != "" {
+			switch msg.Message[f.MsgKey].(type) {
+			case []byte:
+			case string:
+				msg.Message[f.MsgKey] = []byte(msg.Message[f.MsgKey].(string))
+			default:
+				utils.Logger.Warn("msg key not exists or unknown type",
+					zap.String("tag", msg.Tag),
+					zap.String("msg", fmt.Sprintf("%+v", msg.Message)),
+					zap.String("msg_key", f.MsgKey))
+				f.OutChan <- msg
+				continue
+			}
 
-		// parse log string
-		if err = libs.RegexNamedSubMatch(f.Regexp, msg.Message[f.MsgKey].([]byte), msg.Message); err != nil {
-			utils.Logger.Warn("message format not matched",
-				zap.String("tag", msg.Tag),
-				zap.ByteString("log", msg.Message[f.MsgKey].([]byte)))
-			f.Cf.DiscardMsg(msg)
-			continue
-		}
+			// parse log string
+			if f.Regexp != nil {
+				if err = libs.RegexNamedSubMatch(f.Regexp, msg.Message[f.MsgKey].([]byte), msg.Message); err != nil {
+					utils.Logger.Warn("message format not matched",
+						zap.String("tag", msg.Tag),
+						zap.ByteString("log", msg.Message[f.MsgKey].([]byte)))
+					f.Cf.DiscardMsg(msg)
+					continue
+				}
+			}
 
-		// remove origin log
-		if f.IsRemoveOrigLog {
-			delete(msg.Message, f.MsgKey)
+			// remove origin log
+			if f.IsRemoveOrigLog {
+				delete(msg.Message, f.MsgKey)
+			}
 		}
 
 		// MustInclude
@@ -116,7 +128,7 @@ func (f *Parser) Run() {
 		}
 
 		// flatten messages
-		libs.FlattenMap(msg.Message)
+		libs.FlattenMap(msg.Message, "__") // do not use `.` as delimiter!
 
 		// add
 		if _, ok = f.Add[msg.Tag]; ok {
@@ -125,19 +137,64 @@ func (f *Parser) Run() {
 			}
 		}
 
+		// parse time
+		if f.TimeKey != "" {
+			switch msg.Message[f.TimeKey].(type) {
+			case []byte:
+				if t, err = time.Parse(f.TimeFormat, string(msg.Message[f.TimeKey].([]byte))+" "+f.AppendTimeZone); err != nil {
+					utils.Logger.Error("parse time got error",
+						zap.Error(err),
+						zap.ByteString("ts", msg.Message[f.TimeKey].([]byte)),
+						zap.String("time_key", f.TimeKey),
+						zap.String("time_format", f.TimeFormat),
+						zap.String("append_time_zone", f.AppendTimeZone))
+					f.Cf.DiscardMsg(msg)
+					continue
+				}
+			case string:
+				if t, err = time.Parse(f.TimeFormat, msg.Message[f.TimeKey].(string)+" "+f.AppendTimeZone); err != nil {
+					utils.Logger.Error("parse time got error",
+						zap.Error(err),
+						zap.String("ts", msg.Message[f.TimeKey].(string)),
+						zap.String("time_key", f.TimeKey),
+						zap.String("time_format", f.TimeFormat),
+						zap.String("append_time_zone", f.AppendTimeZone))
+					f.Cf.DiscardMsg(msg)
+					continue
+				}
+			default:
+				utils.Logger.Error("unknown time format",
+					zap.Error(err),
+					zap.String("ts", fmt.Sprintf("%+v", msg.Message[f.TimeKey])),
+					zap.String("time_key", f.TimeKey),
+					zap.String("time_format", f.TimeFormat),
+					zap.String("append_time_zone", f.AppendTimeZone))
+				f.Cf.DiscardMsg(msg)
+				continue
+			}
+
+			if !f.ReservedTimeKey {
+				delete(msg.Message, f.TimeKey)
+			}
+
+			msg.Message[f.NewTimeKey] = t.UTC().Format(f.NewTimeFormat)
+		}
+
 		f.OutChan <- msg
 	}
 }
 
 type ParserFactCfg struct {
-	Name                      string
-	Tags                      []string
-	Env, MsgKey               string
-	Regexp                    *regexp.Regexp
-	MsgPool                   *sync.Pool
-	IsRemoveOrigLog           bool
-	Add                       map[string]map[string]string
-	ParseJsonKey, MustInclude string
+	Name                                                           string
+	Tags                                                           []string
+	Env, MsgKey                                                    string
+	Regexp                                                         *regexp.Regexp
+	MsgPool                                                        *sync.Pool
+	IsRemoveOrigLog                                                bool
+	Add                                                            map[string]map[string]string
+	ParseJsonKey, MustInclude                                      string
+	TimeKey, TimeFormat, NewTimeKey, AppendTimeZone, NewTimeFormat string
+	ReservedTimeKey                                                bool
 }
 
 type ParserFact struct {
@@ -186,6 +243,12 @@ func (cf *ParserFact) Spawn(tag string, outChan chan<- *libs.FluentMsg) chan<- *
 		Add:             cf.Add,
 		ParseJsonKey:    cf.ParseJsonKey,
 		MustInclude:     cf.MustInclude,
+		TimeKey:         cf.TimeKey,
+		TimeFormat:      cf.TimeFormat,
+		NewTimeKey:      cf.NewTimeKey,
+		AppendTimeZone:  cf.AppendTimeZone,
+		NewTimeFormat:   cf.NewTimeFormat,
+		ReservedTimeKey: cf.ReservedTimeKey,
 	})
 	go f.Run()
 	return inChan

@@ -18,6 +18,7 @@ func TagsAppendEnv(env string, tags []string) []string {
 type SenderItf interface {
 	Spawn(string) chan<- *libs.FluentMsg // Spawn(tag) inChan
 	IsTagSupported(string) bool
+	DiscardWhenBlocked() bool
 	GetName() string
 
 	SetMsgPool(*sync.Pool)
@@ -34,6 +35,7 @@ type BaseSender struct {
 	commitChan                            chan<- int64
 	discardChan, discardWithoutCommitChan chan<- *libs.FluentMsg
 	tags                                  []string
+	IsDiscardWhenBlocked                  bool
 }
 
 func (s *BaseSender) SetMsgPool(msgPool *sync.Pool) {
@@ -54,6 +56,10 @@ func (s *BaseSender) SetDiscardWithoutCommitChan(discardWithoutCommitChan chan<-
 
 func (s *BaseSender) SetSupportedTags(tags []string) {
 	s.tags = tags
+}
+
+func (s *BaseSender) DiscardWhenBlocked() bool {
+	return s.IsDiscardWhenBlocked
 }
 
 func (s *BaseSender) IsTagSupported(tag string) bool {

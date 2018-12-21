@@ -11,37 +11,41 @@ import (
 	"io"
 	"net"
 
-	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
 	"github.com/ugorji/go/codec"
 	"go.uber.org/zap"
+	"github.com/Laisky/go-fluentd/libs"
 )
 
-type TcpRecv struct {
-	*BaseRecv
-	addr string
+type FluentdRecvCfg struct {
+	Addr, TagKey string
 }
 
-func NewTcpRecv(addr string) *TcpRecv {
-	utils.Logger.Info("create TcpRecv")
-	return &TcpRecv{
-		BaseRecv: &BaseRecv{},
-		addr:     addr,
+type FluentdRecv struct {
+	*BaseRecv
+	*FluentdRecvCfg
+}
+
+func NewFluentdRecv(cfg *FluentdRecvCfg) *FluentdRecv {
+	utils.Logger.Info("create FluentdRecv")
+	return &FluentdRecv{
+		BaseRecv:       &BaseRecv{},
+		FluentdRecvCfg: cfg,
 	}
 }
 
-func (r *TcpRecv) GetName() string {
-	return "TcpRecv"
+func (r *FluentdRecv) GetName() string {
+	return "FluentdRecv"
 }
 
-func (r *TcpRecv) Run() {
-	utils.Logger.Info("run TcpRecv")
+func (r *FluentdRecv) Run() {
+	utils.Logger.Info("run FluentdRecv")
 	var (
 		conn net.Conn
 	)
 
-	utils.Logger.Info("listening on tcp...", zap.String("addr", r.addr))
-	ln, err := net.Listen("tcp", r.addr)
+	utils.Logger.Info("listening on tcp...", zap.String("addr", r.Addr))
+	ln, err := net.Listen("tcp", r.Addr)
 	if err != nil {
 		utils.Logger.Error("try to bind addr got error", zap.Error(err))
 	}
@@ -60,7 +64,7 @@ func (r *TcpRecv) Run() {
 	}
 }
 
-func (r *TcpRecv) decodeMsg(conn net.Conn) {
+func (r *FluentdRecv) decodeMsg(conn net.Conn) {
 	defer conn.Close()
 	var (
 		_codec = libs.NewCodec()
@@ -146,12 +150,8 @@ func (r *TcpRecv) decodeMsg(conn net.Conn) {
 	}
 }
 
-func (r *TcpRecv) SendMsg(msg *libs.FluentMsg) {
+func (r *FluentdRecv) SendMsg(msg *libs.FluentMsg) {
 	msg.Id = r.counter.Count()
-	select {
-	case r.outChan <- msg:
-	default:
-		utils.Logger.Error("discard log", zap.String("tag", msg.Tag))
-		r.msgPool.Put(msg)
-	}
+	msg.Message[r.TagKey] = msg.Tag
+	r.asyncOutChan <- msg
 }

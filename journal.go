@@ -85,21 +85,25 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan chan *libs.Fluent
 	for {
 		i++
 		msg = msgPool.Get().(*libs.FluentMsg)
+		// utils.Logger.Info(fmt.Sprintf("got %p", msg))
 		data["message"] = nil // alloc new map to avoid old data contaminate
 
 		if err = j.j.LoadLegacyBuf(&data); err == io.EOF {
 			utils.Logger.Info("load legacy buf done", zap.Int("n", i), zap.Float64("sec", time.Now().Sub(startTs).Seconds()))
 			msgPool.Put(msg)
+			// utils.Logger.Info(fmt.Sprintf("recycle: %p", msg))
 			return maxId, nil
 		} else if err != nil {
 			utils.Logger.Error("load legacy data got error", zap.Error(err))
 			msgPool.Put(msg)
+			// utils.Logger.Info(fmt.Sprintf("recycle: %p", msg))
 			continue
 		}
 
 		if data["message"] == nil {
 			utils.Logger.Warn("lost message")
 			msgPool.Put(msg)
+			// utils.Logger.Info(fmt.Sprintf("recycle: %p, %v", msg))
 			continue
 		}
 
@@ -141,8 +145,8 @@ func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, dumpChan, skipDumpChan <-chan 
 		)
 		for msg := range dumpChan {
 			data["id"] = msg.Id
-			data["tag"] = msg.Tag
 			data["message"] = msg.Message
+			data["tag"] = msg.Tag
 			utils.Logger.Debug("got new message", zap.Int64("id", msg.Id), zap.String("tag", msg.Tag))
 			for {
 				if err = j.j.WriteData(&data); err != nil {
@@ -165,6 +169,7 @@ func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, dumpChan, skipDumpChan <-chan 
 			select {
 			case j.outChan <- msg:
 			default:
+				// utils.Logger.Info(fmt.Sprintf("recycle: %p, %v", msg))
 				j.MsgPool.Put(msg)
 			}
 		}

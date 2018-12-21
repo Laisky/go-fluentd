@@ -49,10 +49,18 @@ func (c *Controllor) initJournal() *Journal {
 	})
 }
 
-func (c *Controllor) initRecvs(env string) []libs.AcceptorRecvItf {
+func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 	// init tcp recvs
-	receivers := []libs.AcceptorRecvItf{
-		recvs.NewTcpRecv(utils.Settings.GetString("settings.listen_addr")), // tcprecv
+	receivers := []recvs.AcceptorRecvItf{
+		recvs.NewFluentdRecv(&recvs.FluentdRecvCfg{
+			Addr:   utils.Settings.GetString("settings.acceptor.recvs.fluentd.addr"), // FluentdRec
+			TagKey: utils.Settings.GetString("settings.acceptor.recvs.fluentd.tag_key"),
+		}),
+		recvs.NewRsyslogRecv(&recvs.RsyslogCfg{
+			Addr:   utils.Settings.GetString("settings.acceptor.recvs.rsyslog.addr"),
+			Env:    env,
+			TagKey: utils.Settings.GetString("settings.acceptor.recvs.rsyslog.tag_key"),
+		}),
 	}
 	// init kafka tenants recvs
 	sharingKMsgPool := &sync.Pool{
@@ -61,33 +69,44 @@ func (c *Controllor) initRecvs(env string) []libs.AcceptorRecvItf {
 		},
 	}
 
-	for prj := range utils.Settings.Get("settings.kafka_recvs.tenants").(map[string]interface{}) {
-		utils.Logger.Info("starting kafka recvs", zap.String("project", prj))
-		receivers = append(receivers, recvs.NewKafkaRecv(&recvs.KafkaCfg{
-			KMsgPool:  sharingKMsgPool,
-			Meta:      utils.Settings.Get("settings.kafka_recvs.tenants." + prj + ".meta").(map[string]interface{}),
-			MsgKey:    utils.Settings.GetString("settings.kafka_recvs.tenants." + prj + ".msg_key"),
-			Brokers:   utils.Settings.GetStringSlice("settings.kafka_recvs.tenants." + prj + ".brokers." + env),
-			Topics:    []string{utils.Settings.GetString("settings.kafka_recvs.tenants." + prj + ".topics." + env)},
-			Group:     utils.Settings.GetString("settings.kafka_recvs.tenants." + prj + ".groups." + env),
-			Tag:       utils.Settings.GetString("settings.kafka_recvs.tenants." + prj + ".tags." + env),
-			NConsumer: utils.Settings.GetInt("settings.kafka_recvs.tenants." + prj + ".nconsumer"),
-			KafkaCommitCfg: &recvs.KafkaCommitCfg{
-				IntervalNum:      utils.Settings.GetInt("settings.kafka_recvs.interval_num." + env),
-				IntervalDuration: utils.Settings.GetDuration("settings.kafka_recvs.interval_sec." + env),
-			},
-		}))
+	if tenants, ok := utils.Settings.Get("settings.acceptor.recvs.kafka_recvs.tenants").(map[string]interface{}); ok {
+		for prj := range tenants {
+			utils.Logger.Info("starting kafka recvs", zap.String("project", prj))
+			receivers = append(receivers, recvs.NewKafkaRecv(&recvs.KafkaCfg{
+				KMsgPool: sharingKMsgPool,
+				Meta: utils.FallBack(
+					func() interface{} {
+						return utils.Settings.Get("settings.acceptor.recvs.kafka_recvs.tenants." + prj + ".meta").(map[string]interface{})
+					}, map[string]interface{}{}).(map[string]interface{}),
+				Name:         utils.Settings.GetString("settings.acceptor.recvs.kafka_recvs.tenants." + prj + ".name"),
+				MsgKey:       utils.Settings.GetString("settings.acceptor.recvs.kafka_recvs.tenants." + prj + ".msg_key"),
+				Brokers:      utils.Settings.GetStringSlice("settings.acceptor.recvs.kafka_recvs.tenants." + prj + ".brokers." + env),
+				Topics:       []string{utils.Settings.GetString("settings.acceptor.recvs.kafka_recvs.tenants." + prj + ".topics." + env)},
+				Group:        utils.Settings.GetString("settings.acceptor.recvs.kafka_recvs.tenants." + prj + ".groups." + env),
+				Tag:          utils.Settings.GetString("settings.acceptor.recvs.kafka_recvs.tenants." + prj + ".tags." + env),
+				IsJsonFormat: utils.Settings.GetBool("settings.acceptor.recvs.kafka_recvs.tenants." + prj + ".is_json_format"),
+				TagKey:       utils.Settings.GetString("settings.acceptor.recvs.kafka_recvs.tenants." + prj + ".tag_key"),
+				JsonTagKey:   utils.Settings.GetString("settings.acceptor.recvs.kafka_recvs.tenants." + prj + ".json_tag_key"),
+				RewriteTag:   recvs.GetKafkaRewriteTag(utils.Settings.GetString("settings.acceptor.recvs.kafka_recvs.tenants."+prj+".rewrite_tag"), env),
+				NConsumer:    utils.Settings.GetInt("settings.acceptor.recvs.kafka_recvs.tenants." + prj + ".nconsumer"),
+				KafkaCommitCfg: &recvs.KafkaCommitCfg{
+					IntervalNum:      utils.Settings.GetInt("settings.acceptor.recvs.kafka_recvs.interval_num"),
+					IntervalDuration: utils.Settings.GetDuration("settings.acceptor.recvs.kafka_recvs.interval_sec") * time.Second,
+				},
+			}))
+		}
 	}
 
 	return receivers
 }
 
-func (c *Controllor) initAcceptor(journal *Journal, receivers []libs.AcceptorRecvItf) *Acceptor {
+func (c *Controllor) initAcceptor(journal *Journal, receivers []recvs.AcceptorRecvItf) *Acceptor {
 	acceptor := NewAcceptor(&AcceptorCfg{
-		MsgPool:     c.msgPool,
-		Journal:     journal,
-		MaxRotateId: utils.Settings.GetInt64("settings.acceptor.max_rotate_id"),
-		OutChanSize: utils.Settings.GetInt("settings.acceptor.out_chan_size"),
+		MsgPool:          c.msgPool,
+		Journal:          journal,
+		MaxRotateId:      utils.Settings.GetInt64("settings.acceptor.max_rotate_id"),
+		AsyncOutChanSize: utils.Settings.GetInt("settings.acceptor.async_out_chan_size"),
+		SyncOutChanSize:  utils.Settings.GetInt("settings.acceptor.sync_out_chan_size"),
 	},
 		receivers...,
 	)
@@ -113,10 +132,16 @@ func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorP
 			Tag:    "spring." + env,
 			Env:    env,
 			MsgKey: utils.Settings.GetString("settings.acceptor_filters.tenants.spring.msg_key"),
+			TagKey: utils.Settings.GetString("settings.acceptor_filters.tenants.spring.tag_key"),
 			Rules:  acceptorFilters.ParseSpringRules(env, utils.Settings.Get("settings.acceptor_filters.tenants.spring.rules").([]interface{})),
 		}),
 		// set the DefaultFilter as last filter
-		acceptorFilters.NewDefaultFilter(acceptorFilters.NewDefaultFilterCfg()),
+		acceptorFilters.NewDefaultFilter(&acceptorFilters.DefaultFilterCfg{
+			RemoveEmptyTag:     true,
+			RemoveUnsupportTag: true,
+			Env:                env,
+			SupportedTags:      utils.Settings.GetStringSlice("settings.producer.tenants.fluentd.tags"),
+		}),
 	)
 }
 
@@ -143,6 +168,12 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 			ParseJsonKey:    utils.Settings.GetString("settings.tag_filters.tenants.connector.parse_json_key"),
 			Add:             tagFilters.ParseAddCfg(env, utils.Settings.Get("settings.tag_filters.tenants.connector.add")),
 			MustInclude:     utils.Settings.GetString("settings.tag_filters.tenants.connector.must_include"),
+			TimeKey:         utils.Settings.GetString("settings.tag_filters.tenants.connector.time_key"),
+			TimeFormat:      utils.Settings.GetString("settings.tag_filters.tenants.connector.time_format"),
+			NewTimeFormat:   utils.Settings.GetString("settings.tag_filters.tenants.connector.new_time_format"),
+			ReservedTimeKey: utils.Settings.GetBool("settings.tag_filters.tenants.connector.reserved_time_key"),
+			NewTimeKey:      utils.Settings.GetString("settings.tag_filters.tenants.connector.new_time_key"),
+			AppendTimeZone:  utils.Settings.GetString("settings.tag_filters.tenants.connector.append_time_zone"),
 		}),
 		tagFilters.NewParserFact(&tagFilters.ParserFactCfg{ // spring
 			Name:            "spring",
@@ -154,6 +185,12 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 			MsgPool:         c.msgPool,
 			Add:             tagFilters.ParseAddCfg(env, utils.Settings.Get("settings.tag_filters.tenants.spring.add")),
 			MustInclude:     utils.Settings.GetString("settings.tag_filters.tenants.spring.must_include"),
+			TimeKey:         utils.Settings.GetString("settings.tag_filters.tenants.spring.time_key"),
+			TimeFormat:      utils.Settings.GetString("settings.tag_filters.tenants.spring.time_format"),
+			NewTimeFormat:   utils.Settings.GetString("settings.tag_filters.tenants.spring.new_time_format"),
+			ReservedTimeKey: utils.Settings.GetBool("settings.tag_filters.tenants.spring.reserved_time_key"),
+			NewTimeKey:      utils.Settings.GetString("settings.tag_filters.tenants.spring.new_time_key"),
+			AppendTimeZone:  utils.Settings.GetString("settings.tag_filters.tenants.spring.append_time_zone"),
 		}),
 		tagFilters.NewParserFact(&tagFilters.ParserFactCfg{ // geely
 			Name:            "geely",
@@ -165,6 +202,12 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 			MsgPool:         c.msgPool,
 			Add:             tagFilters.ParseAddCfg(env, utils.Settings.Get("settings.tag_filters.tenants.geely.add")),
 			MustInclude:     utils.Settings.GetString("settings.tag_filters.tenants.geely.must_include"),
+			TimeKey:         utils.Settings.GetString("settings.tag_filters.tenants.geely.time_key"),
+			TimeFormat:      utils.Settings.GetString("settings.tag_filters.tenants.geely.time_format"),
+			NewTimeFormat:   utils.Settings.GetString("settings.tag_filters.tenants.geely.new_time_format"),
+			ReservedTimeKey: utils.Settings.GetBool("settings.tag_filters.tenants.geely.reserved_time_key"),
+			NewTimeKey:      utils.Settings.GetString("settings.tag_filters.tenants.geely.new_time_key"),
+			AppendTimeZone:  utils.Settings.GetString("settings.tag_filters.tenants.geely.append_time_zone"),
 		}),
 		tagFilters.NewParserFact(&tagFilters.ParserFactCfg{ // ptdeloyer
 			Name:            "ptdeloyer",
@@ -176,6 +219,12 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 			MsgPool:         c.msgPool,
 			Add:             tagFilters.ParseAddCfg(env, utils.Settings.Get("settings.tag_filters.tenants.ptdeployer.add")),
 			MustInclude:     utils.Settings.GetString("settings.tag_filters.tenants.ptdeployer.must_include"),
+			TimeKey:         utils.Settings.GetString("settings.tag_filters.tenants.ptdeployer.time_key"),
+			TimeFormat:      utils.Settings.GetString("settings.tag_filters.tenants.ptdeployer.time_format"),
+			NewTimeFormat:   utils.Settings.GetString("settings.tag_filters.tenants.ptdeployer.new_time_format"),
+			ReservedTimeKey: utils.Settings.GetBool("settings.tag_filters.tenants.ptdeployer.reserved_time_key"),
+			NewTimeKey:      utils.Settings.GetString("settings.tag_filters.tenants.ptdeployer.new_time_key"),
+			AppendTimeZone:  utils.Settings.GetString("settings.tag_filters.tenants.ptdeployer.append_time_zone"),
 		}),
 		tagFilters.NewParserFact(&tagFilters.ParserFactCfg{ // cp
 			Name:            "cp",
@@ -187,6 +236,25 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 			MsgPool:         c.msgPool,
 			Add:             tagFilters.ParseAddCfg(env, utils.Settings.Get("settings.tag_filters.tenants.cp.add")),
 			MustInclude:     utils.Settings.GetString("settings.tag_filters.tenants.cp.must_include"),
+			TimeKey:         utils.Settings.GetString("settings.tag_filters.tenants.cp.time_key"),
+			TimeFormat:      utils.Settings.GetString("settings.tag_filters.tenants.cp.time_format"),
+			NewTimeFormat:   utils.Settings.GetString("settings.tag_filters.tenants.cp.new_time_format"),
+			ReservedTimeKey: utils.Settings.GetBool("settings.tag_filters.tenants.cp.reserved_time_key"),
+			NewTimeKey:      utils.Settings.GetString("settings.tag_filters.tenants.cp.new_time_key"),
+			AppendTimeZone:  utils.Settings.GetString("settings.tag_filters.tenants.cp.append_time_zone"),
+		}),
+		tagFilters.NewParserFact(&tagFilters.ParserFactCfg{ // emqtt
+			Name:            "emqtt",
+			Env:             env,
+			Tags:            utils.Settings.GetStringSlice("settings.tag_filters.tenants.emqtt.tags"),
+			MsgPool:         c.msgPool,
+			Add:             tagFilters.ParseAddCfg(env, utils.Settings.Get("settings.tag_filters.tenants.emqtt.add")),
+			TimeKey:         utils.Settings.GetString("settings.tag_filters.tenants.emqtt.time_key"),
+			TimeFormat:      utils.Settings.GetString("settings.tag_filters.tenants.emqtt.time_format"),
+			NewTimeFormat:   utils.Settings.GetString("settings.tag_filters.tenants.emqtt.new_time_format"),
+			ReservedTimeKey: utils.Settings.GetBool("settings.tag_filters.tenants.emqtt.reserved_time_key"),
+			NewTimeKey:      utils.Settings.GetString("settings.tag_filters.tenants.emqtt.new_time_key"),
+			AppendTimeZone:  utils.Settings.GetString("settings.tag_filters.tenants.emqtt.append_time_zone." + env),
 		}),
 		tagFilters.NewParserFact(&tagFilters.ParserFactCfg{ // spark
 			Name:            "spark",
@@ -198,6 +266,12 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 			MsgPool:         c.msgPool,
 			Add:             tagFilters.ParseAddCfg(env, utils.Settings.Get("settings.tag_filters.tenants.spark.add")),
 			MustInclude:     utils.Settings.GetString("settings.tag_filters.tenants.spark.must_include"),
+			TimeKey:         utils.Settings.GetString("settings.tag_filters.tenants.spark.time_key"),
+			TimeFormat:      utils.Settings.GetString("settings.tag_filters.tenants.spark.time_format"),
+			NewTimeFormat:   utils.Settings.GetString("settings.tag_filters.tenants.spark.new_time_format"),
+			ReservedTimeKey: utils.Settings.GetBool("settings.tag_filters.tenants.spark.reserved_time_key"),
+			NewTimeKey:      utils.Settings.GetString("settings.tag_filters.tenants.spark.new_time_key"),
+			AppendTimeZone:  utils.Settings.GetString("settings.tag_filters.tenants.spark.append_time_zone." + env),
 		}),
 	)
 }
@@ -227,6 +301,11 @@ func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- int64) *
 			MaxLen: utils.Settings.GetInt("settings.post_filters.tenants.default.max_len"),
 		}),
 		// custom filters...
+		postFilters.NewESDispatcherFilter(&postFilters.ESDispatcherFilterCfg{
+			Tag:      utils.Settings.GetString("settings.post_filters.tenants.es_dispatcher.tag") + "." + env,
+			TagKey:   utils.Settings.GetString("settings.post_filters.tenants.es_dispatcher.tag_key"),
+			ReTagMap: postFilters.LoadReTagMap(env, utils.Settings.Get("settings.post_filters.tenants.es_dispatcher.rewrite_tag_map")),
+		}),
 	)
 }
 
@@ -241,42 +320,85 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 		// 	InChanSize:    utils.Settings.GetInt("settings.producer.sender_inchan_size"),
 		// 	NFork:         utils.Settings.GetInt("settings.producer.tenants.fluentd.forks"),
 		// 	Tags:          senders.TagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.tenants.fluentd.tags")),
+		//  IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.tenants.fluentd.is_discard_when_blocked"),
 		// }),
-		senders.NewKafkaSender(&senders.KafkaSenderCfg{ // kafka backend
-			Name:          "KafkaSender",
-			Brokers:       utils.Settings.GetStringSlice("settings.producer.tenants.kafka.brokers"),
-			Topic:         utils.Settings.GetString("settings.producer.tenants.kafka.topic." + env),
-			BatchSize:     utils.Settings.GetInt("settings.producer.tenants.kafka.msg_batch_size"),
-			MaxWait:       utils.Settings.GetDuration("settings.producer.tenants.kafka.max_wait_sec") * time.Second,
-			RetryChanSize: utils.Settings.GetInt("settings.producer.tenants.kafka.retry_chan_len"),
-			InChanSize:    utils.Settings.GetInt("settings.producer.sender_inchan_size"),
-			NFork:         utils.Settings.GetInt("settings.producer.tenants.kafka.forks"),
-			Tags:          senders.TagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.tenants.kafka.tags")),
+		senders.NewKafkaSender(&senders.KafkaSenderCfg{ // kafka buf
+			Name:                 "KafkaBufSender",
+			Brokers:              utils.Settings.GetStringSlice("settings.producer.tenants.kafkabuf.brokers"),
+			Topic:                utils.Settings.GetString("settings.producer.tenants.kafkabuf.topic." + env),
+			TagKey:               utils.Settings.GetString("settings.producer.tenants.kafkabuf.tag_key"),
+			BatchSize:            utils.Settings.GetInt("settings.producer.tenants.kafkabuf.msg_batch_size"),
+			MaxWait:              utils.Settings.GetDuration("settings.producer.tenants.kafkabuf.max_wait_sec") * time.Second,
+			RetryChanSize:        utils.Settings.GetInt("settings.producer.tenants.kafkabuf.retry_chan_len"),
+			InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
+			NFork:                utils.Settings.GetInt("settings.producer.tenants.kafkabuf.forks"),
+			Tags:                 senders.TagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.tenants.kafkabuf.tags")),
+			IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.tenants.kafkabuf.is_discard_when_blocked"),
 		}),
 		senders.NewKafkaSender(&senders.KafkaSenderCfg{ // cp kafka backend
-			Name:          "KafkaCpSender",
-			Brokers:       utils.Settings.GetStringSlice("settings.producer.tenants.kafka_cp.brokers." + env),
-			Topic:         utils.Settings.GetString("settings.producer.tenants.kafka_cp.topic"),
-			BatchSize:     utils.Settings.GetInt("settings.producer.tenants.kafka_cp.msg_batch_size"),
-			MaxWait:       utils.Settings.GetDuration("settings.producer.tenants.kafka_cp.max_wait_sec") * time.Second,
-			RetryChanSize: utils.Settings.GetInt("settings.producer.tenants.kafka_cp.retry_chan_len"),
-			InChanSize:    utils.Settings.GetInt("settings.producer.sender_inchan_size"),
-			NFork:         utils.Settings.GetInt("settings.producer.tenants.kafka_cp.forks"),
-			Tags:          senders.TagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.tenants.kafka_cp.tags")),
+			Name:                 "KafkaCpSender",
+			Brokers:              utils.Settings.GetStringSlice("settings.producer.tenants.kafka_cp.brokers." + env),
+			Topic:                utils.Settings.GetString("settings.producer.tenants.kafka_cp.topic"),
+			TagKey:               utils.Settings.GetString("settings.producer.tenants.kafka_cp.tag_key"),
+			BatchSize:            utils.Settings.GetInt("settings.producer.tenants.kafka_cp.msg_batch_size"),
+			MaxWait:              utils.Settings.GetDuration("settings.producer.tenants.kafka_cp.max_wait_sec") * time.Second,
+			RetryChanSize:        utils.Settings.GetInt("settings.producer.tenants.kafka_cp.retry_chan_len"),
+			InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
+			NFork:                utils.Settings.GetInt("settings.producer.tenants.kafka_cp.forks"),
+			Tags:                 senders.TagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.tenants.kafka_cp.tags")),
+			IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.tenants.kafka_cp.is_discard_when_blocked"),
+		}),
+		senders.NewElasticSearchSender(&senders.ElasticSearchSenderCfg{ // general elasticsearch backend
+			Name:                 "GeneralESSender",
+			BatchSize:            utils.Settings.GetInt("settings.producer.tenants.es_general.msg_batch_size"),
+			Addr:                 utils.Settings.GetString("settings.producer.tenants.es_general.addr"),
+			MaxWait:              utils.Settings.GetDuration("settings.producer.tenants.es_general.max_wait_sec") * time.Second,
+			RetryChanSize:        utils.Settings.GetInt("settings.producer.tenants.es_general.retry_chan_len"),
+			InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
+			NFork:                utils.Settings.GetInt("settings.producer.tenants.es_general.forks"),
+			TagKey:               utils.Settings.GetString("settings.producer.tenants.es_general.tag_key"),
+			Tags:                 utils.Settings.GetStringSlice("settings.producer.tenants.es_general.tags"),
+			TagIndexMap:          senders.LoadESTagIndexMap(env, utils.Settings.Get("settings.producer.tenants.es_general.indices")),
+			IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.tenants.es_general.is_discard_when_blocked"),
+		}),
+		senders.NewElasticSearchSender(&senders.ElasticSearchSenderCfg{ // geely elasticsearch backend
+			Name:                 "GeelyESSender",
+			BatchSize:            utils.Settings.GetInt("settings.producer.tenants.es_geely.msg_batch_size"),
+			Addr:                 utils.Settings.GetString("settings.producer.tenants.es_geely.addr"),
+			MaxWait:              utils.Settings.GetDuration("settings.producer.tenants.es_geely.max_wait_sec") * time.Second,
+			RetryChanSize:        utils.Settings.GetInt("settings.producer.tenants.es_geely.retry_chan_len"),
+			InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
+			NFork:                utils.Settings.GetInt("settings.producer.tenants.es_geely.forks"),
+			TagKey:               utils.Settings.GetString("settings.producer.tenants.es_geely.tag_key"),
+			Tags:                 utils.Settings.GetStringSlice("settings.producer.tenants.es_geely.tags"),
+			TagIndexMap:          senders.LoadESTagIndexMap(env, utils.Settings.Get("settings.producer.tenants.es_geely.indices")),
+			IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.tenants.es_geely.is_discard_when_blocked"),
 		}),
 	}
 
 	if env == "prod" {
 		ss = append(ss,
-			senders.NewFluentSender(&senders.FluentSenderCfg{ // fluentd backend
-				Name:          "FluentdBackupSender",
-				Addr:          utils.Settings.GetString("settings.producer.tenants.fluentd_backup.addr"),
-				BatchSize:     utils.Settings.GetInt("settings.producer.tenants.fluentd_backup.msg_batch_size"),
-				MaxWait:       utils.Settings.GetDuration("settings.producer.tenants.fluentd_backup.max_wait_sec") * time.Second,
-				RetryChanSize: utils.Settings.GetInt("settings.producer.tenants.fluentd_backup.retry_chan_len"),
-				InChanSize:    utils.Settings.GetInt("settings.producer.sender_inchan_size"),
-				NFork:         utils.Settings.GetInt("settings.producer.tenants.fluentd_backup.forks"),
-				Tags:          senders.TagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.tenants.fluentd_backup.tags")),
+			senders.NewFluentSender(&senders.FluentSenderCfg{ // fluentd backend geely
+				Name:                 "FluentdSender",
+				Addr:                 utils.Settings.GetString("settings.producer.tenants.fluentd_backup_geely.addr"),
+				BatchSize:            utils.Settings.GetInt("settings.producer.tenants.fluentd_backup_geely.msg_batch_size"),
+				MaxWait:              utils.Settings.GetDuration("settings.producer.tenants.fluentd_backup_geely.max_wait_sec") * time.Second,
+				RetryChanSize:        utils.Settings.GetInt("settings.producer.tenants.fluentd_backup_geely.retry_chan_len"),
+				InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
+				NFork:                utils.Settings.GetInt("settings.producer.tenants.fluentd_backup_geely.forks"),
+				Tags:                 senders.TagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.tenants.fluentd_backup_geely.tags")),
+				IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.tenants.fluentd_backup_geely.is_discard_when_blocked"),
+			}),
+			senders.NewFluentSender(&senders.FluentSenderCfg{ // fluentd backend emqtt
+				Name:                 "FluentdSender",
+				Addr:                 utils.Settings.GetString("settings.producer.tenants.fluentd_backup_emqtt.addr"),
+				BatchSize:            utils.Settings.GetInt("settings.producer.tenants.fluentd_backup_emqtt.msg_batch_size"),
+				MaxWait:              utils.Settings.GetDuration("settings.producer.tenants.fluentd_backup_emqtt.max_wait_sec") * time.Second,
+				RetryChanSize:        utils.Settings.GetInt("settings.producer.tenants.fluentd_backup_emqtt.retry_chan_len"),
+				InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
+				NFork:                utils.Settings.GetInt("settings.producer.tenants.fluentd_backup_emqtt.forks"),
+				Tags:                 senders.TagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.tenants.fluentd_backup_emqtt.tags")),
+				IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.tenants.fluentd_backup_emqtt.is_discard_when_blocked"),
 			}),
 		)
 	}
@@ -319,8 +441,9 @@ func (c *Controllor) Run() {
 	acceptorPipeline := c.initAcceptorPipeline(env)
 
 	waitCommitChan := journal.GetCommitChan()
-	waitAccepPipelineChan := acceptor.MessageChan()
-	waitDumpChan, skipDumpChan := acceptorPipeline.Wrap(waitAccepPipelineChan)
+	waitAccepPipelineSyncChan := acceptor.GetSyncOutChan()
+	waitAccepPipelineAsyncChan := acceptor.GetAsyncOutChan()
+	waitDumpChan, skipDumpChan := acceptorPipeline.Wrap(waitAccepPipelineAsyncChan, waitAccepPipelineSyncChan)
 
 	// after `journal.DumpMsgFlow`, every discarded msg should commit to waitCommitChan
 	waitDispatchChan := journal.DumpMsgFlow(c.msgPool, waitDumpChan, skipDumpChan)
@@ -339,21 +462,23 @@ func (c *Controllor) Run() {
 	// monitor
 	monitor.AddMetric("controllor", func() map[string]interface{} {
 		return map[string]interface{}{
-			"goroutine":                runtime.NumGoroutine(),
-			"waitAccepPipelineChanLen": len(waitAccepPipelineChan),
-			"waitAccepPipelineChanCap": cap(waitAccepPipelineChan),
-			"waitDumpChanLen":          len(waitDumpChan),
-			"waitDumpChanCap":          cap(waitDumpChan),
-			"skipDumpChanLen":          len(skipDumpChan),
-			"skipDumpChanCap":          cap(skipDumpChan),
-			"waitDispatchChanLen":      len(waitDispatchChan),
-			"waitDispatchChanCap":      cap(waitDispatchChan),
-			"waitPostPipelineChanLen":  len(waitPostPipelineChan),
-			"waitPostPipelineChanCap":  cap(waitPostPipelineChan),
-			"waitProduceChanLen":       len(waitProduceChan),
-			"waitProduceChanCap":       cap(waitProduceChan),
-			"waitCommitChanLen":        len(waitCommitChan),
-			"waitCommitChanCap":        cap(waitCommitChan),
+			"goroutine":                     runtime.NumGoroutine(),
+			"waitAccepPipelineSyncChanLen":  len(waitAccepPipelineSyncChan),
+			"waitAccepPipelineSyncChanCap":  cap(waitAccepPipelineSyncChan),
+			"waitAccepPipelineAsyncChanLen": len(waitAccepPipelineAsyncChan),
+			"waitAccepPipelineAsyncChanCap": cap(waitAccepPipelineAsyncChan),
+			"waitDumpChanLen":               len(waitDumpChan),
+			"waitDumpChanCap":               cap(waitDumpChan),
+			"skipDumpChanLen":               len(skipDumpChan),
+			"skipDumpChanCap":               cap(skipDumpChan),
+			"waitDispatchChanLen":           len(waitDispatchChan),
+			"waitDispatchChanCap":           cap(waitDispatchChan),
+			"waitPostPipelineChanLen":       len(waitPostPipelineChan),
+			"waitPostPipelineChanCap":       cap(waitPostPipelineChan),
+			"waitProduceChanLen":            len(waitProduceChan),
+			"waitProduceChanCap":            cap(waitProduceChan),
+			"waitCommitChanLen":             len(waitCommitChan),
+			"waitCommitChanCap":             cap(waitCommitChan),
 		}
 	})
 	monitor.BindHTTP(Server)

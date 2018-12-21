@@ -87,9 +87,9 @@ func (p *Producer) registerMonitor() {
 		lastT = time.Now()
 
 		p.producerTagChanMap.Range(func(tagi, smi interface{}) bool {
-			smi.(*sync.Map).Range(func(namei, ci interface{}) bool {
-				metrics[tagi.(string)+"."+namei.(string)+".ChanLen"] = len(ci.(chan<- *libs.FluentMsg))
-				metrics[tagi.(string)+"."+namei.(string)+".ChanCap"] = cap(ci.(chan<- *libs.FluentMsg))
+			smi.(*sync.Map).Range(func(si, ci interface{}) bool {
+				metrics[tagi.(string)+"."+si.(senders.SenderItf).GetName()+".ChanLen"] = len(ci.(chan<- *libs.FluentMsg))
+				metrics[tagi.(string)+"."+si.(senders.SenderItf).GetName()+".ChanCap"] = cap(ci.(chan<- *libs.FluentMsg))
 				return true
 			})
 			return true
@@ -121,6 +121,7 @@ func (p *Producer) DiscardMsg(pmsg *ProducerPendingDiscardMsg) {
 	}
 
 	pmsg.Msg.ExtIds = nil
+	// utils.Logger.Info(fmt.Sprintf("recycle: %p, %v\n", pmsg.Msg, pmsg.Count))
 	p.MsgPool.Put(pmsg.Msg)
 	p.pMsgPool.Put(pmsg)
 }
@@ -142,13 +143,15 @@ func (p *Producer) RunMsgCollector(nSenderForTagMap *sync.Map, discardChan chan 
 			isCommit = false
 		}
 
+		// ⚠️Notify: Do not change tag in any sender
 		if itf, ok = nSenderForTagMap.Load(msg.Tag); !ok {
 			utils.Logger.Error("[panic] nSenderForTagMap should contains tag",
 				zap.String("tag", msg.Tag),
 				zap.String("msg", fmt.Sprintf("%+v", msg)))
-			continue
+			cntToDiscard = 1
+		} else {
+			cntToDiscard = itf.(int)
 		}
-		cntToDiscard = itf.(int)
 
 		if itf, ok = p.discardMsgCountMap.Load(msg); !ok {
 			// create new pmsg
@@ -185,13 +188,14 @@ func (p *Producer) Run() {
 		nSenderForTagMap = &sync.Map{} // map[tag]nSender
 		isSkip           = true
 		itf              interface{}
-		senderChanMap    *sync.Map
+		senderChanMap    *sync.Map // sender: chan
 		nSender          int
 	)
 
 	go p.RunMsgCollector(nSenderForTagMap, p.discardChan)
 
 	for msg = range p.InChan {
+		// utils.Logger.Info(fmt.Sprintf("send msg %p", msg))
 		p.counter.Count()
 		if _, ok = unSupportedTags[msg.Tag]; ok {
 			utils.Logger.Warn("do not produce since of unsupported tag", zap.String("tag", msg.Tag))
@@ -199,9 +203,7 @@ func (p *Producer) Run() {
 			continue
 		}
 
-		msg.Message["tag"] = msg.Tag  // set tag
 		msg.Message["msgid"] = msg.Id // set id
-
 		if _, ok = p.producerTagChanMap.Load(msg.Tag); !ok {
 			// create sender chans for new tag
 			isSkip = true
@@ -214,18 +216,22 @@ func (p *Producer) Run() {
 					utils.Logger.Info("spawn new producer sender",
 						zap.String("name", s.GetName()),
 						zap.String("tag", msg.Tag))
-					senderChanMap.Store(s.GetName(), s.Spawn(msg.Tag))
+					senderChanMap.Store(s, s.Spawn(msg.Tag))
 				}
 			}
 
 			if isSkip {
 				// no sender support this tag
 				utils.Logger.Warn("do not produce since of unsupported tag", zap.String("tag", msg.Tag))
+				nSenderForTagMap.Store(msg.Tag, 1)
 				unSupportedTags[msg.Tag] = struct{}{} // mark as unsupported
 				p.discardChan <- msg
 				continue
 			}
 
+			utils.Logger.Info("register the number of senders for tag",
+				zap.String("tag", msg.Tag),
+				zap.Int("n", nSender))
 			nSenderForTagMap.Store(msg.Tag, nSender)
 			p.producerTagChanMap.Store(msg.Tag, senderChanMap)
 		}
@@ -236,15 +242,22 @@ func (p *Producer) Run() {
 		}
 
 		// put msg into every sender's chan
-		senderChanMap = itf.(*sync.Map)
-		senderChanMap.Range(func(key, val interface{}) bool {
+		itf.(*sync.Map).Range(func(si, val interface{}) bool {
+			s = si.(senders.SenderItf)
 			select {
 			case val.(chan<- *libs.FluentMsg) <- msg:
 			default:
-				utils.Logger.Warn("skip sender",
-					zap.String("name", key.(string)),
-					zap.String("tag", msg.Tag))
-				p.discardWithoutCommitChan <- msg // at least once
+				if s.DiscardWhenBlocked() {
+					p.discardChan <- msg
+					utils.Logger.Warn("skip sender and discard msg since of its inchan is full",
+						zap.String("name", s.GetName()),
+						zap.String("tag", msg.Tag))
+				} else {
+					p.discardWithoutCommitChan <- msg
+					utils.Logger.Debug("skip sender and not discard msg since of its inchan is full",
+						zap.String("name", s.GetName()),
+						zap.String("tag", msg.Tag))
+				}
 			}
 
 			return true

@@ -7,37 +7,31 @@ import (
 )
 
 type DefaultFilterCfg struct {
-	RemoveEmptyTag     bool
-	RemoveUnsupportTag bool
-	tags               map[string]interface{}
+	RemoveEmptyTag, RemoveUnsupportTag bool
+	SupportedTags                      []string
+	Env                                string
 }
 
 type DefaultFilter struct {
 	*BaseFilter
 	*DefaultFilterCfg
-}
-
-func NewDefaultFilterCfg() *DefaultFilterCfg {
-	c := &DefaultFilterCfg{
-		RemoveEmptyTag:     true,
-		RemoveUnsupportTag: true,
-		tags:               map[string]interface{}{},
-	}
-
-	for tag := range libs.LoadConcatorTagConfigs() {
-		c.tags[tag] = nil
-	}
-
-	return c
+	tags map[string]struct{}
 }
 
 func NewDefaultFilter(cfg *DefaultFilterCfg) *DefaultFilter {
 	utils.Logger.Info("NewDefaultFilter")
 
-	return &DefaultFilter{
+	f := &DefaultFilter{
 		BaseFilter:       &BaseFilter{},
 		DefaultFilterCfg: cfg,
+		tags:             map[string]struct{}{},
 	}
+
+	for _, tag := range cfg.SupportedTags {
+		f.tags[tag+"."+cfg.Env] = struct{}{}
+	}
+
+	return f
 }
 
 func (f *DefaultFilter) IsTagInConfigs(tag string) (ok bool) {

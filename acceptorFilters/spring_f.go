@@ -1,6 +1,7 @@
 package acceptorFilters
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -15,8 +16,8 @@ type SpringReTagRule struct {
 }
 
 type SpringFilterCfg struct {
-	Tag, Env, MsgKey string
-	Rules            []*SpringReTagRule
+	Tag, Env, MsgKey, TagKey string
+	Rules                    []*SpringReTagRule
 }
 
 type SpringFilter struct {
@@ -55,13 +56,20 @@ func (f *SpringFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 
 	switch msg.Message[f.MsgKey].(type) {
 	case []byte:
+	case string:
+		msg.Message[f.MsgKey] = string(msg.Message[f.MsgKey].([]byte))
 	default:
-		return msg
+		utils.Logger.Warn("unknown type of msg",
+			zap.String("tag", msg.Tag),
+			zap.String("msg", fmt.Sprintf("%+v", msg.Message[f.MsgKey])))
+		f.DiscardMsg(msg)
+		return nil
 	}
 	// retag spring to cp/bot/app.spring
 	for _, rule := range f.Rules {
 		if rule.Regexp.Match(msg.Message[f.MsgKey].([]byte)) {
 			msg.Tag = rule.NewTag
+			msg.Message[f.TagKey] = msg.Tag
 			f.upstreamChan <- msg
 			return nil
 		}

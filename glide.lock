@@ -1,5 +1,5 @@
-hash: c34224ca296c75287b80edadef715d86f4a9222579ef1189fb8fd0eea21408aa
-updated: 2018-11-28T09:54:42.812450544+08:00
+hash: 2f82a0eb717a32e0041422b1b97d25193a0bea085786f91981258aba679f20cb
+updated: 2018-12-20T14:19:45.939693+08:00
 imports:
 - name: github.com/aymerick/raymond
   version: b565731e1464263de0bda75f2e45d97b54b60110
@@ -114,8 +114,15 @@ imports:
   version: e7e905edc00ea8827e58662220139109efea09db
 - name: github.com/Laisky/go-chaining
   version: 43dcdc5a21be9b79f2b7ee0d8ba67ed8a7158cda
+- name: github.com/Laisky/go-syslog
+  version: eddaa06319d14b687f21aeb896761f1982e72936
+  subpackages:
+  - format
+  - internal/syslogparser
+  - internal/syslogparser/rfc3164
+  - internal/syslogparser/rfc5424
 - name: github.com/Laisky/go-utils
-  version: 7b8d9e0c463fbbc60044e7fd45d291ca9d5ee98b
+  version: 75f3667a1ff9890fdac356feda72b1a0854b0210
   vcs: git
   subpackages:
   - journal

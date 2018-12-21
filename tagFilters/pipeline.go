@@ -1,7 +1,6 @@
 package tagFilters
 
 import (
-	"errors"
 	"sync"
 
 	"github.com/Laisky/go-fluentd/libs"
@@ -67,7 +66,8 @@ func (p *TagPipeline) Spawn(tag string, outChan chan<- *libs.FluentMsg) (chan<- 
 	}
 
 	if !isTagSupported {
-		return nil, errors.New("tag do not has any tagfilter")
+		utils.Logger.Info("skip tagPipeline", zap.String("tag", tag))
+		return outChan, nil
 	}
 
 	return downstreamChan, nil

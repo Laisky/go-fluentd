@@ -60,21 +60,20 @@ func (d *Dispatcher) Run() {
 		)
 		// send each message to appropriate concator by `tag`
 		for msg := range d.InChan {
+			// utils.Logger.Info(fmt.Sprintf("process msg %p", msg))
 			d.counter.Count()
-			inChanForEachTagi, ok = d.concatorMap.Load(msg.Tag)
-			if ok {
+			if inChanForEachTagi, ok = d.concatorMap.Load(msg.Tag); ok {
 				// tagfilters should not blocking
-				inChanForEachTagi.(chan<- *libs.FluentMsg) <- msg
 				if counterI, ok = d.tagsCounter.Load(msg.Tag); ok {
 					counterI.(*utils.Counter).Count()
 				}
+				inChanForEachTagi.(chan<- *libs.FluentMsg) <- msg
 				continue
 			}
 
 			// new tag
 			utils.Logger.Info("got new tag", zap.String("tag", msg.Tag))
-			inChanForEachTag, err = d.TagPipeline.Spawn(msg.Tag, d.outChan)
-			if err != nil {
+			if inChanForEachTag, err = d.TagPipeline.Spawn(msg.Tag, d.outChan); err != nil {
 				utils.Logger.Error("try to spawn new tagpipeline got error",
 					zap.Error(err),
 					zap.String("tag", msg.Tag))

@@ -86,7 +86,9 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 
 						switch pmsg.msg.Message[c.MsgKey].(type) {
 						case []byte:
-							utils.Logger.Debug("timeout flush", zap.ByteString("log", pmsg.msg.Message[c.MsgKey].([]byte)))
+							utils.Logger.Debug("timeout flush",
+								zap.ByteString("log", pmsg.msg.Message[c.MsgKey].([]byte)),
+								zap.String("tag", pmsg.msg.Tag))
 						default:
 							utils.Logger.Error("[panic] unknown type of `pmsg.msg.Message[c.MsgKey]`",
 								zap.String("tag", pmsg.msg.Tag),

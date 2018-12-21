@@ -26,9 +26,8 @@ func RunServer(addr string) {
 		os.Exit(0)
 	}()
 
+	Server.Any("/admin/pprof/{action:path}", pprof.New())
 	if utils.Settings.GetBool("pprof") {
-		Server.Any("/admin/pprof/{action:path}", pprof.New())
-
 		Server.Post("/admin/shutdown", func(ctx iris.Context) {
 			go func() {
 				time.Sleep(1 * time.Second)

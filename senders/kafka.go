@@ -23,12 +23,13 @@ func NewKafkaProducer(brokers []string) (p sarama.SyncProducer, err error) {
 }
 
 type KafkaSenderCfg struct {
-	Name                                        string
+	Name, TagKey                                string
 	Brokers                                     []string
 	Topic                                       string
 	Tags                                        []string
 	InChanSize, RetryChanSize, NFork, BatchSize int
 	MaxWait                                     time.Duration
+	IsDiscardWhenBlocked                        bool
 }
 
 type KafkaSender struct {
@@ -45,7 +46,9 @@ func NewKafkaSender(cfg *KafkaSenderCfg) *KafkaSender {
 	}
 
 	s := &KafkaSender{
-		BaseSender:     &BaseSender{},
+		BaseSender: &BaseSender{
+			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
+		},
 		KafkaSenderCfg: cfg,
 	}
 	s.SetSupportedTags(cfg.Tags)
@@ -90,6 +93,7 @@ func (s *KafkaSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				zap.String("tag", tag))
 
 			for msg := range inChan {
+				// msg.Message[s.TagKey] = msg.Tag // change msg tag
 				msgBatch[iBatch] = msg
 				iBatch++
 				if iBatch < s.BatchSize &&
@@ -108,18 +112,22 @@ func (s *KafkaSender) Spawn(tag string) chan<- *libs.FluentMsg {
 						// TODO(potential bug): should remove element in msgBatchDelivery
 						continue
 					}
+
+					if utils.Settings.GetBool("dry") {
+						utils.Logger.Info("send message to backend",
+							zap.String("tag", tag),
+							zap.ByteString("msg", jb))
+						s.discardChan <- msg
+						continue
+					}
+
 					kmsgBatchDelivery[j].Value = sarama.ByteEncoder(jb)
 				}
 
 				if utils.Settings.GetBool("dry") {
-					utils.Logger.Info("send message to backend",
-						zap.String("tag", tag),
-						zap.String("log", fmt.Sprint(msgBatch[0].Message)))
-					for _, msg = range msgBatchDelivery {
-						s.discardChan <- msg
-					}
 					continue
 				}
+
 			SEND_MSG:
 				if err = producer.SendMessages(kmsgBatchDelivery[:len(msgBatchDelivery)]); err != nil {
 					nRetry++
@@ -145,7 +153,8 @@ func (s *KafkaSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				utils.Logger.Debug("success sent messages to brokers",
 					zap.String("topic", s.Topic),
 					zap.Strings("brokers", s.Brokers),
-					zap.String("tag", tag))
+					zap.String("raw_tag", tag),
+					zap.String("tag", msg.Tag))
 				for _, msg = range msgBatchDelivery {
 					s.discardChan <- msg
 				}

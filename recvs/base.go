@@ -6,14 +6,34 @@ import (
 	"github.com/Laisky/go-fluentd/libs"
 )
 
-type BaseRecv struct {
-	outChan chan *libs.FluentMsg
-	msgPool *sync.Pool
-	counter libs.CounterIft
+type AcceptorRecvItf interface {
+	SetSyncOutChan(chan<- *libs.FluentMsg)
+	SetAsyncOutChan(chan<- *libs.FluentMsg)
+	SetMsgPool(*sync.Pool)
+	SetCounter(libs.CounterIft)
+	Run()
+	GetName() string
 }
 
-func (r *BaseRecv) Setup(msgPool *sync.Pool, outChan chan *libs.FluentMsg, counter libs.CounterIft) {
+type BaseRecv struct {
+	syncOutChan  chan<- *libs.FluentMsg
+	asyncOutChan chan<- *libs.FluentMsg
+	msgPool      *sync.Pool
+	counter      libs.CounterIft
+}
+
+func (r *BaseRecv) SetSyncOutChan(outchan chan<- *libs.FluentMsg) {
+	r.syncOutChan = outchan
+}
+
+func (r *BaseRecv) SetAsyncOutChan(outchan chan<- *libs.FluentMsg) {
+	r.asyncOutChan = outchan
+}
+
+func (r *BaseRecv) SetMsgPool(msgPool *sync.Pool) {
 	r.msgPool = msgPool
-	r.outChan = outChan
+}
+
+func (r *BaseRecv) SetCounter(counter libs.CounterIft) {
 	r.counter = counter
 }

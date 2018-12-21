@@ -5,31 +5,33 @@ import (
 	"sync"
 
 	"github.com/Laisky/go-fluentd/libs"
+	"github.com/Laisky/go-fluentd/recvs"
 	utils "github.com/Laisky/go-utils"
 	"go.uber.org/zap"
 )
 
 type AcceptorCfg struct {
-	MsgPool     *sync.Pool
-	Journal     *Journal
-	OutChanSize int
-	MaxRotateId int64
+	MsgPool                           *sync.Pool
+	Journal                           *Journal
+	AsyncOutChanSize, SyncOutChanSize int
+	MaxRotateId                       int64
 }
 
 // Acceptor listening tcp connection, and decode messages
 type Acceptor struct {
 	*AcceptorCfg
-	msgChan chan *libs.FluentMsg
-	recvs   []libs.AcceptorRecvItf
+	syncOutChan, asyncOutChan chan *libs.FluentMsg
+	recvs                     []recvs.AcceptorRecvItf
 }
 
 // NewAcceptor create new Acceptor
-func NewAcceptor(cfg *AcceptorCfg, recvs ...libs.AcceptorRecvItf) *Acceptor {
+func NewAcceptor(cfg *AcceptorCfg, recvs ...recvs.AcceptorRecvItf) *Acceptor {
 	utils.Logger.Info("create Acceptor")
 	return &Acceptor{
-		AcceptorCfg: cfg,
-		msgChan:     make(chan *libs.FluentMsg, cfg.OutChanSize),
-		recvs:       recvs,
+		AcceptorCfg:  cfg,
+		syncOutChan:  make(chan *libs.FluentMsg, cfg.SyncOutChanSize),
+		asyncOutChan: make(chan *libs.FluentMsg, cfg.AsyncOutChanSize),
+		recvs:        recvs,
 	}
 }
 
@@ -49,12 +51,20 @@ func (a *Acceptor) Run() {
 
 	for _, recv := range a.recvs {
 		utils.Logger.Info("enable recv", zap.String("name", recv.GetName()))
-		recv.Setup(a.MsgPool, a.msgChan, couter)
+		recv.SetAsyncOutChan(a.asyncOutChan)
+		recv.SetSyncOutChan(a.syncOutChan)
+		recv.SetMsgPool(a.MsgPool)
+		recv.SetCounter(couter)
 		go recv.Run()
 	}
 }
 
-// MessageChan return the message chan that received by acceptor
-func (a *Acceptor) MessageChan() chan *libs.FluentMsg {
-	return a.msgChan
+// GetSyncOutChan return the message chan that received by acceptor
+func (a *Acceptor) GetSyncOutChan() chan *libs.FluentMsg {
+	return a.syncOutChan
+}
+
+// GetAsyncOutChan return the message chan that received by blockable acceptor
+func (a *Acceptor) GetAsyncOutChan() chan *libs.FluentMsg {
+	return a.asyncOutChan
 }

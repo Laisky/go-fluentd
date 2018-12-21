@@ -24,7 +24,7 @@ func NewDefaultFilter(cfg *DefaultFilterCfg) *DefaultFilter {
 func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	for k, v := range msg.Message {
 		switch v.(type) {
-		case []byte:
+		case []byte: // convert all bytes fields to string
 			msg.Message[k] = string(v.([]byte))
 		}
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-fluentd/monitor"
 	"github.com/Laisky/go-utils"
+	"go.uber.org/zap"
 )
 
 type AcceptorPipelineCfg struct {
@@ -56,38 +57,66 @@ func (f *AcceptorPipeline) registerMonitor() {
 	})
 }
 
-func (f *AcceptorPipeline) Wrap(inChan chan *libs.FluentMsg) (outChan, skipDumpChan chan *libs.FluentMsg) {
+func (f *AcceptorPipeline) Wrap(asyncInChan, syncInChan chan *libs.FluentMsg) (outChan, skipDumpChan chan *libs.FluentMsg) {
 	outChan = make(chan *libs.FluentMsg, f.OutChanSize)
 	skipDumpChan = make(chan *libs.FluentMsg, f.OutChanSize)
 
 	for i := 0; i < f.NFork; i++ {
 		go func() {
-			defer panic(fmt.Errorf("quit acceptorPipeline"))
-
 			var (
 				filter AcceptorFilterItf
 				msg    *libs.FluentMsg
 			)
+			defer utils.Logger.Panic("quit acceptorPipeline asyncChan", zap.String("msg", fmt.Sprintf("%+v", msg)))
+
 			for {
-			NEXT_MSG:
+			NEXT_ASYNC_MSG:
 				f.counter.Count()
 				select {
 				case msg = <-f.reEnterChan: // CAUTION: do not put msg into reEnterChan forever
-				case msg = <-inChan:
+				case msg = <-asyncInChan:
 				}
 
 				utils.Logger.Debug("AcceptorPipeline got msg")
 				for _, filter = range f.filters {
 					if msg = filter.Filter(msg); msg == nil { // quit filters for this msg
-						goto NEXT_MSG
+						goto NEXT_ASYNC_MSG
 					}
 				}
 
 				select {
 				case outChan <- msg:
-				case skipDumpChan <- msg:
+				case skipDumpChan <- msg: // baidu has low disk performance
+				default:
+					utils.Logger.Error("discard log", zap.String("tag", msg.Tag))
+					f.MsgPool.Put(msg)
 				}
 			}
+		}()
+
+		// starting blockable chan
+		go func() {
+			var (
+				filter AcceptorFilterItf
+				msg    *libs.FluentMsg
+			)
+			defer utils.Logger.Panic("quit acceptorPipeline syncChan", zap.String("msg", fmt.Sprintf("%+v", msg)))
+
+			for msg = range syncInChan {
+				utils.Logger.Debug("AcceptorPipeline got blockable msg")
+				f.counter.Count()
+				for _, filter = range f.filters {
+					if msg = filter.Filter(msg); msg == nil { // quit filters for this msg
+						// do not discard in pipeline
+						// filter can make decision to bypass or discard msg
+						goto NEXT_SYNC_MSG
+					}
+				}
+
+				outChan <- msg
+			NEXT_SYNC_MSG:
+			}
+
 		}()
 	}
 

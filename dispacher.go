@@ -58,31 +58,37 @@ func (d *Dispatcher) Run() {
 			err               error
 			counterI          interface{}
 		)
-		// send each message to appropriate concator by `tag`
+		// send each message to appropriate tagfilter by `tag`
 		for msg := range d.InChan {
-			// utils.Logger.Info(fmt.Sprintf("process msg %p", msg))
 			d.counter.Count()
-			if inChanForEachTagi, ok = d.concatorMap.Load(msg.Tag); ok {
-				// tagfilters should not blocking
-				if counterI, ok = d.tagsCounter.Load(msg.Tag); ok {
-					counterI.(*utils.Counter).Count()
+			if inChanForEachTagi, ok = d.concatorMap.Load(msg.Tag); !ok {
+				// new tag, create new tagfilter and its inchan
+				utils.Logger.Info("got new tag", zap.String("tag", msg.Tag))
+				if inChanForEachTag, err = d.TagPipeline.Spawn(msg.Tag, d.outChan); err != nil {
+					utils.Logger.Error("try to spawn new tagpipeline got error",
+						zap.Error(err),
+						zap.String("tag", msg.Tag))
+					continue
 				}
-				inChanForEachTagi.(chan<- *libs.FluentMsg) <- msg
-				continue
+
+				d.concatorMap.Store(msg.Tag, inChanForEachTag)
+				d.tagsCounter.Store(msg.Tag, utils.NewCounter())
+			} else {
+				inChanForEachTag = inChanForEachTagi.(chan<- *libs.FluentMsg)
 			}
 
-			// new tag
-			utils.Logger.Info("got new tag", zap.String("tag", msg.Tag))
-			if inChanForEachTag, err = d.TagPipeline.Spawn(msg.Tag, d.outChan); err != nil {
-				utils.Logger.Error("try to spawn new tagpipeline got error",
-					zap.Error(err),
-					zap.String("tag", msg.Tag))
-				continue
+			// count
+			if counterI, ok = d.tagsCounter.Load(msg.Tag); !ok {
+				utils.Logger.Panic("counter must exists", zap.String("tag", msg.Tag))
 			}
+			counterI.(*utils.Counter).Count()
 
-			d.concatorMap.Store(msg.Tag, inChanForEachTag)
-			d.tagsCounter.Store(msg.Tag, utils.NewCounterFromN(1))
-			inChanForEachTag <- msg
+			// put msg into tagfilter's inchan
+			select {
+			case inChanForEachTag <- msg:
+			default:
+				utils.Logger.Warn("tagfilter's inchan is blocked", zap.String("tag", msg.Tag))
+			}
 		}
 	}()
 }

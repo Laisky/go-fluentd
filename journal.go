@@ -63,7 +63,7 @@ func (j *Journal) ConvertMsg2Buf(msg *libs.FluentMsg, data *map[string]interface
 	(*data)["message"] = msg.Message
 }
 
-func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan chan *libs.FluentMsg) (maxId int64, err error) {
+func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan, dumpChan chan *libs.FluentMsg) (maxId int64, err error) {
 	utils.Logger.Info("starting to process legacy data...")
 	if ok := atomic.CompareAndSwapUint32(&j.legacyLock, 0, 1); !ok {
 		utils.Logger.Info("legacy data already in processing")
@@ -114,16 +114,18 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan chan *libs.Fluent
 			maxId = msg.Id
 		}
 
-		msgChan <- msg
+		// rewrite data into journal
+		// only commited id can really remove a msg
+		dumpChan <- msg
 	}
 }
 
-func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, dumpChan, skipDumpChan <-chan *libs.FluentMsg) chan *libs.FluentMsg {
+func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, dumpChan, skipDumpChan chan *libs.FluentMsg) chan *libs.FluentMsg {
 	// deal with legacy
 	go func() {
 		var err error
 		for {
-			if _, err = j.ProcessLegacyMsg(msgPool, j.outChan); err != nil {
+			if _, err = j.ProcessLegacyMsg(msgPool, j.outChan, dumpChan); err != nil {
 				utils.Logger.Error("process legacy got error", zap.Error(err))
 			}
 			time.Sleep(30 * time.Second)

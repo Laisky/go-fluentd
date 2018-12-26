@@ -6,15 +6,6 @@ import (
 	"github.com/Laisky/go-fluentd/libs"
 )
 
-func TagsAppendEnv(env string, tags []string) []string {
-	ret := []string{}
-	for _, t := range tags {
-		ret = append(ret, t+"."+env)
-	}
-
-	return ret
-}
-
 type SenderItf interface {
 	Spawn(string) chan<- *libs.FluentMsg // Spawn(tag) inChan
 	IsTagSupported(string) bool

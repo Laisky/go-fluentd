@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"github.com/Laisky/go-fluentd/libs"
 )
 
 var (
@@ -81,13 +81,13 @@ type ESBulkCtx struct {
 }
 
 func (s *ElasticSearchSender) getMsgStarting(msg *libs.FluentMsg) ([]byte, error) {
-	// load message origin tag
+	// load origin tag from messages, because msg.Tag could modified by kafka
 	tag := msg.Message[s.TagKey].(string)
 
 	// load elasitcsearch index name by msg tag
 	index, ok := s.TagIndexMap[tag]
 	if !ok {
-		return nil, fmt.Errorf("tag `%v` not exists in indices", msg.Tag)
+		return nil, fmt.Errorf("tag `%v` not exists in indices", tag)
 	}
 
 	return []byte("{\"index\": {\"_index\": \"" + index + "\", \"_type\": \"logs\"}}\n"), nil
@@ -174,7 +174,7 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
 
 	for _, v := range ret.Items {
 		if utils.FloorDivision(v.Index.Status, 100) != 2 {
-			return fmt.Errorf("bulk got error for idx: %v", v.Index.Status)
+			return fmt.Errorf("bulk got error for idx `%v`: %v", v.Index.Index, v.Index.Status)
 		}
 	}
 

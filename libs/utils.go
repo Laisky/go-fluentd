@@ -6,6 +6,15 @@ import (
 	"regexp"
 )
 
+func LoadTagsAppendEnv(env string, tags []string) []string {
+	ret := []string{}
+	for _, t := range tags {
+		ret = append(ret, t+"."+env)
+	}
+
+	return ret
+}
+
 func RegexNamedSubMatch(r *regexp.Regexp, log []byte, subMatchMap map[string]interface{}) error {
 	match := r.FindSubmatch(log)
 	names := r.SubexpNames()

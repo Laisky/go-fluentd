@@ -1,6 +1,7 @@
 package concator
 
 import (
+	"fmt"
 	"regexp"
 	"sync"
 	"time"
@@ -57,9 +58,12 @@ func (d *Dispatcher) Run() {
 			ok                bool
 			err               error
 			counterI          interface{}
+			msg               *libs.FluentMsg
 		)
+		defer utils.Logger.Panic("dispatcher exit with msg", zap.String("msg", fmt.Sprintf("%+v", msg)))
+
 		// send each message to appropriate tagfilter by `tag`
-		for msg := range d.InChan {
+		for msg = range d.InChan {
 			d.counter.Count()
 			if inChanForEachTagi, ok = d.concatorMap.Load(msg.Tag); !ok {
 				// new tag, create new tagfilter and its inchan

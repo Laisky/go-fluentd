@@ -1,212 +1,72 @@
-consts:
-  kafka:
-    172-16-6-11-9092: &172-16-6-11-9092
-      - 172.16.6.11:9092
-      - 172.16.6.12:9092
-      - 172.16.6.13:9092
-    172-16-4-63-9092: &172-16-4-63-9092
-      - 172.16.4.63:9092
-      - 172.16.4.64:9092
-      - 172.16.4.65:9092
-  tags:
-    all-tags: &all-tags
-      - test
-      - app.spring
-      - gateway
-      - connector
-      - cp
-      - ptdeployer
-      - httpguard
-      - ramjet
-      - tsp
-      - ai
-      - base
-      - geely
-      - bot
-      - spark
-      - emqtt
-      - kafkabuf
 settings:
-  acceptor:
-    async_out_chan_size: 100000
-    sync_out_chan_size: 10000
-    max_rotate_id: 100000000000  # do not change
-    recvs:
-      fluentd:
-        tag_key: tag
-        addr: 127.0.0.1:18082
-      rsyslog:
-        tag_key: tag
-        addr: 127.0.0.1:18083
-      kafka_recvs:
-        interval_num: 5000
-        interval_sec: 3
-        tenants:
-          spark:
-            name: spark
-            nconsumer: 1
-            msg_key: log
-            tag_key: tag
-            is_json_format: false
-            meta:
-              container_id: "go-fluentd"
-            groups:
-              sit: paas_spark_log_sit_v2
-              uat: paas_spark_log_uat_v2
-              perf: paas_spark_log_perf_v2
-              prod: paas_spark_log_prod_v2
-            topics:
-              sit: logaiSit
-              uat: logaiUat
-              perf: logaiPerf
-              prod: logaiPro
-            tags:
-              sit: spark.sit
-              uat: spark.uat
-              perf: spark.perf
-              prod: spark.prod
-            brokers:
-              sit: *172-16-6-11-9092
-              uat: *172-16-6-11-9092
-              perf: *172-16-6-11-9092
-              prod: *172-16-4-63-9092
-          kafkabuf:
-            name: kafkabuf
-            nconsumer: 1
-            msg_key: log
-            is_json_format: true
-            json_tag_key: tag
-            tag_key: tag
-            # rewrite_tag: kafkabuf
-            groups:
-              sit: paas_log_platform_sit
-              perf: paas_log_platform_perf
-              uat: paas_log_platform_uat
-              prod: paas_log_platform_prod
-            topics:
-              sit: logbuf_sit
-              uat: logbuf_uat
-              perf: logbuf_perf
-              prod: logbuf_prod
-            brokers:
-              sit: *172-16-4-63-9092
-              uat: *172-16-4-63-9092
-              perf: *172-16-4-63-9092
-              prod: *172-16-4-63-9092
+  listen_addr: 127.0.0.1:18082
   producer:
     discard_chan_size: 50000
-    sender_inchan_size: 50000
+    sender_inchan_size: 8000
     tenants:
-      fluentd:  # also used by `acceptorFilters.default_f`
-        tags: *all-tags
+      fluentd:
+        tags: &all-tags
+          - test
+          - app.spring
+          - gateway
+          - connector
+          - cp
+          - ptdeployer
+          - tsp
+          - ai
+          - base
+          - geely
+          - bot
+          - spark
         forks: 3
         addr: 127.0.0.1:24225
         msg_batch_size: 1000
         max_wait_sec: 5
         retry_chan_len: 10000
-        is_discard_when_blocked: true
-      es_general:
-        tags:
-          - es-general
-        forks: 10
-        addr: http://superuser:xxx@172.16.4.160:8200/_bulk
-        msg_batch_size: 1000
-        max_wait_sec: 3
-        tag_key: tag
-        retry_chan_len: 10000
-        indices:
-          app.spring.{env}: "{env}-spring-logs-write"
-          gateway.{env}: "{env}-gateway-logs-write"
-          connector.{env}: "{env}-connector-logs-write"
-          cp.{env}: "{env}-cp-logs-write"
-          ptdeployer.{env}: "{env}-spring-logs-write"
-          tsp.{env}: "{env}-spring-logs-write"
-          ai.{env}: "{env}-spring-logs-write"
-          base.{env}: "{env}-spring-logs-write"
-          bot.{env}: "{env}-spring-logs-write"
-          spark.{env}: "{env}-spark-logs-write"
-          emqtt.{env}: "{env}-emqtt-logs-write"
-        is_discard_when_blocked: false
-      es_geely:
-        tags:
-          - es-geely
-        forks: 10
-        addr: http://superuser:xxx@172.16.4.154:8200/_bulk
-        msg_batch_size: 1000
-        max_wait_sec: 3
-        tag_key: tag
-        retry_chan_len: 10000
-        indices:
-          geely.{env}: "{env}-geely-logs-write"
-        is_discard_when_blocked: false
-      # kafkabuf:
-      #   tag_key: tag
-      #   brokers:
-      #     - 172.16.4.63:9092
-      #     - 172.16.4.64:9092
-      #     - 172.16.4.65:9092
-      #   topic:
-      #     sit: logbuf_sit
-      #     perf: logbuf_perf
-      #     uat: logbuf_uat
-      #     prod: logbuf_prod
-      #   tags:  # all-tags exclude `kafkabuf`
-      #     - test
-      #     - app.spring
-      #     - gateway
-      #     - connector
-      #     - cp
-      #     - ptdeployer
-      #     - tsp
-      #     - ai
-      #     - base
-      #     - geely
-      #     - bot
-      #     - spark
-      #     - emqtt
-      #   forks: 3
-      #   msg_batch_size: 10000
-      #   max_wait_sec: 5
-      #   retry_chan_len: 100000
-      #   is_discard_when_blocked: false
-      kafka_cp:
-        tag_key: tag
+      kafka:
         brokers:
-          sit: *172-16-6-11-9092
-          perf: *172-16-6-11-9092
-          uat: *172-16-6-11-9092
-          prod: *172-16-4-63-9092
+          - xxx:9092
+        topic:
+          sit: logbuf_sit
+          perf: logbuf_perf
+          uat: logbuf_uat
+          prod: logbuf_prod
+        tags: *all-tags
+        forks: 3
+        msg_batch_size: 10000
+        max_wait_sec: 5
+        retry_chan_len: 10000
+      kafka_cp:
+        brokers:
+          sit: &default-kafka-brokers
+            - xxx
+          perf: *default-kafka-brokers
+          uat: *default-kafka-brokers
+          prod:
+            - xxx
         topic: docker_message
         tags:
           - cp
         forks: 3
         msg_batch_size: 10000
         max_wait_sec: 5
-        retry_chan_len: 100000
-        is_discard_when_blocked: false
-      fluentd_backup_geely:
+        retry_chan_len: 10000
+      fluentd_backup:
         tags:
           - geely
         forks: 3
         addr: fluentd-sit.ptcloud.t.home:24235
-        msg_batch_size: 10000
+        msg_batch_size: 1000
         max_wait_sec: 5
-        retry_chan_len: 50000
-        is_discard_when_blocked: true
-      fluentd_backup_emqtt:
-        tags:
-          - emqtt
-        forks: 3
-        addr: fluentd-sit.ptcloud.t.home:24236
-        msg_batch_size: 10000
-        max_wait_sec: 5
-        retry_chan_len: 50000
-        is_discard_when_blocked: true
+        retry_chan_len: 10000
   journal:
     buf_dir_path: /Users/laisky/Downloads/buf
     buf_file_bytes: 209315200  # 200 MB
     journal_out_chan_len: 100000
     commit_id_chan_len: 500000
+  acceptor:
+    out_chan_size: 100000
+    max_rotate_id: 100000000  # do not change
   acceptor_filters:
     out_buf_len: 150000
     reenter_chan_len: 5000
@@ -218,7 +78,6 @@ settings:
         ignore_regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2},\d{3} +\[
       spring:
         msg_key: log
-        tag_key: tag
         rules:
           - new_tag: cp.{env}
             regexp: ms:cp
@@ -234,24 +93,39 @@ settings:
       default:
         msg_key: log
         max_len: 307200
-      es_dispatcher:
-        tags: *all-tags
-        tag_key: tag
-        rewrite_tag_map:
-          # es-general
-          app.spring.{env}: es-general.{env}
-          gateway.{env}: es-general.{env}
-          connector.{env}: es-general.{env}
-          cp.{env}: es-general.{env}
-          ptdeployer.{env}: es-general.{env}
-          tsp.{env}: es-general.{env}
-          ai.{env}: es-general.{env}
-          base.{env}: es-general.{env}
-          bot.{env}: es-general.{env}
-          spark.{env}: es-general.{env}
-          emqtt.{env}: es-general.{env}
-          # es-geely
-          geely.{env}: es-geely.{env}
+  kafka_recvs:
+    interval_num: 1000
+    interval_sec: 30
+    tenants:
+      spark:
+        nconsumer: 10
+        msg_key: log
+        meta:
+          container_id: "go-fluentd"
+        groups:
+          sit: paas_spark_log_sit_v2
+          uat: paas_spark_log_uat_v2
+          perf: paas_spark_log_perf_v2
+          prod: paas_spark_log_prod_v2
+        topics:
+          sit: logaiSit
+          uat: logaiUat
+          perf: logaiPerf
+          prod: logaiPro
+        tags:
+          sit: spark.sit
+          uat: spark.uat
+          perf: spark.perf
+          prod: spark.prod
+        brokers:
+          sit:
+            - xxx
+          uat:
+            - xxx
+          perf:
+            - xxx
+          prod:
+            - xxx
   dispatcher:
     out_chan_size: 10000
   tag_filters:
@@ -265,38 +139,18 @@ settings:
         # 2018-04-02 02:02:10.928 | sh-datamining | INFO | http-nio-8080-exec-80 | com.pateo.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74 | {"key": "value"}: xxx
         # 2018-04-02 02:02:10.928 | sh-datamining | INFO | http-nio-8080-exec-80 | com.pateo.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74 | xxx
         # 2018-03-12 02:02:10.928 | gateway | INFO | http-nio-8080-exec-80 | com.pateo.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74: {"key": "value"}:xxx
-        pattern: (?ms)^(?P<time>.{23}) {0,}\| {0,}(?P<app>[^\|]+) {0,}\| {0,}(?P<level>[^\|]+) {0,}\| {0,}(?P<thread>[^\|]+) {0,}\| {0,}(?P<class>[^\|]+) {0,}\| {0,}(?P<line>\d+) {0,}([\|:] {0,}(?P<args>\{.*\}))?([\|:] {0,}(?P<message>.*))?
+        pattern: (?ms)^(?P<time>.{23}) {0,}\| {0,}(?P<app>[^ ]+) {0,}\| {0,}(?P<level>[^ ]+) {0,}\| {0,}(?P<thread>[^ ]+) {0,}\| {0,}(?P<class>[^ ]+) {0,}\| {0,}(?P<line>\d+) {0,}([\|:] {0,}(?P<args>\{.*\}))?([\|:] {0,}(?P<message>.*))?
         is_remove_orig_log: true
         parse_json_key: args
         must_include: app
-        # ⬇⬇ time
-        time_key: time
-        time_format: "2006-01-02 15:04:05.000 -0700"
-        new_time_format: "2006-01-02T15:04:05.000000Z"
-        reserved_time_key: false
-        new_time_key: "@timestamp"
-        append_time_zone: "+0800"
       geely:
         tags:
           - geely
         msg_key: log
         # 2018-02-05 10:33:13.408 | geely:nlcc | INFO | http-bio-8081-exec-3 | com.tservice.cc.web.interceptor.MyLoggingOutInterceptor.handleMessage:57 - Outbound Message:{ID:1, Address:http://10.133.200.77:8082/gisnavi/tservice/gisnavi/poi/poicategory, Http-Method:GET, Content-Type:application/json, Headers:{Content-Type=[application/json], Accept=[application/json]}}
-        pattern: (?ms)^(?P<time>.{23}) {0,}\| {0,}(?P<project>[^\|]+) {0,}\| {0,}(?P<level>[^\|]+) {0,}\| {0,}(?P<thread>[^\|]+) {0,}\| {0,}(?P<class>[^\:]+)\:(?P<line>\d+) {0,}- {0,}(?P<message>.+)
+        pattern: (?ms)^(?P<time>.{23}) {0,}\| {0,}(?P<project>[^ ]+) {0,}\| {0,}(?P<level>[^ ]+) {0,}\| {0,}(?P<thread>[^\|]+) {0,}\| {0,}(?P<class>[^\:]+)\:(?P<line>\d+) {0,}- {0,}(?P<message>.+)
         is_remove_orig_log: true
         must_include: project
-        # ⬇⬇ time
-        time_key: time
-        time_format: "2006-01-02 15:04:05.000 -0700"
-        new_time_format: "2006-01-02T15:04:05.000000Z"
-        reserved_time_key: false
-        new_time_key: "@timestamp"
-        append_time_zone: "+0800"
-      emqtt:
-        tags:
-          - emqtt
-        add:
-          emqtt:
-            datasource: emqtt
       spark:
         tags:
           - spark
@@ -305,35 +159,17 @@ settings:
         pattern: "(?ms)^(?P<time>.{23}) {0,}(?P<level>[^ ]+) +(?P<uuid>[^ ]+) +(?P<app_info>[^:]+) {0,}: {0,}(?P<message>.*)"
         is_remove_orig_log: true
         must_include: app_info
-        # ⬇⬇ time
-        time_key: time
-        time_format: "2006/01/02 15:04:05.000 -0700"
-        new_time_format: "2006-01-02T15:04:05.000000Z"
-        reserved_time_key: false
-        new_time_key: "@timestamp"
-        append_time_zone:
-          sit: "+0800"
-          perf: "+0000"
-          uat: "+0000"
-          prod: "+0800"
       ptdeployer:
         tags:
           - ptdeployer
         msg_key: log
         # [2018-11-12 03:41:39,735 - ptdeployer - views.py - 1429 - INFO - app_log] - zihengni登录成功
-        pattern: (?ms)^\[(?P<time>.{23}) {0,}- {0,}(?P<app>[^\-]+) {0,}- {0,}(?P<class>[^\-]+) {0,}- {0,}(?P<line>\d+) {0,}- {0,}(?P<level>[^\-]+) {0,}- {0,}(?P<thread>[^\|]+)\] {0,}- {0,}(?P<message>.*)
+        pattern: (?ms)^\[(?P<time>.{23}) {0,}- {0,}(?P<app>[^ ]+) {0,}- {0,}(?P<class>[^ ]+) {0,}- {0,}(?P<line>\d+) {0,}- {0,}(?P<level>[^ ]+) {0,}- {0,}(?P<thread>[^\|]+)\] {0,}- {0,}(?P<message>.*)
         is_remove_orig_log: true
         must_include: app
         add:  # optional
           ptdeployer:
             datasource: ptdeployer
-        # ⬇⬇ time
-        time_key: time
-        time_format: "2006-01-02 15:04:05,000 -0700"
-        new_time_format: "2006-01-02T15:04:05.000000Z"
-        reserved_time_key: false
-        new_time_key: "@timestamp"
-        append_time_zone: "+0000"
       cp:
         tags:
           - cp
@@ -345,13 +181,6 @@ settings:
         add:  # optional
           cp:
             datasource: cp
-        # ⬇⬇ time
-        time_key: time
-        time_format: "2006-01-02 15:04:05.000 -0700"
-        new_time_format: "2006-01-02T15:04:05.000000Z"
-        reserved_time_key: false
-        new_time_key: "@timestamp"
-        append_time_zone: "+0800"
       spring:
         tags:
           - app.spring
@@ -361,17 +190,9 @@ settings:
           - bot
         msg_key: log
         # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
-        pattern: (?ms)^(?P<time>.{23}) {0,}\| {0,}(?P<app>[^\|]+) {0,}\| {0,}(?P<level>[^\|]+) {0,}\| {0,}(?P<thread>[^\|]+) {0,}\| {0,}(?P<class>[^ ]+) {0,}\| {0,}(?P<line>\d+) {0,}([\|:] {0,}(?P<args>\{.*\}))?([\|:] {0,}(?P<message>.*))?
+        pattern: (?ms)^(?P<time>.{23}) {0,}\| {0,}(?P<app>[^ ]+) {0,}\| {0,}(?P<level>[^ ]+) {0,}\| {0,}(?P<thread>[^ ]+) {0,}\| {0,}(?P<class>[^ ]+) {0,}\| {0,}(?P<line>\d+) {0,}([\|:] {0,}(?P<args>\{.*\}))?([\|:] {0,}(?P<message>.*))?
         is_remove_orig_log: true
         must_include: app
-        # ⬇⬇ time
-        time_key: time
-        time_format: "2006-01-02 15:04:05.000 -0700"
-        new_time_format: "2006-01-02T15:04:05.000000Z"
-        reserved_time_key: false
-        new_time_key: "@timestamp"
-        append_time_zone: "+0800"
-        # ⬇⬇ fields
         add:  # optional
           ai:
             datasource: ai

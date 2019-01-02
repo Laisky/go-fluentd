@@ -5,11 +5,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/go-utils/kafka"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"github.com/Laisky/go-fluentd/libs"
 )
 
 func GetKafkaRewriteTag(rewriteTag, env string) string {
@@ -63,6 +63,7 @@ func (r *KafkaRecv) Run() {
 	utils.Logger.Info("run KafkaRecv")
 	for i := 0; i < r.NConsumer; i++ {
 		go func(i int) {
+			defer utils.Logger.Panic("kafka reciver exit", zap.Int("n", i))
 			for {
 				cli, err := kafka.NewKafkaCliWithGroupId(&kafka.KafkaCliCfg{
 					Brokers:          r.Brokers,

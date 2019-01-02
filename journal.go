@@ -1,6 +1,7 @@
 package concator
 
 import (
+	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -123,6 +124,7 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan, dumpChan chan *l
 func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, dumpChan, skipDumpChan chan *libs.FluentMsg) chan *libs.FluentMsg {
 	// deal with legacy
 	go func() {
+		defer utils.Logger.Panic("legacy processor exit")
 		var err error
 		for {
 			if _, err = j.ProcessLegacyMsg(msgPool, j.outChan, dumpChan); err != nil {
@@ -133,6 +135,7 @@ func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, dumpChan, skipDumpChan chan *l
 	}()
 
 	go func() {
+		defer utils.Logger.Panic("skipDumpChan goroutine exit")
 		for msg := range skipDumpChan {
 			j.outChan <- msg
 		}
@@ -144,8 +147,11 @@ func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, dumpChan, skipDumpChan chan *l
 			data     = map[string]interface{}{}
 			nRetry   = 0
 			maxRetry = 5
+			msg      *libs.FluentMsg
 		)
-		for msg := range dumpChan {
+		defer utils.Logger.Panic("legacy dumper exit", zap.String("msg", fmt.Sprintf("%+v", msg)))
+
+		for msg = range dumpChan {
 			data["id"] = msg.Id
 			data["message"] = msg.Message
 			data["tag"] = msg.Tag
@@ -188,6 +194,8 @@ func (j *Journal) GetCommitChan() chan<- int64 {
 		commitChan = make(chan int64, j.CommitIdChanLen)
 	)
 	go func() {
+		defer utils.Logger.Panic("id commitor exit")
+
 		for id := range commitChan {
 			for {
 				if err = j.j.WriteId(id); err != nil {

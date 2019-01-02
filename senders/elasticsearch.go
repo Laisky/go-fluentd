@@ -187,7 +187,7 @@ func (s *ElasticSearchSender) Spawn(tag string) chan<- *libs.FluentMsg {
 
 	for i := 0; i < s.NFork; i++ { // parallel to each tag
 		go func() {
-			defer utils.Logger.Error("producer exits", zap.String("tag", tag))
+			defer utils.Logger.Error("producer exits", zap.String("tag", tag), zap.String("name", s.GetName()))
 
 			var (
 				nRetry           = 0

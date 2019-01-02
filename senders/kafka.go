@@ -65,6 +65,7 @@ func (s *KafkaSender) Spawn(tag string) chan<- *libs.FluentMsg {
 
 	for i := 0; i < s.NFork; i++ {
 		go func() {
+			defer utils.Logger.Panic("kafka sender exit", zap.String("tag", tag), zap.String("name", s.GetName()))
 			var (
 				jb                []byte
 				nRetry            = 0

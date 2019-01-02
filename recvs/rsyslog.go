@@ -3,10 +3,10 @@ package recvs
 import (
 	"time"
 
+	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-syslog"
 	"github.com/Laisky/go-utils"
 	"go.uber.org/zap"
-	"github.com/Laisky/go-fluentd/libs"
 )
 
 func NewRsyslogSrv(addr string) (*syslog.Server, syslog.LogPartsChannel) {
@@ -46,6 +46,7 @@ func (r *RsyslogRecv) Run() {
 	utils.Logger.Info("Run RsyslogRecv")
 
 	go func() {
+		defer utils.Logger.Panic("rsyslog reciver exit", zap.String("name", r.GetName()))
 		var (
 			err error
 			msg *libs.FluentMsg

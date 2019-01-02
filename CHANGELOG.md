@@ -2,10 +2,32 @@
 *CURRENT*
 ---
     
-- 2018-12-21 (Laisky) fix -> [view commit](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commit/8116fde484aa51424952ff8a3f10caa5aac4590b)
-- 2018-12-21 (Laisky) fix(paas-243): unblocked dispatcher -> [view commit](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commit/68a0561983fa21c7757ac6273766f361b1d30a1c)
-- 2018-12-21 (Laisky) fix -> [view commit](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commit/f437217ea031d6423f30105a68cd695a625b3c4b)
-- 2018-12-21 (Laisky) fix: spark rewrite tag -> [view commit](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commit/e1882c9739d83ce79ddb4b6b6739a8b596f9687a)
+    
+       
+*1.5.3*
+---
+    
+- 2018-12-27 (Laisky) feat(paas-249): set default_field `message` default to "" -> [view commit](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commit/d5f3db2ad426444eb29eb5f5bb67d53ef7609fb2)
+- 2018-12-26 (Laisky) fix: add panic logging in goroutines -> [view commit](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commit/1b4f9db49352fc40e159041028db34b77270a33a)
+- 2018-12-26 (Laisky) docs: update changelog -> [view commit](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commit/b32483fff37ea78ffb374c9e44d19de58dd8b863)    
+       
+*1.5.2*
+---
+    
+- 2018-12-25 (Laisky) fix(paas-245): esdispatcher error -> [view commit](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commit/c2407063c8e182cc941131199109711c5a83989c)
+- 2018-12-25 (Laisky) fix(paas-246): journal data should rewrite into journal -> [view commit](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commit/ed8453cb3c74ad2fcd125588d10554adebf6f907)
+- 2018-12-25 (Laisky) perf(paas-245): remove kafka buffer -> [view commit](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commit/c5176c39c71dc0d48a9245a629b90955cb8f5ec6)    
+       
+*1.5.1*
+---
+    
+- 2018-12-24 (Laisky) build: add http proxy -> [view commit](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commit/67282982a91ab3146c7f84f81fd1854cfb8e372b)
+- 2018-12-24 (Laisky) fix(paas-244): upgrade go-utils -> [view commit](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commit/e9be92a3fbadfb90bd11b8cd722b6150c348a41e)    
+       
+*1.5*
+---
+    
+- 2018-12-24 (Laisky) feat(paas-212): async dispatcher -> [view commit](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commit/a4d8ddb29555eb4a6c9684f5c2d96f1ef4a7c513)
 - 2018-12-21 (Laisky) fix(paas-212): some errors during testing -> [view commit](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commit/3be24c8b7f7fea16f5f4f2bb1962a8745b40a052)
 - 2018-12-19 (Laisky) Revert "Revert "Merge branch 'feature/paas-212-fluent-buf' into develop"" -> [view commit](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commit/f4231241dc987c2ae3898569e88b3e1d9518c433)
 - 2018-12-19 (Laisky) Revert "Merge branch 'feature/paas-212-fluent-buf' into develop" -> [view commit](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commit/e623dd44a22edd7f1de65afcf716c72c0bcdbd70)

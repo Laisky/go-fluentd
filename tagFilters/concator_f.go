@@ -92,8 +92,8 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 						default:
 							utils.Logger.Error("[panic] unknown type of `pmsg.msg.Message[c.MsgKey]`",
 								zap.String("tag", pmsg.msg.Tag),
-								zap.String("log", fmt.Sprintf("%v", pmsg.msg.Message[c.MsgKey])),
-								zap.String("msg", fmt.Sprintf("%+v", pmsg.msg)))
+								zap.String("log", fmt.Sprint(pmsg.msg.Message[c.MsgKey])),
+								zap.String("msg", fmt.Sprint(pmsg.msg)))
 						}
 
 						c.PutDownstream(pmsg.msg)
@@ -118,7 +118,8 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 		default:
 			utils.Logger.Warn("unknown identifier or unknown type",
 				zap.String("tag", msg.Tag),
-				zap.String("identifier", c.Identifier))
+				zap.String("identifier_key", c.Identifier),
+				zap.String("identifier", fmt.Sprint(msg.Message[c.Identifier])))
 			c.PutDownstream(msg)
 			continue
 		}
@@ -133,7 +134,8 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 		default:
 			utils.Logger.Warn("unknown msg key or unknown type",
 				zap.String("tag", msg.Tag),
-				zap.String("msg_key", c.MsgKey))
+				zap.String("msg_key", c.MsgKey),
+				zap.String("msg", fmt.Sprint(msg.Message[c.MsgKey])))
 			c.PutDownstream(msg)
 			continue
 		}

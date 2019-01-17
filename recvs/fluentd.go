@@ -1,24 +1,21 @@
-// Package recvs defines different kind of receivers.
-//
-// recvs are components applied in acceptor. Each recv can
-// receiving specific kind of messages. All recv should
-// satisfy `libs.AcceptorRecvItf`.
 package recvs
 
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"net"
 
+	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
 	"github.com/ugorji/go/codec"
 	"go.uber.org/zap"
-	"github.com/Laisky/go-fluentd/libs"
 )
 
 type FluentdRecvCfg struct {
-	Addr, TagKey string
+	Name, Addr, TagKey     string
+	IsRewriteTagFromTagKey bool
 }
 
 type FluentdRecv struct {
@@ -35,7 +32,7 @@ func NewFluentdRecv(cfg *FluentdRecvCfg) *FluentdRecv {
 }
 
 func (r *FluentdRecv) GetName() string {
-	return "FluentdRecv"
+	return r.Name
 }
 
 func (r *FluentdRecv) Run() {
@@ -135,7 +132,11 @@ func (r *FluentdRecv) decodeMsg(conn net.Conn) {
 					break
 				} else {
 					msg = r.msgPool.Get().(*libs.FluentMsg)
-					msg.Message = v2[1].(map[string]interface{})
+					if msg.Message, ok = v2[1].(map[string]interface{}); !ok {
+						utils.Logger.Error("msg format incorrect", zap.String("msg", fmt.Sprint(v2[1])))
+						r.msgPool.Put(msg)
+						continue
+					}
 					msg.Tag = tag
 					r.SendMsg(msg)
 				}
@@ -151,7 +152,26 @@ func (r *FluentdRecv) decodeMsg(conn net.Conn) {
 }
 
 func (r *FluentdRecv) SendMsg(msg *libs.FluentMsg) {
+	if r.IsRewriteTagFromTagKey {
+		switch msg.Message[r.TagKey].(type) {
+		case string:
+			msg.Tag = msg.Message[r.TagKey].(string)
+		case []byte:
+			msg.Tag = string(msg.Message[r.TagKey].([]byte))
+		default:
+			utils.Logger.Warn("unknown type of msg tag key",
+				zap.String("tag", fmt.Sprint(msg.Message[r.TagKey])),
+				zap.String("tag_key", r.TagKey))
+			r.msgPool.Put(msg)
+			return
+		}
+
+		utils.Logger.Debug("rewrite msg tag", zap.String("new_tag", msg.Tag))
+	} else {
+		msg.Message[r.TagKey] = msg.Tag
+	}
+
 	msg.Id = r.counter.Count()
-	msg.Message[r.TagKey] = msg.Tag
+	utils.Logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id))
 	r.asyncOutChan <- msg
 }

@@ -22,7 +22,8 @@ func NewRsyslogSrv(addr string) (*syslog.Server, syslog.LogPartsChannel) {
 }
 
 type RsyslogCfg struct {
-	Addr, Env, TagKey string
+	Name, Addr, Env, TagKey, MsgKey    string
+	NewTimeFormat, TimeKey, NewTimeKey string
 }
 
 // RsyslogRecv
@@ -39,7 +40,7 @@ func NewRsyslogRecv(cfg *RsyslogCfg) *RsyslogRecv {
 }
 
 func (r *RsyslogRecv) GetName() string {
-	return "RsyslogRecv"
+	return r.Name
 }
 
 func (r *RsyslogRecv) Run() {
@@ -64,17 +65,17 @@ func (r *RsyslogRecv) Run() {
 			}
 
 			for logPart := range inchan {
-				switch logPart["timestamp"].(type) {
+				switch logPart[r.TimeKey].(type) {
 				case time.Time:
-					logPart["@timestamp"] = logPart["timestamp"].(time.Time).UTC().Format("2006-01-02T15:04:05.000000Z")
-					delete(logPart, "timestamp")
+					logPart[r.NewTimeKey] = logPart[r.TimeKey].(time.Time).UTC().Format(r.NewTimeFormat)
+					delete(logPart, r.TimeKey)
 				default:
 					utils.Logger.Error("unknown timestamp format")
 				}
 
 				// rename to message because of the elasticsearch default query field is `message`
-				logPart["message"] = logPart["content"]
-				delete(logPart, "content")
+				logPart["message"] = logPart[r.MsgKey]
+				delete(logPart, r.MsgKey)
 
 				msg = r.msgPool.Get().(*libs.FluentMsg)
 				// utils.Logger.Info(fmt.Sprintf("got %p", msg))

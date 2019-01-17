@@ -16,15 +16,6 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	httpClient = &http.Client{ // default http client
-		Transport: &http.Transport{
-			MaxIdleConnsPerHost: 20,
-		},
-		Timeout: time.Duration(30) * time.Second,
-	}
-)
-
 func LoadESTagIndexMap(env string, mapi interface{}) map[string]string {
 	tagIndexMap := map[string]string{}
 	for tag, indexi := range mapi.(map[string]interface{}) {
@@ -47,6 +38,7 @@ type ElasticSearchSender struct {
 	*BaseSender
 	*ElasticSearchSenderCfg
 	retryMsgChan chan *libs.FluentMsg
+	httpClient   *http.Client
 }
 
 func NewElasticSearchSender(cfg *ElasticSearchSenderCfg) *ElasticSearchSender {
@@ -65,6 +57,12 @@ func NewElasticSearchSender(cfg *ElasticSearchSenderCfg) *ElasticSearchSender {
 		},
 		ElasticSearchSenderCfg: cfg,
 		retryMsgChan:           make(chan *libs.FluentMsg, cfg.RetryChanSize),
+		httpClient: &http.Client{ // default http client
+			Transport: &http.Transport{
+				MaxIdleConnsPerHost: 20,
+			},
+			Timeout: time.Duration(30) * time.Second,
+		},
 	}
 	f.SetSupportedTags(cfg.Tags)
 	return f
@@ -74,7 +72,7 @@ func (s *ElasticSearchSender) GetName() string {
 	return s.Name
 }
 
-type ESBulkCtx struct {
+type BulkOpCtx struct {
 	body     []byte
 	buf      *bytes.Buffer
 	gzWriter *gzip.Writer
@@ -93,7 +91,7 @@ func (s *ElasticSearchSender) getMsgStarting(msg *libs.FluentMsg) ([]byte, error
 	return []byte("{\"index\": {\"_index\": \"" + index + "\", \"_type\": \"logs\"}}\n"), nil
 }
 
-func (s *ElasticSearchSender) SendBulkMsgs(ctx *ESBulkCtx, msgs []*libs.FluentMsg) (err error) {
+func (s *ElasticSearchSender) SendBulkMsgs(ctx *BulkOpCtx, msgs []*libs.FluentMsg) (err error) {
 	cnt := []byte{}
 	var starting []byte
 	for _, m := range msgs {
@@ -129,10 +127,12 @@ func (s *ElasticSearchSender) SendBulkMsgs(ctx *ESBulkCtx, msgs []*libs.FluentMs
 	}
 	req.Close = true
 	req.Header.Set("Content-encoding", "gzip")
-	resp, err := httpClient.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return errors.Wrap(err, "try to request es got error")
 	}
+	defer resp.Body.Close()
+
 	if err = s.checkResp(resp); err != nil {
 		return errors.Wrap(err, "request es got error")
 	}
@@ -164,17 +164,25 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
 	ret := &ESResp{}
 	bb, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return errors.Wrap(err, "try to read es resp body got error")
+		utils.Logger.Error("try to read es resp body got error", zap.Error(err))
+		return nil
 	}
-	defer resp.Body.Close()
 
 	if err = json.Unmarshal(bb, ret); err != nil {
-		return errors.Wrapf(err, "try to unmarshal body got error, body: %v", string(bb))
+		utils.Logger.Error("try to unmarshal body got error, body",
+			zap.Error(err),
+			zap.ByteString("body", bb))
+		return nil
 	}
 
 	for _, v := range ret.Items {
 		if utils.FloorDivision(v.Index.Status, 100) != 2 {
-			return fmt.Errorf("bulk got error for idx `%v`: %v", v.Index.Index, v.Index.Status)
+			// do not retry if there is part of msgs got error
+			utils.Logger.Warn("bulk got error for idx",
+				zap.ByteString("body", bb),
+				zap.String("idx", v.Index.Index),
+				zap.Int("status", v.Index.Status))
+			return nil
 		}
 	}
 
@@ -198,7 +206,7 @@ func (s *ElasticSearchSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				iBatch           = 0
 				lastT            = time.Unix(0, 0)
 				err              error
-				ctx              = &ESBulkCtx{}
+				ctx              = &BulkOpCtx{}
 				j                int
 			)
 
@@ -220,7 +228,7 @@ func (s *ElasticSearchSender) Spawn(tag string) chan<- *libs.FluentMsg {
 					for j, msg = range msgBatchDelivery {
 						utils.Logger.Info("send message to backend",
 							zap.String("tag", tag),
-							zap.String("log", fmt.Sprintf("%+v", msgBatch[j].Message)))
+							zap.String("log", fmt.Sprint(msgBatch[j].Message)))
 						s.discardChan <- msg
 					}
 					continue

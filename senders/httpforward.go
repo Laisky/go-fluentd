@@ -1,16 +1,18 @@
 package senders
 
 import (
+	"encoding/json"
 	"fmt"
-	"net"
+	"net/http"
 	"time"
 
-	"github.com/Laisky/go-fluentd/libs"
-	"github.com/Laisky/go-utils"
+	utils "github.com/Laisky/go-utils"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"github.com/Laisky/go-fluentd/libs"
 )
 
-type FluentSenderCfg struct {
+type HTTPSenderCfg struct {
 	Name, Addr                                  string
 	Tags                                        []string
 	BatchSize, InChanSize, RetryChanSize, NFork int
@@ -18,37 +20,44 @@ type FluentSenderCfg struct {
 	IsDiscardWhenBlocked                        bool
 }
 
-type FluentSender struct {
+type HTTPSender struct {
 	*BaseSender
-	*FluentSenderCfg
+	*HTTPSenderCfg
 	retryMsgChan chan *libs.FluentMsg
+	httpClient   *http.Client
 }
 
-func NewFluentSender(cfg *FluentSenderCfg) *FluentSender {
-	utils.Logger.Info("new fluent sender",
+func NewHTTPSender(cfg *HTTPSenderCfg) *HTTPSender {
+	utils.Logger.Info("new http sender",
 		zap.String("addr", cfg.Addr),
 		zap.Strings("tags", cfg.Tags))
 
 	if cfg.Addr == "" {
-		utils.Logger.Panic("addr should not be empty")
+		panic(fmt.Errorf("addr should not be empty: %v", cfg.Addr))
 	}
 
-	f := &FluentSender{
+	f := &HTTPSender{
 		BaseSender: &BaseSender{
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
 		},
-		FluentSenderCfg: cfg,
-		retryMsgChan:    make(chan *libs.FluentMsg, cfg.RetryChanSize),
+		HTTPSenderCfg: cfg,
+		retryMsgChan:  make(chan *libs.FluentMsg, cfg.RetryChanSize),
+		httpClient: &http.Client{ // default http client
+			Transport: &http.Transport{
+				MaxIdleConnsPerHost: 30,
+			},
+			Timeout: time.Duration(3) * time.Second,
+		},
 	}
 	f.SetSupportedTags(cfg.Tags)
 	return f
 }
 
-func (s *FluentSender) GetName() string {
+func (s *HTTPSender) GetName() string {
 	return s.Name
 }
 
-func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {
+func (s *HTTPSender) Spawn(tag string) chan<- *libs.FluentMsg {
 	utils.Logger.Info("SpawnForTag", zap.String("tag", tag))
 	inChan := make(chan *libs.FluentMsg, s.InChanSize) // for each tag
 
@@ -64,22 +73,10 @@ func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				msgBatchDelivery []*libs.FluentMsg
 				iBatch           = 0
 				lastT            = time.Unix(0, 0)
-				encoder          *libs.FluentEncoder
-				conn             net.Conn
+				ctx              = &BulkOpCtx{}
 				err              error
 			)
 
-		RECONNECT: // reconnect to downstream
-			conn, err = net.DialTimeout("tcp", s.Addr, 10*time.Second)
-			if err != nil {
-				utils.Logger.Error("try to connect to backend got error", zap.Error(err), zap.String("tag", tag))
-				goto RECONNECT
-			}
-			utils.Logger.Info("connected to backend",
-				zap.String("backend", conn.RemoteAddr().String()),
-				zap.String("tag", tag))
-
-			encoder = libs.NewFluentEncoder(conn) // one encoder for each connection
 			for msg = range inChan {
 				msgBatch[iBatch] = msg
 				iBatch++
@@ -103,7 +100,7 @@ func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				}
 
 			SEND_MSG:
-				if err = encoder.EncodeBatch(tag, msgBatchDelivery); err != nil {
+				if err = s.SendBulkMsgs(ctx, msgBatchDelivery); err != nil {
 					nRetry++
 					if nRetry > maxRetry {
 						utils.Logger.Error("try send message got error", zap.Error(err), zap.String("tag", tag))
@@ -112,18 +109,15 @@ func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {
 							s.discardWithoutCommitChan <- msg
 						}
 
-						if err = conn.Close(); err != nil {
-							utils.Logger.Error("try to close connection got error", zap.Error(err))
-						}
-						utils.Logger.Info("connection closed, try to reconnect...")
-						goto RECONNECT
+						continue
 					}
 					goto SEND_MSG
 				}
 
 				utils.Logger.Debug("success sent message to backend",
 					zap.String("backend", s.Addr),
-					zap.String("tag", tag))
+					zap.Int("batch", len(msgBatchDelivery)),
+					zap.String("tag", msg.Tag))
 				for _, msg = range msgBatchDelivery {
 					s.discardChan <- msg
 				}
@@ -132,4 +126,39 @@ func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {
 	}
 
 	return inChan
+}
+
+func (s *HTTPSender) SendBulkMsgs(ctx *BulkOpCtx, msgs []*libs.FluentMsg) (err error) {
+	msgCnts := make([]map[string]interface{}, len(msgs))
+	for i, m := range msgs {
+		msgCnts[i] = m.Message
+	}
+
+	ctx.buf.Reset()
+	ctx.gzWriter.Reset(ctx.buf)
+	var jb []byte
+	if jb, err = json.Marshal(msgCnts); err != nil {
+		return errors.Wrap(err, "try to marshal messages got error")
+	}
+
+	if _, err = ctx.gzWriter.Write(jb); err != nil {
+		return errors.Wrap(err, "try to compress messages got error")
+	}
+
+	ctx.gzWriter.Flush()
+	req, err := http.NewRequest("POST", s.Addr, ctx.buf)
+	if err != nil {
+		return errors.Wrap(err, "try to init es request got error")
+	}
+	req.Header.Set("Content-encoding", "gzip")
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "try to request es got error")
+	}
+	if err = utils.CheckResp(resp); err != nil {
+		return errors.Wrap(err, "request es got error")
+	}
+
+	utils.Logger.Debug("httpforward bulk all done", zap.Int("batch", len(msgs)))
+	return nil
 }

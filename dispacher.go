@@ -60,7 +60,7 @@ func (d *Dispatcher) Run() {
 			counterI          interface{}
 			msg               *libs.FluentMsg
 		)
-		defer utils.Logger.Panic("dispatcher exit with msg", zap.String("msg", fmt.Sprintf("%+v", msg)))
+		defer utils.Logger.Panic("dispatcher exit with msg", zap.String("msg", fmt.Sprint(msg)))
 
 		// send each message to appropriate tagfilter by `tag`
 		for msg = range d.InChan {

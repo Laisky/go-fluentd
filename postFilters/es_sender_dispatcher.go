@@ -55,7 +55,7 @@ func (f *ESDispatcherFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	}
 
 	if msg.Message[f.TagKey].(string) == "" {
-		utils.Logger.Error("msg tag should not empty", zap.String("msg", fmt.Sprintf("%+v", msg)))
+		utils.Logger.Error("msg tag should not empty", zap.String("msg", fmt.Sprint(msg)))
 		f.DiscardMsg(msg)
 		return nil
 	}

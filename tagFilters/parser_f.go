@@ -79,7 +79,7 @@ func (f *Parser) Run() {
 			default:
 				utils.Logger.Warn("msg key not exists or unknown type",
 					zap.String("tag", msg.Tag),
-					zap.String("msg", fmt.Sprintf("%+v", msg.Message)),
+					zap.String("msg", fmt.Sprint(msg.Message)),
 					zap.String("msg_key", f.MsgKey))
 				f.OutChan <- msg
 				continue
@@ -165,7 +165,7 @@ func (f *Parser) Run() {
 			default:
 				utils.Logger.Error("unknown time format",
 					zap.Error(err),
-					zap.String("ts", fmt.Sprintf("%+v", msg.Message[f.TimeKey])),
+					zap.String("ts", fmt.Sprint(msg.Message[f.TimeKey])),
 					zap.String("time_key", f.TimeKey),
 					zap.String("time_format", f.TimeFormat),
 					zap.String("append_time_zone", f.AppendTimeZone))

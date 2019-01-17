@@ -41,7 +41,7 @@ func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	case nil:
 		msg.Message[DefaultSearchField] = ""
 	default:
-		utils.Logger.Error("unknown message type", zap.String("message", fmt.Sprintf("%+v", msg.Message[DefaultSearchField])))
+		utils.Logger.Error("unknown message type", zap.String("message", fmt.Sprint(msg.Message[DefaultSearchField])))
 	}
 
 	return msg

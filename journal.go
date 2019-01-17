@@ -149,7 +149,7 @@ func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, dumpChan, skipDumpChan chan *l
 			maxRetry = 5
 			msg      *libs.FluentMsg
 		)
-		defer utils.Logger.Panic("legacy dumper exit", zap.String("msg", fmt.Sprintf("%+v", msg)))
+		defer utils.Logger.Panic("legacy dumper exit", zap.String("msg", fmt.Sprint(msg)))
 
 		for msg = range dumpChan {
 			data["id"] = msg.Id

@@ -1,3 +1,8 @@
+// Package recvs defines different kind of receivers.
+//
+// recvs are components applied in acceptor. Each recv can
+// receiving specific kind of messages. All recv should
+// satisfy `libs.AcceptorRecvItf`.
 package recvs
 
 import (

@@ -1,5 +1,5 @@
-hash: 2f82a0eb717a32e0041422b1b97d25193a0bea085786f91981258aba679f20cb
-updated: 2018-12-24T11:19:13.064034+08:00
+hash: 8a5520a8db94d9875158ca85b58bc2749208464eb1fc94820aed47eea3b6b23c
+updated: 2019-01-15T14:28:53.983638+08:00
 imports:
 - name: github.com/aymerick/raymond
   version: b565731e1464263de0bda75f2e45d97b54b60110
@@ -39,8 +39,6 @@ imports:
   version: 9f0cb55181dd3a0a4c168d3dbc72d4aca4853126
 - name: github.com/golang/snappy
   version: 2e65f85255dbc3072edf28d6b5b8efc472979f5a
-- name: github.com/hashicorp/go-version
-  version: 23480c0665776210b5fbbac6eaaee40e3e6a96b7
 - name: github.com/hashicorp/hcl
   version: ef8a98b0bbce4a65b5aa4c368430a80ddc533168
   subpackages:
@@ -68,7 +66,7 @@ imports:
 - name: github.com/kataras/golog
   version: 03be101463868edc5a81f094fc68a5f6c1b5503a
 - name: github.com/kataras/iris
-  version: 39b8b1eb00eae9914addee3dee3612ffa785817f
+  version: 5e81b605c93c0243fe5ac26e3b1378b5f549a8b2
   subpackages:
   - cache
   - cache/cfg
@@ -81,17 +79,15 @@ imports:
   - core/errors
   - core/handlerconv
   - core/host
-  - core/maintenance
-  - core/maintenance/version
   - core/memstore
   - core/netutil
   - core/router
-  - core/router/macro
-  - core/router/macro/interpreter/ast
-  - core/router/macro/interpreter/lexer
-  - core/router/macro/interpreter/parser
-  - core/router/macro/interpreter/token
-  - core/router/node
+  - macro
+  - macro/handler
+  - macro/interpreter/ast
+  - macro/interpreter/lexer
+  - macro/interpreter/parser
+  - macro/interpreter/token
   - middleware/logger
   - middleware/pprof
   - middleware/recover
@@ -99,11 +95,6 @@ imports:
 - name: github.com/kataras/pio
   version: a9733b5b6b83d32b479aacd51d26ef6018261963
   subpackages:
-  - terminal
-- name: github.com/kataras/survey
-  version: 00934ae069eda15df26fa427ac393e67e239380c
-  subpackages:
-  - core
   - terminal
 - name: github.com/klauspost/compress
   version: 5fb1f31b0a61e9858f12f39266e059848a5f1cea
@@ -122,19 +113,13 @@ imports:
   - internal/syslogparser/rfc3164
   - internal/syslogparser/rfc5424
 - name: github.com/Laisky/go-utils
-  version: 3750ef47a60e24bc27bac0c264dbb78f493f2a57
+  version: 99e95a5adc2f9436c3754d38c504eb6cea613a99
   vcs: git
   subpackages:
   - journal
   - kafka
 - name: github.com/magiconair/properties
   version: c2353362d570a7bfa228149c62842019201cfb71
-- name: github.com/mattn/go-colorable
-  version: efa589957cd060542a26d2dd7832fd6a6c6c3ade
-- name: github.com/mattn/go-isatty
-  version: 6ca4dbf54d38eea1a992b3c722a76a5d1c4cb25c
-- name: github.com/mgutz/ansi
-  version: 9520e82c474b0a04dd04f8a40959027271bab992
 - name: github.com/microcosm-cc/bluemonday
   version: 995366fdf961d03629cd17361bddd32745718e2c
 - name: github.com/mitchellh/mapstructure
@@ -154,7 +139,7 @@ imports:
   subpackages:
   - internal/xxh32
 - name: github.com/pkg/errors
-  version: 645ef00459ed84a119197bfb8d8205042c6df63d
+  version: ba968bfe8b2f7e042a574c888954fccecfa385b4
 - name: github.com/rcrowley/go-metrics
   version: e2704e165165ec55d062f5919b4b29494e9fa790
 - name: github.com/RoaringBitmap/roaring

@@ -147,7 +147,7 @@ func (p *Producer) RunMsgCollector(nSenderForTagMap *sync.Map, discardChan chan 
 		if itf, ok = nSenderForTagMap.Load(msg.Tag); !ok {
 			utils.Logger.Error("[panic] nSenderForTagMap should contains tag",
 				zap.String("tag", msg.Tag),
-				zap.String("msg", fmt.Sprintf("%+v", msg)))
+				zap.String("msg", fmt.Sprint(msg)))
 			cntToDiscard = 1
 		} else {
 			cntToDiscard = itf.(int)

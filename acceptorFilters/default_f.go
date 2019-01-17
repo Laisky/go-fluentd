@@ -9,7 +9,7 @@ import (
 type DefaultFilterCfg struct {
 	RemoveEmptyTag, RemoveUnsupportTag bool
 	SupportedTags                      []string
-	Env                                string
+	Name, Env                          string
 }
 
 type DefaultFilter struct {
@@ -28,10 +28,14 @@ func NewDefaultFilter(cfg *DefaultFilterCfg) *DefaultFilter {
 	}
 
 	for _, tag := range cfg.SupportedTags {
-		f.tags[tag+"."+cfg.Env] = struct{}{}
+		f.tags[tag+"."+f.Env] = struct{}{}
 	}
 
 	return f
+}
+
+func (f *DefaultFilter) GetName() string {
+	return f.Name
 }
 
 func (f *DefaultFilter) IsTagInConfigs(tag string) (ok bool) {

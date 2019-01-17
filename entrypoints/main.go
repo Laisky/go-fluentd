@@ -9,14 +9,11 @@ import (
 	utils "github.com/Laisky/go-utils"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+	"go.uber.org/zap"
 )
 
 // SetupSettings setup arguments restored in viper
 func SetupSettings() {
-	if err := utils.Settings.Setup(utils.Settings.GetString("config")); err != nil {
-		panic(err)
-	}
-
 	// check `--log-level`
 	switch utils.Settings.GetString("log-level") {
 	case "debug":
@@ -40,12 +37,49 @@ func SetupSettings() {
 	// mode
 	if utils.Settings.GetBool("debug") {
 		fmt.Println("run in debug mode")
+		utils.Settings.Set("log-level", "debug")
 	} else { // prod mode
 		fmt.Println("run in prod mode")
 	}
 
 	// log
 	utils.SetupLogger(utils.Settings.GetString("log-level"))
+
+	// load configuration
+	isCfgLoaded := false
+	cfgDirPath := utils.Settings.GetString("config")
+	if err := utils.Settings.Setup(cfgDirPath); err != nil {
+		utils.Logger.Info("can not load config from disk",
+			zap.String("dirpath", cfgDirPath))
+	} else {
+		utils.Logger.Info("success load configuration from dir",
+			zap.String("dirpath", cfgDirPath))
+		isCfgLoaded = true
+	}
+
+	if utils.Settings.GetString("config-server") != "" &&
+		utils.Settings.GetString("config-server-appname") != "" &&
+		utils.Settings.GetString("config-server-profile") != "" &&
+		utils.Settings.GetString("config-server-label") != "" &&
+		utils.Settings.GetString("config-server-key") != "" {
+		cfgSrvCfg := &utils.ConfigServerCfg{
+			Url:     utils.Settings.GetString("config-server"),
+			Profile: utils.Settings.GetString("config-server-profile"),
+			Label:   utils.Settings.GetString("config-server-label"),
+			App:     utils.Settings.GetString("config-server-appname"),
+		}
+		if err := utils.Settings.SetupFromConfigServerWithRawYaml(cfgSrvCfg, utils.Settings.GetString("config-server-key")); err != nil {
+			utils.Logger.Panic("try to load configuration from config-server got error", zap.Error(err))
+		} else {
+			utils.Logger.Info("success load configuration from config-server",
+				zap.String("cfg", fmt.Sprint(cfgSrvCfg)))
+			isCfgLoaded = true
+		}
+	}
+
+	if !isCfgLoaded {
+		utils.Logger.Panic("can not load any configuration")
+	}
 }
 
 func SetupArgs() {
@@ -53,6 +87,11 @@ func SetupArgs() {
 	pflag.Bool("dry", false, "run in dry mode")
 	pflag.Bool("pprof", false, "run in prof mode")
 	pflag.String("config", "/etc/go-ramjet/settings", "config file directory path")
+	pflag.String("config-server", "", "config server url")
+	pflag.String("config-server-appname", "", "config server app name")
+	pflag.String("config-server-profile", "", "config server profile name")
+	pflag.String("config-server-label", "", "config server branch name")
+	pflag.String("config-server-key", "", "raw content key ")
 	pflag.String("addr", "localhost:8080", "like `localhost:8080`")
 	pflag.String("env", "", "environment `sit/perf/uat/prod`")
 	pflag.String("log-level", "info", "`debug/info/error`")

@@ -16,8 +16,8 @@ type SpringReTagRule struct {
 }
 
 type SpringFilterCfg struct {
-	Tag, Env, MsgKey, TagKey string
-	Rules                    []*SpringReTagRule
+	Name, Tag, Env, MsgKey, TagKey string
+	Rules                          []*SpringReTagRule
 }
 
 type SpringFilter struct {
@@ -49,6 +49,10 @@ func NewSpringFilter(cfg *SpringFilterCfg) *SpringFilter {
 	}
 }
 
+func (f *SpringFilter) GetName() string {
+	return f.Name
+}
+
 func (f *SpringFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	if msg.Tag != f.Tag {
 		return msg
@@ -61,7 +65,7 @@ func (f *SpringFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	default:
 		utils.Logger.Warn("unknown type of msg",
 			zap.String("tag", msg.Tag),
-			zap.String("msg", fmt.Sprintf("%+v", msg.Message[f.MsgKey])))
+			zap.String("msg", fmt.Sprint(msg.Message[f.MsgKey])))
 		f.DiscardMsg(msg)
 		return nil
 	}

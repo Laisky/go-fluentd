@@ -109,7 +109,7 @@ func (s *KafkaSender) Spawn(tag string) chan<- *libs.FluentMsg {
 					if jb, err = json.Marshal(&msg.Message); err != nil {
 						utils.Logger.Error("marashal msg got error",
 							zap.Error(err),
-							zap.String("msg", fmt.Sprintf("%+v", msg)))
+							zap.String("msg", fmt.Sprint(msg)))
 						// TODO(potential bug): should remove element in msgBatchDelivery
 						continue
 					}

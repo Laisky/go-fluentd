@@ -2,6 +2,7 @@
 
 Rewrite fluentd-server by Golang.
 
+([中文文档](docs/README_cn.md))
 
 ## Description
 

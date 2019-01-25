@@ -1,31 +1,38 @@
-# Go-Fluentd 设计文档
+# 1. Go-Fluentd 设计文档
+
 
 <!-- TOC -->
-- [Go-Fluentd 设计文档](#go-fluentd-%E8%AE%BE%E8%AE%A1%E6%96%87%E6%A1%A3)
-  - [一、概述](#%E4%B8%80%E6%A6%82%E8%BF%B0)
-  - [二、功能](#%E4%BA%8C%E5%8A%9F%E8%83%BD)
-    - [1、Acceptor & Recvs](#1acceptor--recvs)
-    - [2、AcceptorPipeline](#2acceptorpipeline)
-    - [3、Journal](#3journal)
-    - [4、Dispatcher & tagFilters](#4dispatcher--tagfilters)
-    - [5、PostPipeline](#5postpipeline)
-    - [6、Producer & Senders](#6producer--senders)
-    - [7、Controllor](#7controllor)
-    - [8、Monitor](#8monitor)
-<!-- TOC -->
+- [1. Go-Fluentd 设计文档](#1-go-fluentd-%E8%AE%BE%E8%AE%A1%E6%96%87%E6%A1%A3)
+  - [1.1. 概述](#11-%E6%A6%82%E8%BF%B0)
+  - [1.2. 功能](#12-%E5%8A%9F%E8%83%BD)
+    - [1.2.1. Acceptor & Recvs](#121-acceptor--recvs)
+    - [1.2.2. AcceptorPipeline](#122-acceptorpipeline)
+    - [1.2.3. Journal](#123-journal)
+    - [1.2.4. Dispatcher & tagFilters](#124-dispatcher--tagfilters)
+    - [1.2.5. PostPipeline](#125-postpipeline)
+    - [1.2.6. Producer & Senders](#126-producer--senders)
+    - [1.2.7. Controllor](#127-controllor)
+    - [1.2.8. Monitor](#128-monitor)
+  - [1.3. 使用](#13-%E4%BD%BF%E7%94%A8)
+    - [1.3.1. 运行](#131-%E8%BF%90%E8%A1%8C)
+    - [1.3.2. 配置](#132-%E9%85%8D%E7%BD%AE)
 
-## 一、概述
+## 1.1. 概述
 
 取代 Fluentd，实现高性能的 log aggregator, parser 等功能。
 
-原因是因为 fluentd 无法利用多核，已经出现性能瓶颈。而且我们目前的日志分化和解析逻辑非常多样化，开源组件已经无法满足需求，所以需要自行开发更为灵活和高性能的日志解析组件。
+原因是因为 fluentd 无法利用多核，已经出现性能瓶颈。
+而且我们目前的日志分化和解析逻辑非常多样化，开源组件已经无法满足需求，
+所以需要自行开发更为灵活和高性能的日志解析组件。
 
 
-使用语言：Golang v1.11.4
+使用语言：Golang v1.11.5
 
-## 二、功能
 
-Go-Fluentd 采用插件化的设计，将日志从接收到转发的全部流程拆分为一个不同的步骤，每个步骤都可以按需的插入功能组件（只要实现了所需的接口方法）。
+## 1.2. 功能
+
+Go-Fluentd 采用插件化的设计，将日志从接收到转发的全部流程拆分为一个个不同的步骤，
+每个步骤都可以按需的插入功能组件（只要实现了所需的接口方法）。
 
 目前已经拆分的步骤有：
 
@@ -45,7 +52,7 @@ Go-Fluentd 采用插件化的设计，将日志从接收到转发的全部流程
 ![architect](https://s3.laisky.com/uploads/2019/01/go-fluentd-architecture.jpg)
 
 
-需要强调的是，在整个流程中流转的都是 *libs.Fluentd 消息体（下文中以 msg 代称）：
+需要强调的是，在整个流程中流转的都是 `*libs.Fluentd` 消息体（下文中以 msg 代称）：
 
 ```go
 type FluentMsg struct {
@@ -56,8 +63,7 @@ type FluentMsg struct {
 }
 ```
 
-
-其中各个属性代表：
+其中各个成员为：
 
 - `Tag`：消息的 tag，将会决定消息如何在框架中流转；
 - `Message`：承载的消息内容；
@@ -67,13 +73,14 @@ type FluentMsg struct {
 
 不过，在 Message 映射表中，也会有几个保留字段用来保存元数据：
 
-- `tag`：用来保存该消息真实的 tag（因为 msg.Tag 有时候会为了流转而被修改）；
-- `msgid`：等于 msg.Id。
+- `tag`：用来保存该消息真实的 tag（因为 msg.Tag 有时候会为了流转而被不断的改动）；
+- `msgid`：等于 msg.Id，可用于对消息进行去重。
 
 
 BTW：为了保证性能，所有的 msg 必须通过 sync.Pool 进行回收。
 
-### 1、Acceptor & Recvs
+
+### 1.2.1. Acceptor & Recvs
 
 Acceptor 是接收数据的框架。具体的接收方式是由 recvs 来实现的，任何 recv 只需要满足如下接口即可：
 
@@ -92,18 +99,21 @@ type AcceptorRecvItf interface {
 
 - fluentd：以 tcp 端口的形式流式解析 fluentd 格式的数据；
 - kafka：以 kafka consumer 的形式从 kafka brokers 拉取数据；
-- rsyslog：以 udp 端口的形式流式解析 rsyslog 格式的数据；
-- http：以 http json 的形式接收日志；
+- rsyslog：以 udp/tcp 端口的形式流式解析 rsyslog 格式的数据；
+- http：以 http post json 的形式接收日志；
 
 
 recvs 负责将接收到的数据流转换为 *libs.Fluentd 类型后统一输出（需要确定 tag 和 id），acceptor 提供的输出 channel 有两个：
 
 - `syncOutChan`：会被 journal 同步阻塞，主要用于 kafka 这类可以控速的来源；
-- `asyncOutChan`：不会被阻塞，journal 阻塞后会跳过 journal，如果后续仍然堵塞就会丢弃消息；
+- `asyncOutChan`：不会被阻塞，journal 阻塞后会跳过 journal，如果后续仍然堵塞就会丢弃消息，
+  用于确保服务不会因为日志消费不及时受到影响；
 
-### 2、AcceptorPipeline
 
-AcceptorPipeline 负责对消息进行一些简单的前处理，会按顺序执行 acceptorFilters，各个 filter 自行判断如何处理消息（跳过、处理或丢弃）。任何 filter 需要满足如下接口：
+### 1.2.2. AcceptorPipeline
+
+AcceptorPipeline 负责对消息进行一些简单的前处理，会按顺序执行 acceptorFilters，
+各个 filter 自行判断如何处理消息（跳过、处理或丢弃）。任何 filter 需要满足如下接口：
 
 ```go
 type AcceptorFilterItf interface {
@@ -124,17 +134,31 @@ type AcceptorFilterItf interface {
 
 各个 filters 返回 nil 的话，就会跳过后续的 filters。所以如果 filter 决定丢弃消息的话，需要自行处理回收。
 
-### 3、Journal
+需要注意的是，acceptorFilters 早于 journal，消息尚未被持久化到磁盘，
+所以为了提高可靠性，不要在这里实现太复杂的逻辑，应该让 msg 尽可能快的通过。
 
-Journal 扮演 redo log 的角色，将 AcceptorPipeline 后的所有消息都写入 data 文件，提供持久化。任何被后续流程处理的消息，也需要将其 id 提交给 journal 并写入到 ids 文件中。
 
-journal 会定期的重新读取历史的 data 和 ids 文件，首先加载所有的 ids，然后再逐一的读取 data 中的 msg，如果 msg 的 id 已经存在于 ids 中，说明该消息已被处理，则跳过。如果 msg 的 id 未存在于 ids 中，说明该消息还没有被后续流程处理，则将该 msg 传递给 journal dump，也就是将其写入新的 data 文件，并进入后续流转。这样可以保证任何达到了 journal 的消息，至少会被消费一次，实现 At Least One 语义。
+### 1.2.3. Journal
 
-在程序中止时，只有 Acceptor 和 AccptorPipeline 内的消息和 Journal 内正在等待 dump 的消息会丢失，所以 Acceptor 和 AccptorPipeline 的处理要尽可能的快，而 Journal dump 的目标磁盘的 IO 也要尽可能的高。不过由于 Journal 使用的磁盘空间极小（视配置而定，一半小于 1 GB），而且全部采用顺序读写，所以应该能很好的利用页缓存，不会对磁盘带来太大压力。
+Journal 扮演 redo log 的角色，将 AcceptorPipeline 后的所有消息都写入 data 文件，提供持久化。
+任何被后续流程处理的消息，也需要将其 id 提交给 journal 并写入到 ids 文件中。
 
-### 4、Dispatcher & tagFilters
+journal 会定期的重新读取历史的 data 和 ids 文件，首先加载所有的 ids，然后再逐一的读取 data 中的 msg，
+如果 msg 的 id 已经存在于 ids 中，说明该消息已被处理，则跳过。
+如果 msg 的 id 未存在于 ids 中，说明该消息还没有被后续流程处理，则将该 msg 传递给 journal dump，
+也就是将其写入新的 data 文件，并进入后续流转。这样可以保证任何达到了 journal 的消息，至少会被消费一次，实现 At Least One 语义。
 
-这是目前最主要的解析逻辑。其实导致 Fluentd 不能水瓶扩展的根本原因就在于我们需要让日志以 tag & container_id 来分流，而不能随机分配。所以首先使用 dispatcher 按照 tag 对 msg 进行分流（channel），每一个 channel 后都接上支持该 tag 的 tagfilters。最后再进行合流，以一个 channel 进行统一输出。
+在程序中止时，只有 Acceptor 和 AccptorPipeline 内的消息和 Journal 内正在等待 dump 的消息会丢失，
+所以 Acceptor 和 AccptorPipeline 的处理要尽可能的快，而 Journal dump 的目标磁盘的 IO 也要尽可能的高。
+不过由于 Journal 使用的磁盘空间极小（视配置而定，一半小于 1 GB），而且全部采用顺序读写，所以应该能很好的利用页缓存，不会对磁盘带来太大压力。
+
+
+### 1.2.4. Dispatcher & tagFilters
+
+这是目前最主要的解析逻辑。其实最初导致 Fluentd 不能水平扩展的根本原因就在于我们需要让日志以 tag & container_id 来分流，
+而目前使用的 lb 只支持 roundrobin 或 ip source，都不符合需求。
+所以首先使用 dispatcher 按照 tag 对 msg 进行分流（channel），
+每一个 channel 后都接上支持该 tag 的 tagfilters。最后再进行合流，以一个 channel 进行统一输出。
 
 tagFilters 需要符合如下接口即可：
 
@@ -151,15 +175,18 @@ type TagFilterFactoryItf interface {
 }
 ```
 
-tagFilters 和 acceptorPipeline 以及 postPipeline 在设计上最大的区别在于：Pipeline 是对每一个 msg，由外部去调用每一个 filters 的 Filter 方法，而 tagFilters 是一系列 filters 通过 inChan 和 outChan 串联起来。所以 tagFilters 中的每一个 filter 都需要自行决定是否要将 msg 传递给后续 channel，而且需要自行回收决定要丢弃的 msg。
+tagFilters 和 acceptorPipeline 以及 postPipeline 在设计上最大的区别在于：
+Pipeline 是对每一个 msg，由外部去调用每一个 filters 的 Filter 方法，
+而 tagFilters 是一系列 filters 通过 inChan 和 outChan 串联起来。
+所以 tagFilters 中的每一个 filter 都需要自行决定是否要将 msg 传递给后续 channel，而且需要自行回收决定要丢弃的 msg。
 
 目前已经实现的 tagFilters 有：
 
-- concator：负责日志拼接，将被 docker 切分的日志拼为一整条；
+- concator：负责日志拼接，将被 docker 切分的日志拼为一整条（已 hardcoding 为第一个 tagfilter）；
 - parser：日志解析，将字符串按照正则解析为结构化数据。
 
 
-### 5、PostPipeline
+### 1.2.5. PostPipeline
 
 负责对已解析的日志进行后处理，该步骤结束后就直接进入转发步骤。内部设计理念和 acceptorPipeline 完全一致，postFilters 的接口要求为：
 
@@ -179,12 +206,14 @@ type PostFilterItf interface {
 
 - elasticsearch_dispatcher: 按照 tag 分发到不同的 es_sender；
   - 不过后来发现单独为每个 tag 开一个 sender 似乎对 es 服务器的 CPU 压力更小，所以此功能后来没有启用。
-- default：将所有的 []byte 类型转换为 string 类型，以方便序列化为 json。
+- default：将所有的 []byte 类型转换为 string 类型，以方便后面序列化为可读的 json（hardcoding 为最后一个 postFilter）。
 
 
-### 6、Producer & Senders
+### 1.2.6. Producer & Senders
 
-Producer 负责分发消息，支持多 senders，按照 msg.Tag 传递给 sender 进行发送，既允许一个 sender 转发多个 tag，也支持多个 senders 转发同一个 tag。senders 需要满足如下接口：
+Producer 负责分发消息，支持多 senders，按照 msg.Tag 传递给 sender 进行发送，
+既允许一个 sender 转发多个 tag，也支持多个 senders 转发同一个 tag。
+senders 需要满足如下接口：
 
 ```go
 type SenderItf interface {
@@ -210,12 +239,12 @@ producer 的主要职责除了将 msg 传递给各个 senders 外，还负责统
   - 如果有任意 msg id 是通过 discardWithoutCommitChan 送回的，则仅回收消息，但是不向 journal 提交（这会导致该条消息在稍后会被重新处理）。
 
 
-### 7、Controllor
+### 1.2.7. Controllor
 
 这不是流程，而是代码的一个设计模式，在 controllor 内，对所有的流程组件进行初始化，并且进行拼接，最终实现完成的流程，可以理解为类似于 IoC 容器。
 
 
-### 8、Monitor
+### 1.2.8. Monitor
 
 一个基于 iris 提供 HTTP 监控接口的组件。通过 `HTTP GET /monitor` 返回监控结果。
 
@@ -351,3 +380,66 @@ func AddMetric(name string, metric func() map[string]interface{}) {
   "ts": "2018-12-26T06:12:01Z"
 }
 ```
+
+
+## 1.3. 使用
+
+### 1.3.1. 运行
+
+使用 glide 安装依赖，然后直接编译运行即可。
+
+```sh
+# 安装依赖
+glide i
+
+# 运行
+➜  go-fluentd git:(master) go run ./entrypoints/main.go --help
+{"level":"info","ts":"2019-01-17T16:16:53.463+0800","caller":"go-utils/logger.go:39","message":"Logger construction succeeded","level":"info"}
+Usage of /var/folders/v0/02b7gzrx6cq8b66pbk00byf00000gp/T/go-build509430316/b001/exe/main:
+      --addr localhost:8080            like localhost:8080 (default "localhost:8080")
+      --config string                  config file directory path (default "/etc/go-fluentd/settings")
+      --config-server string           config server url
+      --config-server-appname string   config server app name
+      --config-server-key string       raw content key
+      --config-server-label string     config server branch name
+      --config-server-profile string   config server profile name
+      --debug                          run in debug mode
+      --dry                            run in dry mode
+      --env sit/perf/uat/prod          environment sit/perf/uat/prod
+      --heartbeat int                  heartbeat seconds (default 60)
+      --log-level debug/info/error     debug/info/error (default "info")
+      --pprof                          run in prof mode
+pflag: help requested
+exit status 2
+```
+
+目前支持的运行参数：
+
+- `--debug`：bool，启用 debug 模式；
+- `--dry`：bool，启用 dry 模式（不会发生实际的外部影响）；
+- `--pprof`：bool，是否启用性能分析；
+- `--config`：string，配置文件所在的文件夹路径；
+- `--config-server`：string，config-server 的 URL；
+- `--config-server-appname`：string；
+- `--config-server-profile`：string；
+- `--config-server-label`：string；
+- `--config-server-key`：string，config-server 中，yml 内容对应的 key；
+- `--addr`：string，监听的 HTTP 地址；
+- `--env`：string，当前运行的环境，接收 sit/perf/uat/prod；
+- `--log-level`：string，日志级别，支持 debug/info/error；
+- `--heartbeat`：int，心跳日志间隔秒数。
+
+
+
+### 1.3.2. 配置
+
+命令行参数只接收一些必要的参数，而运行插件所需的参数都来自于配置文件。目前支持两种读取配置的方式：
+
+- 从 yml 文件读取；
+- 从 config-server 中加载 yml 文本。
+
+从 yml 文件读取，使用 `--config` 参数传入配置文件所在的文件夹，目前默认配置文件名为 `settings.yml`，默认文件夹地址为 `/etc/go-fluentd/settings`。
+
+从 config-server 读取，需要指定 `--config-server`、`--config-server-appname`、`--config-server-profile`、`--config-server-label`、`--config-server-key`。
+也就是会从 `{config-server}/{config-server-appname}/{config-server-profile}/{config-server-label}` 加载 json，
+并且从其中的 `{config-server-key}` key 中读取原始的 yml 文件内容进行解析。

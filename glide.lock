@@ -1,5 +1,5 @@
 hash: 8a5520a8db94d9875158ca85b58bc2749208464eb1fc94820aed47eea3b6b23c
-updated: 2019-01-15T14:28:53.983638+08:00
+updated: 2019-01-25T15:02:02.072986+08:00
 imports:
 - name: github.com/aymerick/raymond
   version: b565731e1464263de0bda75f2e45d97b54b60110
@@ -66,7 +66,7 @@ imports:
 - name: github.com/kataras/golog
   version: 03be101463868edc5a81f094fc68a5f6c1b5503a
 - name: github.com/kataras/iris
-  version: 5e81b605c93c0243fe5ac26e3b1378b5f549a8b2
+  version: a0f29bd2f48611021667c199cff55c1e3ab46f81
   subpackages:
   - cache
   - cache/cfg
@@ -106,18 +106,26 @@ imports:
 - name: github.com/Laisky/go-chaining
   version: 43dcdc5a21be9b79f2b7ee0d8ba67ed8a7158cda
 - name: github.com/Laisky/go-syslog
-  version: eddaa06319d14b687f21aeb896761f1982e72936
+  version: a934d2042802cab2b2a612e2d4f63caff437d10f
   subpackages:
   - format
   - internal/syslogparser
   - internal/syslogparser/rfc3164
   - internal/syslogparser/rfc5424
 - name: github.com/Laisky/go-utils
-  version: 99e95a5adc2f9436c3754d38c504eb6cea613a99
+  version: 454a9803409d650a667c77b82ec1bbe8399e34b2
   vcs: git
   subpackages:
   - journal
   - kafka
+- name: github.com/Laisky/zap
+  version: 5c0138de209f397ae93319e22ec1923008cc5767
+  subpackages:
+  - buffer
+  - internal/bufferpool
+  - internal/color
+  - internal/exit
+  - zapcore
 - name: github.com/magiconair/properties
   version: c2353362d570a7bfa228149c62842019201cfb71
 - name: github.com/microcosm-cc/bluemonday
@@ -178,14 +186,6 @@ imports:
   version: 1ea20fb1cbb1cc08cbd0d913a96dead89aa18289
 - name: go.uber.org/multierr
   version: 3c4937480c32f4c13a875a1829af76c98ca3d40a
-- name: go.uber.org/zap
-  version: ff33455a0e382e8a81d14dd7c922020b6b5e7982
-  subpackages:
-  - buffer
-  - internal/bufferpool
-  - internal/color
-  - internal/exit
-  - zapcore
 - name: golang.org/x/crypto
   version: 8ac0e0d97ce45cd83d1d7243c060cb8461dda5e9
   subpackages:

@@ -2,7 +2,7 @@
 # docker run -it --rm --cap-add SYS_ADMIN --device /dev/fuse -e MFS_MASTER=mfs-master.sit.ptcloud.t.home -e TZ=Asia/Shanghai -v /opt/configs/go-fluentd/forward:/forward registry:5000/go-fluentd-forward:666 /bin/sh
 # sh startApp.sh
 # cp /forward/settings.yml /data/Sit/go-fluentd/settings/.
-FROM registry:5000/golang-stretch:1.11.4 AS gobin
+FROM registry:5000/golang-stretch:1.11.5 AS gobin
 
 # http proxy
 ENV HTTP_PROXY=http://172.16.4.26:17777

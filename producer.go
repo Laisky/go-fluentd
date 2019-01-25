@@ -9,7 +9,7 @@ import (
 	"github.com/Laisky/go-fluentd/monitor"
 	"github.com/Laisky/go-fluentd/senders"
 	utils "github.com/Laisky/go-utils"
-	"go.uber.org/zap"
+	"github.com/Laisky/zap"
 )
 
 type ProducerCfg struct {
@@ -109,7 +109,7 @@ func (p *Producer) registerMonitor() {
 }
 
 func (p *Producer) DiscardMsg(pmsg *ProducerPendingDiscardMsg) {
-	utils.Logger.Debug("recycle pmsg", zap.Int64("id", pmsg.Msg.Id), zap.String("tag", pmsg.Msg.Tag))
+	// utils.Logger.Debug("recycle pmsg", zap.Int64("id", pmsg.Msg.Id), zap.String("tag", pmsg.Msg.Tag))
 	var id int64
 	if pmsg.IsCommit {
 		p.CommitChan <- pmsg.Msg.Id
@@ -254,9 +254,9 @@ func (p *Producer) Run() {
 						zap.String("tag", msg.Tag))
 				} else {
 					p.discardWithoutCommitChan <- msg
-					utils.Logger.Debug("skip sender and not discard msg since of its inchan is full",
-						zap.String("name", s.GetName()),
-						zap.String("tag", msg.Tag))
+					// utils.Logger.Debug("skip sender and not discard msg since of its inchan is full",
+					// 	zap.String("name", s.GetName()),
+					// 	zap.String("tag", msg.Tag))
 				}
 			}
 

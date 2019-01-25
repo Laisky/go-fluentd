@@ -15,7 +15,7 @@ import (
 	"github.com/Laisky/go-fluentd/tagFilters"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/go-utils/kafka"
-	"go.uber.org/zap"
+	"github.com/Laisky/zap"
 )
 
 // Controllor is an IoC that manage all roles
@@ -173,7 +173,7 @@ func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorP
 			}))
 		default:
 			utils.Logger.Panic("unknown acceptorfilter type",
-				zap.String("recv_type", utils.Settings.GetString("settings.acceptor_filters.recvs.tenants."+name+".type")),
+				zap.String("recv_type", utils.Settings.GetString("settings.acceptor_filters.tenants."+name+".type")),
 				zap.String("recv_name", name))
 			continue
 		}
@@ -181,6 +181,7 @@ func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorP
 			zap.String("name", name),
 			zap.String("type", utils.Settings.GetString("settings.acceptor_filters.recvs.tenants."+name+".type")))
 	}
+
 	// set the DefaultFilter as last filter
 	afs = append(afs, acceptorFilters.NewDefaultFilter(&acceptorFilters.DefaultFilterCfg{
 		Name:               "default",
@@ -227,10 +228,6 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 				AppendTimeZone:  utils.Settings.GetString("settings.tag_filters.tenants." + name + ".append_time_zone." + env),
 			}))
 		case "concator":
-			fs = append(fs, tagFilters.NewConcatorFact(&tagFilters.ConcatorFactCfg{
-				MaxLen:       utils.Settings.GetInt("settings.tag_filters.tenants.concator.config.max_length"),
-				ConcatorCfgs: libs.LoadConcatorTagConfigs(utils.Settings.Get("settings.tag_filters.tenants.concator.tenants").(map[string]interface{})),
-			}))
 		default:
 			utils.Logger.Panic("unknown tagfilter type",
 				zap.String("recv_type", utils.Settings.GetString("settings.tag_filters.recvs.tenants."+name+".type")),
@@ -241,6 +238,12 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 			zap.String("name", name),
 			zap.String("type", utils.Settings.GetString("settings.tag_filters.recvs.tenants."+name+".type")))
 	}
+
+	// concatorFilter must in the front
+	fs = append([]tagFilters.TagFilterFactoryItf{tagFilters.NewConcatorFact(&tagFilters.ConcatorFactCfg{
+		MaxLen:       utils.Settings.GetInt("settings.tag_filters.tenants.concator.config.max_length"),
+		ConcatorCfgs: libs.LoadConcatorTagConfigs(env, utils.Settings.Get("settings.tag_filters.tenants.concator.tenants").(map[string]interface{})),
+	})}, fs...)
 
 	return tagFilters.NewTagPipeline(&tagFilters.TagPipelineCfg{
 		MsgPool:                 c.msgPool,
@@ -313,7 +316,7 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 					RetryChanSize:        utils.Settings.GetInt("settings.producer.tenants." + name + ".retry_chan_len"),
 					InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
 					NFork:                utils.Settings.GetInt("settings.producer.tenants." + name + ".forks"),
-					Tags:                 utils.Settings.GetStringSlice("settings.producer.tenants." + name + ".tags"),
+					Tags:                 libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.tenants."+name+".tags")),
 					IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.tenants." + name + ".is_discard_when_blocked"),
 				}))
 			}

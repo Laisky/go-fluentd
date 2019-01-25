@@ -6,8 +6,8 @@ import (
 	"io"
 
 	"github.com/Laisky/go-utils"
+	"github.com/Laisky/zap"
 	"github.com/ugorji/go/codec"
-	"go.uber.org/zap"
 )
 
 type TinyFluentRecord struct {

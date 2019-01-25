@@ -9,8 +9,8 @@ import (
 
 	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
+	"github.com/Laisky/zap"
 	"github.com/ugorji/go/codec"
-	"go.uber.org/zap"
 )
 
 type FluentdRecvCfg struct {
@@ -77,7 +77,7 @@ func (r *FluentdRecv) decodeMsg(conn net.Conn) {
 		entryI interface{}
 	)
 	for {
-		utils.Logger.Debug("wait to decode new message")
+		// utils.Logger.Debug("wait to decode new message")
 		v[2] = nil // create new map, avoid influenced by old data
 		err = dec.Decode(&v)
 		if err == io.EOF {
@@ -98,7 +98,7 @@ func (r *FluentdRecv) decodeMsg(conn net.Conn) {
 
 		switch v[1].(type) {
 		case []interface{}:
-			utils.Logger.Debug("got message in format: `[]interface{}`")
+			// utils.Logger.Debug("got message in format: `[]interface{}`")
 			for _, entryI = range v[1].([]interface{}) {
 				msg = r.msgPool.Get().(*libs.FluentMsg)
 				if msg.Message, ok = entryI.([]interface{})[1].(map[string]interface{}); !ok {
@@ -110,7 +110,7 @@ func (r *FluentdRecv) decodeMsg(conn net.Conn) {
 				r.SendMsg(msg)
 			}
 		case []byte:
-			utils.Logger.Debug("got message in format: `[]byte`")
+			// utils.Logger.Debug("got message in format: `[]byte`")
 			if reader == nil {
 				reader = bytes.NewReader(v[1].([]byte))
 			} else {
@@ -142,7 +142,7 @@ func (r *FluentdRecv) decodeMsg(conn net.Conn) {
 				}
 			}
 		default:
-			utils.Logger.Debug("got message in format: default")
+			// utils.Logger.Debug("got message in format: default")
 			msg = r.msgPool.Get().(*libs.FluentMsg)
 			msg.Message = v[2].(map[string]interface{})
 			msg.Tag = tag
@@ -166,12 +166,12 @@ func (r *FluentdRecv) SendMsg(msg *libs.FluentMsg) {
 			return
 		}
 
-		utils.Logger.Debug("rewrite msg tag", zap.String("new_tag", msg.Tag))
+		// utils.Logger.Debug("rewrite msg tag", zap.String("new_tag", msg.Tag))
 	} else {
 		msg.Message[r.TagKey] = msg.Tag
 	}
 
 	msg.Id = r.counter.Count()
-	utils.Logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id))
+	// utils.Logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id))
 	r.asyncOutChan <- msg
 }

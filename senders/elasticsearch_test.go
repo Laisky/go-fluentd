@@ -15,7 +15,7 @@ var (
 		Transport: &http.Transport{
 			MaxIdleConnsPerHost: 20,
 		},
-		Timeout: time.Duration(30) * time.Second,
+		Timeout: 30 * time.Second,
 	}
 )
 

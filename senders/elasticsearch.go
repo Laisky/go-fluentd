@@ -12,8 +12,8 @@ import (
 
 	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
+	"github.com/Laisky/zap"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 func LoadESTagIndexMap(env string, mapi interface{}) map[string]string {
@@ -51,7 +51,7 @@ func NewElasticSearchSender(cfg *ElasticSearchSenderCfg) *ElasticSearchSender {
 		panic(fmt.Errorf("addr should not be empty: %v", cfg.Addr))
 	}
 
-	f := &ElasticSearchSender{
+	s := &ElasticSearchSender{
 		BaseSender: &BaseSender{
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
 		},
@@ -61,11 +61,11 @@ func NewElasticSearchSender(cfg *ElasticSearchSenderCfg) *ElasticSearchSender {
 			Transport: &http.Transport{
 				MaxIdleConnsPerHost: 20,
 			},
-			Timeout: time.Duration(30) * time.Second,
+			Timeout: 30 * time.Second,
 		},
 	}
-	f.SetSupportedTags(cfg.Tags)
-	return f
+	s.SetSupportedTags(cfg.Tags)
+	return s
 }
 
 func (s *ElasticSearchSender) GetName() string {
@@ -105,9 +105,9 @@ func (s *ElasticSearchSender) SendBulkMsgs(ctx *BulkOpCtx, msgs []*libs.FluentMs
 			return errors.Wrap(err, "try to marshal messages got error")
 		}
 
-		utils.Logger.Debug("prepare bulk content send to es",
-			zap.ByteString("starting", starting),
-			zap.ByteString("body", b))
+		// utils.Logger.Debug("prepare bulk content send to es",
+		// 	zap.ByteString("starting", starting),
+		// 	zap.ByteString("body", b))
 		cnt = append(cnt, starting...)
 		cnt = append(cnt, b...)
 		cnt = append(cnt, '\n')
@@ -137,7 +137,7 @@ func (s *ElasticSearchSender) SendBulkMsgs(ctx *BulkOpCtx, msgs []*libs.FluentMs
 		return errors.Wrap(err, "request es got error")
 	}
 
-	utils.Logger.Debug("elasticsearch bulk all done", zap.Int("batch", len(msgs)))
+	// utils.Logger.Debug("elasticsearch bulk all done", zap.Int("batch", len(msgs)))
 	return nil
 }
 
@@ -217,10 +217,10 @@ func (s *ElasticSearchSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				msgBatch[iBatch] = msg
 				iBatch++
 				if iBatch < s.BatchSize &&
-					time.Now().Sub(lastT) < s.MaxWait {
+					utils.Clock.GetUTCNow().Sub(lastT) < s.MaxWait {
 					continue
 				}
-				lastT = time.Now()
+				lastT = utils.Clock.GetUTCNow()
 				msgBatchDelivery = msgBatch[:iBatch]
 				iBatch = 0
 				nRetry = 0

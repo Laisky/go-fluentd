@@ -9,7 +9,7 @@ import (
 
 	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
-	"go.uber.org/zap"
+	"github.com/Laisky/zap"
 )
 
 func ParseAddCfg(env string, cfg interface{}) map[string]map[string]string {
@@ -229,7 +229,7 @@ func (cf *ParserFact) IsTagSupported(tag string) (ok bool) {
 }
 
 func (cf *ParserFact) Spawn(tag string, outChan chan<- *libs.FluentMsg) chan<- *libs.FluentMsg {
-	utils.Logger.Info("spawn Parser tagfilter", zap.String("tag", tag))
+	utils.Logger.Info("spawn parser tagfilter", zap.String("tag", tag))
 	inChan := make(chan *libs.FluentMsg, cf.defaultInternalChanSize)
 	f := NewParser(&ParserCfg{
 		Cf:              cf,

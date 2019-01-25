@@ -2,11 +2,10 @@ package monitor
 
 import (
 	"encoding/json"
-	"time"
 
 	"github.com/Laisky/go-utils"
+	"github.com/Laisky/zap"
 	"github.com/kataras/iris"
-	"go.uber.org/zap"
 )
 
 var metricGetter = map[string]func() map[string]interface{}{}
@@ -22,7 +21,7 @@ func BindHTTP(srv *iris.Application) {
 	)
 	srv.Get("/monitor", func(ctx iris.Context) {
 		metrics := map[string]interface{}{
-			"ts": time.Now().Format(time.RFC3339),
+			"ts": utils.Clock.GetTimeInRFC3339Nano(),
 		}
 		for k, getter := range metricGetter {
 			metrics[k] = getter()

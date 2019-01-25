@@ -7,8 +7,8 @@ import (
 
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-utils"
+	"github.com/Laisky/zap"
 	"github.com/Shopify/sarama"
-	"go.uber.org/zap"
 )
 
 func NewKafkaProducer(brokers []string) (p sarama.SyncProducer, err error) {
@@ -98,10 +98,10 @@ func (s *KafkaSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				msgBatch[iBatch] = msg
 				iBatch++
 				if iBatch < s.BatchSize &&
-					time.Now().Sub(lastT) < s.MaxWait {
+					utils.Clock.GetUTCNow().Sub(lastT) < s.MaxWait {
 					continue
 				}
-				lastT = time.Now()
+				lastT = utils.Clock.GetUTCNow()
 				msgBatchDelivery = msgBatch[:iBatch]
 				iBatch = 0
 				nRetry = 0
@@ -151,11 +151,11 @@ func (s *KafkaSender) Spawn(tag string) chan<- *libs.FluentMsg {
 
 					goto SEND_MSG
 				}
-				utils.Logger.Debug("success sent messages to brokers",
-					zap.String("topic", s.Topic),
-					zap.Strings("brokers", s.Brokers),
-					zap.String("raw_tag", tag),
-					zap.String("tag", msg.Tag))
+				// utils.Logger.Debug("success sent messages to brokers",
+				// 	zap.String("topic", s.Topic),
+				// 	zap.Strings("brokers", s.Brokers),
+				// 	zap.String("raw_tag", tag),
+				// 	zap.String("tag", msg.Tag))
 				for _, msg = range msgBatchDelivery {
 					s.discardChan <- msg
 				}

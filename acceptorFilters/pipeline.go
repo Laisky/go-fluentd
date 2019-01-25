@@ -8,7 +8,7 @@ import (
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-fluentd/monitor"
 	"github.com/Laisky/go-utils"
-	"go.uber.org/zap"
+	"github.com/Laisky/zap"
 )
 
 type AcceptorPipelineCfg struct {
@@ -99,9 +99,10 @@ func (f *AcceptorPipeline) Wrap(asyncInChan, syncInChan chan *libs.FluentMsg) (o
 				}
 				f.counter.Count()
 
-				utils.Logger.Debug("AcceptorPipeline got msg")
+				// utils.Logger.Debug("AcceptorPipeline got msg")
+
 				if f.IsThrottle && !f.throttle.Allow() {
-					utils.Logger.Debug("discard msg by throttle", zap.String("tag", msg.Tag))
+					utils.Logger.Warn("discard msg by throttle", zap.String("tag", msg.Tag))
 					f.DiscardMsg(msg)
 					continue
 				}
@@ -131,11 +132,11 @@ func (f *AcceptorPipeline) Wrap(asyncInChan, syncInChan chan *libs.FluentMsg) (o
 			defer utils.Logger.Panic("quit acceptorPipeline syncChan", zap.String("msg", fmt.Sprint(msg)))
 
 			for msg = range syncInChan {
-				utils.Logger.Debug("AcceptorPipeline got blockable msg")
+				// utils.Logger.Debug("AcceptorPipeline got blockable msg")
 				f.counter.Count()
 
 				if f.IsThrottle && !f.throttle.Allow() {
-					utils.Logger.Debug("discard msg by throttle", zap.String("tag", msg.Tag))
+					utils.Logger.Warn("discard msg by throttle", zap.String("tag", msg.Tag))
 					f.DiscardMsg(msg)
 					continue
 				}

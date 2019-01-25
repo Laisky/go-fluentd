@@ -3,9 +3,9 @@ package postFilters
 import (
 	"strings"
 
-	"github.com/Laisky/go-utils"
-	"go.uber.org/zap"
 	"github.com/Laisky/go-fluentd/libs"
+	"github.com/Laisky/go-utils"
+	"github.com/Laisky/zap"
 )
 
 type ForwardTagRewriterFilterCfg struct {
@@ -35,6 +35,6 @@ func (f *ForwardTagRewriterFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 
 	env := strings.Split(msg.Message[f.TagKey].(string), ".")[1]
 	msg.Tag = strings.Split(msg.Tag, ".")[0] + "." + env
-	utils.Logger.Debug("rewrite msg tag", zap.String("new_tag", msg.Tag))
+	// utils.Logger.Debug("rewrite msg tag", zap.String("new_tag", msg.Tag))
 	return msg
 }

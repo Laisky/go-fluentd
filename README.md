@@ -4,6 +4,8 @@ Rewrite fluentd-server by Golang.
 
 ([中文文档](docs/README_cn.md))
 
+[![Commitizen friendly](https://img.shields.io/badge/commitizen-friendly-brightgreen.svg)](http://commitizen.github.io/cz-cli/)
+
 ## Description
 
 LogAggregator + Concator + Parser + Producer.

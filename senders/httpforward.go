@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	utils "github.com/Laisky/go-utils"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 	"github.com/Laisky/go-fluentd/libs"
+	utils "github.com/Laisky/go-utils"
+	"github.com/Laisky/zap"
+	"github.com/pkg/errors"
 )
 
 type HTTPSenderCfg struct {
@@ -36,7 +36,7 @@ func NewHTTPSender(cfg *HTTPSenderCfg) *HTTPSender {
 		panic(fmt.Errorf("addr should not be empty: %v", cfg.Addr))
 	}
 
-	f := &HTTPSender{
+	s := &HTTPSender{
 		BaseSender: &BaseSender{
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
 		},
@@ -46,11 +46,11 @@ func NewHTTPSender(cfg *HTTPSenderCfg) *HTTPSender {
 			Transport: &http.Transport{
 				MaxIdleConnsPerHost: 30,
 			},
-			Timeout: time.Duration(3) * time.Second,
+			Timeout: 3 * time.Second,
 		},
 	}
-	f.SetSupportedTags(cfg.Tags)
-	return f
+	s.SetSupportedTags(cfg.Tags)
+	return s
 }
 
 func (s *HTTPSender) GetName() string {
@@ -81,10 +81,10 @@ func (s *HTTPSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				msgBatch[iBatch] = msg
 				iBatch++
 				if iBatch < s.BatchSize &&
-					time.Now().Sub(lastT) < s.MaxWait {
+					utils.Clock.GetUTCNow().Sub(lastT) < s.MaxWait {
 					continue
 				}
-				lastT = time.Now()
+				lastT = utils.Clock.GetUTCNow()
 				msgBatchDelivery = msgBatch[:iBatch]
 				iBatch = 0
 
@@ -114,10 +114,10 @@ func (s *HTTPSender) Spawn(tag string) chan<- *libs.FluentMsg {
 					goto SEND_MSG
 				}
 
-				utils.Logger.Debug("success sent message to backend",
-					zap.String("backend", s.Addr),
-					zap.Int("batch", len(msgBatchDelivery)),
-					zap.String("tag", msg.Tag))
+				// utils.Logger.Debug("success sent message to backend",
+				// 	zap.String("backend", s.Addr),
+				// 	zap.Int("batch", len(msgBatchDelivery)),
+				// 	zap.String("tag", msg.Tag))
 				for _, msg = range msgBatchDelivery {
 					s.discardChan <- msg
 				}
@@ -159,6 +159,6 @@ func (s *HTTPSender) SendBulkMsgs(ctx *BulkOpCtx, msgs []*libs.FluentMsg) (err e
 		return errors.Wrap(err, "request es got error")
 	}
 
-	utils.Logger.Debug("httpforward bulk all done", zap.Int("batch", len(msgs)))
+	// utils.Logger.Debug("httpforward bulk all done", zap.Int("batch", len(msgs)))
 	return nil
 }

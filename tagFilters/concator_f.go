@@ -8,7 +8,7 @@ import (
 
 	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
-	"go.uber.org/zap"
+	"github.com/Laisky/zap"
 )
 
 type ConcatorCfg struct {
@@ -35,7 +35,7 @@ type PendingMsg struct {
 
 // NewConcator create new Concator
 func NewConcator(cfg *ConcatorCfg) *Concator {
-	utils.Logger.Debug("create new concator",
+	utils.Logger.Info("create new concator",
 		zap.String("tag", cfg.Tag),
 		zap.String("identifier", cfg.Identifier),
 		zap.String("msgKey", cfg.MsgKey))
@@ -60,7 +60,6 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 		log        []byte
 		ok         bool
 
-		now             time.Time
 		initWaitTs      = 1 * time.Millisecond
 		maxWaitTs       = 40 * time.Millisecond
 		waitTs          = initWaitTs
@@ -71,16 +70,15 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 	)
 
 	for {
-		now = time.Now()
 		if len(c.slot) == 0 { // no msg waitting in slot
-			utils.Logger.Debug("slot clear, waitting for new msg")
+			// utils.Logger.Debug("slot clear, waitting for new msg")
 			msg = <-inChan
 		} else {
 			select {
 			case msg = <-inChan:
-			default:
+			default: // no new msg
 				for identifier, pmsg = range c.slot {
-					if now.Sub(pmsg.lastT) > concatTimeoutTs { // timeout to flush
+					if utils.Clock.GetUTCNow().Sub(pmsg.lastT) > concatTimeoutTs { // timeout to flush
 						// PAAS-210: I have no idea why this line could throw error
 						// utils.Logger.Debug("timeout flush", zap.ByteString("log", pmsg.msg.Message[c.MsgKey].([]byte)))
 
@@ -107,7 +105,7 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			}
 		}
 
-		timer.Reset(time.Now())
+		timer.Reset(utils.Clock.GetUTCNow())
 
 		// unknown identifier
 		switch msg.Message[c.Identifier].(type) {
@@ -135,7 +133,7 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			utils.Logger.Warn("unknown msg key or unknown type",
 				zap.String("tag", msg.Tag),
 				zap.String("msg_key", c.MsgKey),
-				zap.String("msg", fmt.Sprint(msg.Message[c.MsgKey])))
+				zap.String("msg", fmt.Sprint(msg.Message)))
 			c.PutDownstream(msg)
 			continue
 		}
@@ -152,7 +150,7 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 				zap.String("identifier", identifier),
 				zap.ByteString("log", log))
 			pmsg = c.PMsgPool.Get().(*PendingMsg)
-			pmsg.lastT = now
+			pmsg.lastT = utils.Clock.GetUTCNow()
 			pmsg.msg = msg
 			c.slot[identifier] = pmsg
 			continue
@@ -160,17 +158,17 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 
 		// replace exists msg in slot
 		if c.Regexp.Match(log) { // new line
-			utils.Logger.Debug("got new line",
-				zap.ByteString("log", log),
-				zap.String("tag", msg.Tag))
+			// utils.Logger.Debug("got new line",
+			// 	zap.ByteString("log", log),
+			// 	zap.String("tag", msg.Tag))
 			c.PutDownstream(c.slot[identifier].msg)
 			c.slot[identifier].msg = msg
-			c.slot[identifier].lastT = now
+			c.slot[identifier].lastT = utils.Clock.GetUTCNow()
 			continue
 		}
 
 		// need to concat
-		utils.Logger.Debug("concat lines", zap.ByteString("log", msg.Message[c.MsgKey].([]byte)))
+		// utils.Logger.Debug("concat lines", zap.ByteString("log", msg.Message[c.MsgKey].([]byte)))
 		c.slot[identifier].msg.Message[c.MsgKey] =
 			append(c.slot[identifier].msg.Message[c.MsgKey].([]byte), '\n')
 		c.slot[identifier].msg.Message[c.MsgKey] =
@@ -179,7 +177,7 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			c.slot[identifier].msg.ExtIds = []int64{} // create ids, wait to append tail-msg's id
 		}
 		c.slot[identifier].msg.ExtIds = append(c.slot[identifier].msg.ExtIds, msg.Id)
-		c.slot[identifier].lastT = now
+		c.slot[identifier].lastT = utils.Clock.GetUTCNow()
 
 		// too long to send
 		if len(c.slot[identifier].msg.Message[c.MsgKey].([]byte)) >= c.MaxLen {
@@ -213,11 +211,13 @@ type ConcatorFactory struct {
 func NewConcatorFact(cfg *ConcatorFactCfg) *ConcatorFactory {
 	utils.Logger.Info("create concatorFactory", zap.Int("max_len", cfg.MaxLen))
 
-	if cfg.MaxLen < 10000 {
+	if cfg.MaxLen <= 0 {
+		utils.Logger.Panic("concator max_length should bigger than 0")
+	} else if cfg.MaxLen < 10000 {
 		utils.Logger.Warn("concator max_length maybe too short", zap.Int("len", cfg.MaxLen))
 	}
 
-	return &ConcatorFactory{
+	cf := &ConcatorFactory{
 		BaseTagFilterFactory: &BaseTagFilterFactory{},
 		ConcatorFactCfg:      cfg,
 		pMsgPool: &sync.Pool{
@@ -226,6 +226,7 @@ func NewConcatorFact(cfg *ConcatorFactCfg) *ConcatorFactory {
 			},
 		},
 	}
+	return cf
 }
 
 func (cf *ConcatorFactory) GetName() string {
@@ -233,13 +234,14 @@ func (cf *ConcatorFactory) GetName() string {
 }
 
 func (cf *ConcatorFactory) IsTagSupported(tag string) bool {
-	utils.Logger.Debug("IsTagSupported", zap.String("tag", tag))
+	// utils.Logger.Debug("IsTagSupported", zap.String("tag", tag))
 	_, ok := cf.ConcatorCfgs[tag]
 	return ok
 }
 
 // Spawn create and run new Concator for new tag
 func (cf *ConcatorFactory) Spawn(tag string, outChan chan<- *libs.FluentMsg) chan<- *libs.FluentMsg {
+	utils.Logger.Info("spawn concator tagfilter", zap.String("tag", tag))
 	inChan := make(chan *libs.FluentMsg, cf.defaultInternalChanSize)
 	concator := NewConcator(&ConcatorCfg{
 		Cf:         cf,

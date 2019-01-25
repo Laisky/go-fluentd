@@ -7,7 +7,7 @@ import (
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-fluentd/recvs"
 	utils "github.com/Laisky/go-utils"
-	"go.uber.org/zap"
+	"github.com/Laisky/zap"
 )
 
 type AcceptorCfg struct {

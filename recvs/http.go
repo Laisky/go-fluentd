@@ -11,8 +11,8 @@ import (
 
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-utils"
+	"github.com/Laisky/zap"
 	"github.com/kataras/iris"
-	"go.uber.org/zap"
 )
 
 const (
@@ -111,7 +111,7 @@ func (r *HTTPRecv) validate(ctx iris.Context, msg *libs.FluentMsg) bool {
 	}
 
 	// check whether @timestamp is expires
-	now := time.Now()
+	now := utils.Clock.GetUTCNow()
 	if ts, err := time.Parse(r.TimeFormat, string(msg.Message[TIMESTAMP_KEY].([]byte))); err != nil {
 		utils.Logger.Error("parse ts got error",
 			zap.Error(err),
@@ -146,7 +146,7 @@ func (r *HTTPRecv) HTTPLogHandler(ctx iris.Context) {
 		ctx.Writef("only accept sit/perf/uat/prod, but got `%v`", env)
 		return
 	}
-	utils.Logger.Debug("got new http log", zap.String("env", env))
+	// utils.Logger.Debug("got new http log", zap.String("env", env))
 
 	if ctx.GetContentLength() > r.MaxBodySize {
 		utils.Logger.Warn("content size too big", zap.Int64("size", ctx.GetContentLength()))
@@ -179,7 +179,7 @@ func (r *HTTPRecv) HTTPLogHandler(ctx iris.Context) {
 	libs.FlattenMap(msg.Message, "__")
 	msg.Message[r.TagKey] = r.OrigTag + "." + env
 	msg.Id = r.counter.Count()
-	utils.Logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id))
+	// utils.Logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id))
 	ctx.Writef(`'{"msgid": %d}'`, msg.Id)
 	r.asyncOutChan <- msg
 }

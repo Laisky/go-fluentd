@@ -7,7 +7,7 @@ import (
 
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-utils"
-	"go.uber.org/zap"
+	"github.com/Laisky/zap"
 )
 
 type FluentSenderCfg struct {
@@ -33,15 +33,15 @@ func NewFluentSender(cfg *FluentSenderCfg) *FluentSender {
 		utils.Logger.Panic("addr should not be empty")
 	}
 
-	f := &FluentSender{
+	s := &FluentSender{
 		BaseSender: &BaseSender{
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
 		},
 		FluentSenderCfg: cfg,
 		retryMsgChan:    make(chan *libs.FluentMsg, cfg.RetryChanSize),
 	}
-	f.SetSupportedTags(cfg.Tags)
-	return f
+	s.SetSupportedTags(cfg.Tags)
+	return s
 }
 
 func (s *FluentSender) GetName() string {
@@ -84,10 +84,10 @@ func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				msgBatch[iBatch] = msg
 				iBatch++
 				if iBatch < s.BatchSize &&
-					time.Now().Sub(lastT) < s.MaxWait {
+					utils.Clock.GetUTCNow().Sub(lastT) < s.MaxWait {
 					continue
 				}
-				lastT = time.Now()
+				lastT = utils.Clock.GetUTCNow()
 				msgBatchDelivery = msgBatch[:iBatch]
 				iBatch = 0
 
@@ -121,9 +121,9 @@ func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {
 					goto SEND_MSG
 				}
 
-				utils.Logger.Debug("success sent message to backend",
-					zap.String("backend", s.Addr),
-					zap.String("tag", tag))
+				// utils.Logger.Debug("success sent message to backend",
+				// 	zap.String("backend", s.Addr),
+				// 	zap.String("tag", tag))
 				for _, msg = range msgBatchDelivery {
 					s.discardChan <- msg
 				}

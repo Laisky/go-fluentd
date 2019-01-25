@@ -29,8 +29,8 @@ build on machine that should installed docker.
 
 ```sh
 # build golang-stretch
-docker build . -f ./.docker/golang-stretch.Dockerfile -t registry:5000/golang-stretch:1.11.4
-docker push registry:5000/golang-stretch:1.11.4
+docker build . -f ./.docker/golang-stretch.Dockerfile -t registry:5000/golang-stretch:1.11.5
+docker push registry:5000/golang-stretch:1.11.5
 
 # build mfs-stretch
 docker build . -f ./.docker/mfs-stretch -t registry:5000/mfs-stretch:20180116

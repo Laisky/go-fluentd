@@ -2,14 +2,13 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"runtime/pprof"
+	"time"
 
 	concator "github.com/Laisky/go-fluentd"
 	utils "github.com/Laisky/go-utils"
+	"github.com/Laisky/zap"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"go.uber.org/zap"
 )
 
 // SetupSettings setup arguments restored in viper
@@ -44,6 +43,9 @@ func SetupSettings() {
 
 	// log
 	utils.SetupLogger(utils.Settings.GetString("log-level"))
+
+	// clock
+	utils.SetupClock(100 * time.Millisecond)
 
 	// load configuration
 	isCfgLoaded := false
@@ -85,8 +87,7 @@ func SetupSettings() {
 func SetupArgs() {
 	pflag.Bool("debug", false, "run in debug mode")
 	pflag.Bool("dry", false, "run in dry mode")
-	pflag.Bool("pprof", false, "run in prof mode")
-	pflag.String("config", "/etc/go-ramjet/settings", "config file directory path")
+	pflag.String("config", "/etc/go-fluentd/settings", "config file directory path")
 	pflag.String("config-server", "", "config server url")
 	pflag.String("config-server-appname", "", "config server app name")
 	pflag.String("config-server-profile", "", "config server profile name")
@@ -105,18 +106,6 @@ func main() {
 	SetupArgs()
 	SetupSettings()
 	defer utils.Logger.Info("All done")
-
-	// pprof
-	if utils.Settings.GetBool("pprof") {
-		f, err := os.Create("cpu.pprof")
-		if err != nil {
-			panic(err)
-		}
-		defer f.Close()
-
-		pprof.StartCPUProfile(f)
-		defer pprof.StopCPUProfile()
-	}
 
 	// run
 	controllor := concator.NewControllor()

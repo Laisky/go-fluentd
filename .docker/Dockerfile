@@ -1,4 +1,4 @@
-FROM golang:1.11.4-alpine3.8 AS gobin
+FROM golang:1.11.5-alpine3.8 AS gobin
 
 # http proxy
 ENV HTTP_PROXY=http://172.16.4.26:17777

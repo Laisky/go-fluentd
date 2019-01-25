@@ -8,8 +8,8 @@ import (
 	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/go-utils/kafka"
+	"github.com/Laisky/zap"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 func GetKafkaRewriteTag(rewriteTag, env string) string {
@@ -90,10 +90,10 @@ func (r *KafkaRecv) Run() {
 					msg  *libs.FluentMsg
 				)
 				for kmsg = range cli.Messages() { // receive new kmsg, and convert to fluent msg
-					utils.Logger.Debug("got new message from kafka",
-						zap.Int("n", i),
-						zap.ByteString("msg", kmsg.Message),
-						zap.String("name", r.GetName()))
+					// utils.Logger.Debug("got new message from kafka",
+					// 	zap.Int("n", i),
+					// 	zap.ByteString("msg", kmsg.Message),
+					// 	zap.String("name", r.GetName()))
 					if msg, err = r.parse2Msg(kmsg); err != nil {
 						utils.Logger.Error("try to parse kafka message got error",
 							zap.String("name", r.GetName()),
@@ -149,10 +149,10 @@ func (r *KafkaRecv) parse2Msg(kmsg *kafka.KafkaMsg) (msg *libs.FluentMsg, err er
 	}
 
 	msg.Message[r.TagKey] = msg.Tag
-	utils.Logger.Debug("parse2Msg got new msg",
-		zap.String("tag", msg.Tag),
-		zap.String("rewrite_tag", r.RewriteTag),
-		zap.ByteString("msg", kmsg.Message))
+	// utils.Logger.Debug("parse2Msg got new msg",
+	// 	zap.String("tag", msg.Tag),
+	// 	zap.String("rewrite_tag", r.RewriteTag),
+	// 	zap.ByteString("msg", kmsg.Message))
 	if r.RewriteTag != "" {
 		msg.Tag = r.RewriteTag
 	}

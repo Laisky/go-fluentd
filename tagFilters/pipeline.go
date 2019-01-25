@@ -6,7 +6,7 @@ import (
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-fluentd/monitor"
 	utils "github.com/Laisky/go-utils"
-	"go.uber.org/zap"
+	"github.com/Laisky/zap"
 )
 
 type TagPipelineCfg struct {
@@ -47,20 +47,19 @@ func NewTagPipeline(cfg *TagPipelineCfg, itfs ...TagFilterFactoryItf) *TagPipeli
 func (p *TagPipeline) Spawn(tag string, outChan chan<- *libs.FluentMsg) (chan<- *libs.FluentMsg, error) {
 	utils.Logger.Info("spawn tagpipeline", zap.String("tag", tag))
 	var (
-		lastI          = len(p.TagFilterFactoryItfs) - 1
 		f              TagFilterFactoryItf
 		i              int
 		isTagSupported = false
 		downstreamChan = outChan
 	)
-	for i = lastI; i >= 0; i-- {
+	for i = len(p.TagFilterFactoryItfs) - 1; i >= 0; i-- {
 		f = p.TagFilterFactoryItfs[i]
 		if f.IsTagSupported(tag) {
 			utils.Logger.Info("enable tagfilter",
 				zap.String("name", f.GetName()),
 				zap.String("tag", tag))
 			isTagSupported = true
-			downstreamChan = f.Spawn(tag, downstreamChan)        // downstream outChan is upstream's inChan
+			downstreamChan = f.Spawn(tag, downstreamChan)        // downstream's inChan is upstream's outChan
 			p.monitorChans[tag+"."+f.GetName()] = downstreamChan // instream
 		}
 	}

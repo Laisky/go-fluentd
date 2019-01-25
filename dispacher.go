@@ -10,7 +10,7 @@ import (
 	"github.com/Laisky/go-fluentd/monitor"
 	"github.com/Laisky/go-fluentd/tagFilters"
 	utils "github.com/Laisky/go-utils"
-	"go.uber.org/zap"
+	"github.com/Laisky/zap"
 )
 
 type DispatcherCfg struct {

@@ -2,8 +2,6 @@ package libs
 
 import (
 	"regexp"
-
-	utils "github.com/Laisky/go-utils"
 )
 
 // ConcatorTagCfg configurations about how to dispatch messages
@@ -13,9 +11,8 @@ type ConcatorTagCfg struct {
 }
 
 // LoadConcatorTagConfigs return the configurations about dispatch rules
-func LoadConcatorTagConfigs(tenants map[string]interface{}) (concatorcfgs map[string]*ConcatorTagCfg) {
+func LoadConcatorTagConfigs(env string, tenants map[string]interface{}) (concatorcfgs map[string]*ConcatorTagCfg) {
 	concatorcfgs = map[string]*ConcatorTagCfg{}
-	env := utils.Settings.GetString("env")
 	for tag, tagcfgI := range tenants {
 		cfg := tagcfgI.(map[string]interface{})
 		concatorcfgs[tag+"."+env] = &ConcatorTagCfg{

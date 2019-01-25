@@ -6,7 +6,7 @@ import (
 
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-utils"
-	"go.uber.org/zap"
+	"github.com/Laisky/zap"
 )
 
 type SparkFilterCfg struct {
@@ -52,9 +52,9 @@ func (f *SparkFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	}
 
 	// discard some format
-	utils.Logger.Debug("ignore spark log",
-		zap.String("tag", f.Tag),
-		zap.ByteString("log", msg.Message[f.MsgKey].([]byte)))
+	// utils.Logger.Debug("ignore spark log",
+	// 	zap.String("tag", f.Tag),
+	// 	zap.ByteString("log", msg.Message[f.MsgKey].([]byte)))
 	if f.IgnoreRegex.Match(msg.Message[f.MsgKey].([]byte)) {
 		f.DiscardMsg(msg)
 		return nil

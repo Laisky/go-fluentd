@@ -1,12 +1,9 @@
 package libs
 
 import (
-	"bufio"
 	"bytes"
 	"io"
 
-	"github.com/Laisky/go-utils"
-	"github.com/Laisky/zap"
 	"github.com/ugorji/go/codec"
 )
 
@@ -16,44 +13,37 @@ type TinyFluentRecord struct {
 }
 
 type FluentEncoder struct {
-	wrap, batchWrap               []interface{}
-	encoder, internalBatchEncoder *codec.Encoder
-	msgBuf                        *bytes.Buffer
-	msgWriter                     *bufio.Writer
-	tmpMsg                        *FluentMsg
+	wrap, batchWrap []interface{}
+	encoder         *codec.Encoder
+	msgBuf          *bytes.Buffer
+	tmpMsg          *FluentMsg
 }
 
 func NewFluentEncoder(writer io.Writer) *FluentEncoder {
 	enc := &FluentEncoder{
-		wrap:      []interface{}{0, []TinyFluentRecord{TinyFluentRecord{}}},
-		encoder:   codec.NewEncoder(writer, NewCodec()),
+		wrap:      []interface{}{0, nil},
+		encoder:   codec.NewEncoder(writer, NewOutputCodec()),
 		msgBuf:    &bytes.Buffer{},
 		batchWrap: []interface{}{nil, nil, nil},
 	}
-	enc.msgWriter = bufio.NewWriter(enc.msgBuf)
-	enc.internalBatchEncoder = codec.NewEncoder(enc.msgWriter, NewCodec())
 	return enc
 }
 
 func (e *FluentEncoder) Encode(msg *FluentMsg) error {
 	e.wrap[0] = msg.Tag
-	e.wrap[1].([]TinyFluentRecord)[0].Data = msg.Message
+	e.wrap[1] = []*TinyFluentRecord{&TinyFluentRecord{Data: msg.Message}}
 	return e.encoder.Encode(e.wrap)
 }
 
 func (e *FluentEncoder) EncodeBatch(tag string, msgBatch []*FluentMsg) (err error) {
+	msgs := []*TinyFluentRecord{}
 	for _, e.tmpMsg = range msgBatch {
-		e.wrap[1] = e.tmpMsg.Message
-		if err = e.internalBatchEncoder.Encode(e.wrap); err != nil {
-			utils.Logger.Error("try to encode msg got error", zap.String("tag", tag))
-		}
+		msgs = append(msgs, &TinyFluentRecord{Data: e.tmpMsg.Message})
 	}
+	e.wrap[0] = tag
+	e.wrap[1] = msgs
+	return e.encoder.Encode(e.wrap)
 
-	e.batchWrap[0] = tag
-	e.msgWriter.Flush()
-	e.batchWrap[1] = e.msgBuf.Bytes()
-	e.msgBuf.Reset()
-	return e.encoder.Encode(e.batchWrap)
 }
 
 type Decoder struct {
@@ -64,7 +54,7 @@ type Decoder struct {
 func NewDecoder(reader io.Reader) *Decoder {
 	return &Decoder{
 		wrap:    []interface{}{nil, nil, nil},
-		decoder: codec.NewDecoder(reader, NewCodec()),
+		decoder: codec.NewDecoder(reader, NewOutputCodec()),
 	}
 }
 

@@ -97,6 +97,7 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 				TSRegexp:           regexp.MustCompile(utils.Settings.GetString("settings.acceptor.recvs.tenants." + name + ".ts_regexp")),
 				TimeFormat:         utils.Settings.GetString("settings.acceptor.recvs.tenants." + name + ".time_format"),
 				MaxAllowedDelaySec: utils.Settings.GetDuration("settings.acceptor.recvs.tenants."+name+".max_allowed_delay_sec") * time.Second,
+				MaxAllowedAheadSec: utils.Settings.GetDuration("settings.acceptor.recvs.tenants."+name+".max_allowed_ahead_sec") * time.Second,
 			}))
 		case "kafka":
 			receivers = append(receivers, recvs.NewKafkaRecv(&recvs.KafkaCfg{
@@ -316,7 +317,7 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 					RetryChanSize:        utils.Settings.GetInt("settings.producer.tenants." + name + ".retry_chan_len"),
 					InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
 					NFork:                utils.Settings.GetInt("settings.producer.tenants." + name + ".forks"),
-					Tags:                 libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.tenants."+name+".tags")),
+					Tags:                 utils.Settings.GetStringSlice("settings.producer.tenants." + name + ".tags"), // do not append env
 					IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.tenants." + name + ".is_discard_when_blocked"),
 				}))
 			}

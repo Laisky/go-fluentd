@@ -21,15 +21,15 @@ const (
 )
 
 type HTTPRecvCfg struct {
-	HTTPSrv                            *iris.Application
-	MaxBodySize                        int64
-	Path, Env                          string
-	Name, OrigTag, Tag, TagKey, MsgKey string
-	TimeKey, NewTimeKey, NewTimeFormat string
-	TimeFormat                         string
-	SigSalt                            []byte
-	TSRegexp                           *regexp.Regexp
-	MaxAllowedDelaySec                 time.Duration
+	HTTPSrv                                *iris.Application
+	MaxBodySize                            int64
+	Path, Env                              string
+	Name, OrigTag, Tag, TagKey, MsgKey     string
+	TimeKey, NewTimeKey, NewTimeFormat     string
+	TimeFormat                             string
+	SigSalt                                []byte
+	TSRegexp                               *regexp.Regexp
+	MaxAllowedDelaySec, MaxAllowedAheadSec time.Duration
 }
 
 type HTTPRecv struct {
@@ -119,9 +119,11 @@ func (r *HTTPRecv) validate(ctx iris.Context, msg *libs.FluentMsg) bool {
 		r.BadRequest(ctx, "signature error")
 		return false
 	} else if now.Sub(ts) > r.MaxAllowedDelaySec {
+		utils.Logger.Warn("@timestamp expires", zap.Time("ts", ts))
 		r.BadRequest(ctx, "expires")
 		return false
-	} else if ts.After(now) {
+	} else if ts.Sub(now) > r.MaxAllowedAheadSec {
+		utils.Logger.Warn("@timestamp ahead of now", zap.Time("ts", ts))
 		r.BadRequest(ctx, "come from future?")
 		return false
 	}
@@ -142,8 +144,8 @@ func (r *HTTPRecv) HTTPLogHandler(ctx iris.Context) {
 	case "uat":
 	case "prod":
 	default:
-		ctx.StatusCode(iris.StatusForbidden)
-		ctx.Writef("only accept sit/perf/uat/prod, but got `%v`", env)
+		utils.Logger.Warn("unknown env", zap.String("env", env))
+		r.BadRequest(ctx, fmt.Sprintf("only accept sit/perf/uat/prod, but got `%v`", env))
 		return
 	}
 	// utils.Logger.Debug("got new http log", zap.String("env", env))
@@ -179,7 +181,7 @@ func (r *HTTPRecv) HTTPLogHandler(ctx iris.Context) {
 	libs.FlattenMap(msg.Message, "__")
 	msg.Message[r.TagKey] = r.OrigTag + "." + env
 	msg.Id = r.counter.Count()
-	// utils.Logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id))
+	utils.Logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id))
 	ctx.Writef(`'{"msgid": %d}'`, msg.Id)
 	r.asyncOutChan <- msg
 }

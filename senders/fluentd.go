@@ -51,6 +51,7 @@ func (s *FluentSender) GetName() string {
 func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {
 	utils.Logger.Info("SpawnForTag", zap.String("tag", tag))
 	inChan := make(chan *libs.FluentMsg, s.InChanSize) // for each tag
+	go s.runFlusher(inChan)
 
 	for i := 0; i < s.NFork; i++ { // parallel to each tag
 		go func() {
@@ -81,15 +82,27 @@ func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {
 
 			encoder = libs.NewFluentEncoder(conn) // one encoder for each connection
 			for msg = range inChan {
-				msgBatch[iBatch] = msg
-				iBatch++
+				if msg != nil {
+					msgBatch[iBatch] = msg
+					iBatch++
+				} else if iBatch == 0 {
+					continue
+				} else {
+					msg = msgBatch[iBatch-1]
+				}
+
 				if iBatch < s.BatchSize &&
 					utils.Clock.GetUTCNow().Sub(lastT) < s.MaxWait {
 					continue
 				}
+
+				// fmt.Println("msgbatch", len(msgBatch), fmt.Sprint(msgBatch))
+				// fmt.Println("ibatch", iBatch)
+
 				lastT = utils.Clock.GetUTCNow()
 				msgBatchDelivery = msgBatch[:iBatch]
 				iBatch = 0
+				// fmt.Println("msgBatchDelivery", len(msgBatchDelivery), fmt.Sprint(msgBatchDelivery))
 
 				nRetry = 0
 				if utils.Settings.GetBool("dry") {
@@ -121,9 +134,10 @@ func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {
 					goto SEND_MSG
 				}
 
-				// utils.Logger.Debug("success sent message to backend",
-				// 	zap.String("backend", s.Addr),
-				// 	zap.String("tag", tag))
+				utils.Logger.Debug("success sent message to backend",
+					zap.Int("batch", len(msgBatchDelivery)),
+					zap.String("backend", s.Addr),
+					zap.String("tag", tag))
 				for _, msg = range msgBatchDelivery {
 					s.discardChan <- msg
 				}

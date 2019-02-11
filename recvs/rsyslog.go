@@ -84,6 +84,7 @@ func (r *RsyslogRecv) Run() {
 				msg.Message = logPart
 				msg.Message[r.TagKey] = msg.Tag
 
+				utils.Logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id))
 				r.asyncOutChan <- msg
 			}
 

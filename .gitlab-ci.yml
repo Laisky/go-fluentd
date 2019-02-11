@@ -4,6 +4,7 @@ variables:
   DOCKER_DRIVER: overlay
   # DOCKER_IMAGE_NAME: $DOCKER_REGISTRY_URL/$CI_PROJECT_NAME:$CI_PIPELINE_IID
   APP_NAME: go-fluentd-forward
+  DOCKER_REGISTRY_URL: registry:5000
   DOCKER_IMAGE_NAME: $DOCKER_REGISTRY_URL/$APP_NAME
   SPRING_PROFILES_ACTIVE: gitlab-ci
   WORK_HOME: "."
@@ -22,8 +23,8 @@ docker-build:
   script:
     - rm -rf ./.git
     - DOCKER_TAG=`SHA=$CI_COMMIT_SHA; echo ${SHA:0:10}`
-    - docker build -t $DOCKER_IMAGE_NAME-$DOCKER_TAG -f $DOCKERFILE .
-    - docker push $DOCKER_IMAGE_NAME-$DOCKER_TAG
+    - docker build -t $DOCKER_IMAGE_NAME:$DOCKER_TAG -f $DOCKERFILE .
+    - docker push $DOCKER_IMAGE_NAME:$DOCKER_TAG
   only:
     - master
 
@@ -34,7 +35,7 @@ marathon-deploy:
   image: registry:5000/appropriate/curl:latest
   script:
     - DOCKER_TAG=`SHA=$CI_COMMIT_SHA; echo ${SHA:0:10}`
-    - "sed -i \"s#DOCKER_IMAGE_NAME#$DOCKER_IMAGE_NAME-$DOCKER_TAG#g\" $MARATHON_CONFIG"
+    - "sed -i \"s#DOCKER_IMAGE_NAME#$DOCKER_IMAGE_NAME:$DOCKER_TAG#g\" $MARATHON_CONFIG"
     - "cat $MARATHON_CONFIG"
     - "curl -X PUT -H 'Content-Type: application/json' \"http://172.16.5.11/marathon/v2/apps/paas/$APP_NAME?force=true\" -d @$MARATHON_CONFIG"
   only:

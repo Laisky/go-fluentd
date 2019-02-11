@@ -2,6 +2,7 @@ package postFilters
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-utils"
@@ -29,6 +30,15 @@ const DefaultSearchField = "message"
 
 func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	for k, v := range msg.Message {
+		if k == "" {
+			delete(msg.Message, k)
+		}
+
+		if strings.Contains(k, ".") {
+			msg.Message[strings.Replace(k, ".", "__", -1)] = msg.Message[k]
+			delete(msg.Message, k)
+		}
+
 		switch v.(type) {
 		case []byte: // convert all bytes fields to string
 			msg.Message[k] = string(v.([]byte))

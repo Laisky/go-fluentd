@@ -62,6 +62,7 @@ func (s *KafkaSender) GetName() string {
 func (s *KafkaSender) Spawn(tag string) chan<- *libs.FluentMsg {
 	utils.Logger.Info("SpawnForTag", zap.String("tag", tag))
 	inChan := make(chan *libs.FluentMsg, s.InChanSize)
+	go s.runFlusher(inChan)
 
 	for i := 0; i < s.NFork; i++ {
 		go func() {
@@ -94,9 +95,16 @@ func (s *KafkaSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				zap.String("tag", tag))
 
 			for msg := range inChan {
-				// msg.Message[s.TagKey] = msg.Tag // change msg tag
-				msgBatch[iBatch] = msg
-				iBatch++
+				if msg != nil {
+					// msg.Message[s.TagKey] = msg.Tag // change msg tag
+					msgBatch[iBatch] = msg
+					iBatch++
+				} else if iBatch == 0 {
+					continue
+				} else {
+					msg = msgBatch[iBatch-1]
+				}
+
 				if iBatch < s.BatchSize &&
 					utils.Clock.GetUTCNow().Sub(lastT) < s.MaxWait {
 					continue
@@ -151,11 +159,12 @@ func (s *KafkaSender) Spawn(tag string) chan<- *libs.FluentMsg {
 
 					goto SEND_MSG
 				}
-				// utils.Logger.Debug("success sent messages to brokers",
-				// 	zap.String("topic", s.Topic),
-				// 	zap.Strings("brokers", s.Brokers),
-				// 	zap.String("raw_tag", tag),
-				// 	zap.String("tag", msg.Tag))
+				utils.Logger.Debug("success sent messages to brokers",
+					zap.Int("batch", len(msgBatchDelivery)),
+					zap.String("topic", s.Topic),
+					zap.Strings("brokers", s.Brokers),
+					zap.String("raw_tag", tag),
+					zap.String("tag", msg.Tag))
 				for _, msg = range msgBatchDelivery {
 					s.discardChan <- msg
 				}

@@ -105,9 +105,9 @@ func (s *ElasticSearchSender) SendBulkMsgs(ctx *BulkOpCtx, msgs []*libs.FluentMs
 			return errors.Wrap(err, "try to marshal messages got error")
 		}
 
-		// utils.Logger.Debug("prepare bulk content send to es",
-		// 	zap.ByteString("starting", starting),
-		// 	zap.ByteString("body", b))
+		utils.Logger.Debug("prepare bulk content send to es",
+			zap.ByteString("starting", starting),
+			zap.ByteString("body", b))
 		cnt = append(cnt, starting...)
 		cnt = append(cnt, b...)
 		cnt = append(cnt, '\n')
@@ -137,7 +137,7 @@ func (s *ElasticSearchSender) SendBulkMsgs(ctx *BulkOpCtx, msgs []*libs.FluentMs
 		return errors.Wrap(err, "request es got error")
 	}
 
-	// utils.Logger.Debug("elasticsearch bulk all done", zap.Int("batch", len(msgs)))
+	utils.Logger.Debug("elasticsearch bulk all done", zap.Int("batch", len(msgs)))
 	return nil
 }
 
@@ -192,6 +192,7 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
 func (s *ElasticSearchSender) Spawn(tag string) chan<- *libs.FluentMsg {
 	utils.Logger.Info("SpawnForTag", zap.String("tag", tag))
 	inChan := make(chan *libs.FluentMsg, s.InChanSize) // for each tag
+	go s.runFlusher(inChan)
 
 	for i := 0; i < s.NFork; i++ { // parallel to each tag
 		go func() {
@@ -214,8 +215,15 @@ func (s *ElasticSearchSender) Spawn(tag string) chan<- *libs.FluentMsg {
 			ctx.gzWriter = gzip.NewWriter(ctx.buf)
 
 			for msg = range inChan {
-				msgBatch[iBatch] = msg
-				iBatch++
+				if msg != nil {
+					msgBatch[iBatch] = msg
+					iBatch++
+				} else if iBatch == 0 {
+					continue
+				} else {
+					msg = msgBatch[iBatch-1]
+				}
+
 				if iBatch < s.BatchSize &&
 					utils.Clock.GetUTCNow().Sub(lastT) < s.MaxWait {
 					continue

@@ -2,6 +2,7 @@ package senders
 
 import (
 	"sync"
+	"time"
 
 	"github.com/Laisky/go-fluentd/libs"
 )
@@ -27,6 +28,13 @@ type BaseSender struct {
 	discardChan, discardWithoutCommitChan chan<- *libs.FluentMsg
 	tags                                  []string
 	IsDiscardWhenBlocked                  bool
+}
+
+func (s *BaseSender) runFlusher(inChan chan *libs.FluentMsg) {
+	for {
+		time.Sleep(3 * time.Second)
+		inChan <- nil
+	}
 }
 
 func (s *BaseSender) SetMsgPool(msgPool *sync.Pool) {

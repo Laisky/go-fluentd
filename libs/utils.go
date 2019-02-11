@@ -16,15 +16,15 @@ func LoadTagsAppendEnv(env string, tags []string) []string {
 }
 
 func RegexNamedSubMatch(r *regexp.Regexp, log []byte, subMatchMap map[string]interface{}) error {
-	match := r.FindSubmatch(log)
+	matches := r.FindSubmatch(log)
 	names := r.SubexpNames()
-	if len(names) != len(match) {
+	if len(names) != len(matches) {
 		return errors.New("the number of args in `regexp` and `str` not matched")
 	}
 
-	for i, name := range r.SubexpNames() {
-		if name != "" && i != 0 && len(match[i]) != 0 {
-			subMatchMap[name] = bytes.TrimSpace(match[i])
+	for i, name := range names {
+		if i != 0 && name != "" && len(matches[i]) != 0 {
+			subMatchMap[name] = bytes.TrimSpace(matches[i])
 		}
 	}
 	return nil

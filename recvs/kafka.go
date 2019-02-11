@@ -90,10 +90,10 @@ func (r *KafkaRecv) Run() {
 					msg  *libs.FluentMsg
 				)
 				for kmsg = range cli.Messages() { // receive new kmsg, and convert to fluent msg
-					// utils.Logger.Debug("got new message from kafka",
-					// 	zap.Int("n", i),
-					// 	zap.ByteString("msg", kmsg.Message),
-					// 	zap.String("name", r.GetName()))
+					utils.Logger.Debug("got new message from kafka",
+						zap.Int("n", i),
+						zap.ByteString("msg", kmsg.Message),
+						zap.String("name", r.GetName()))
 					if msg, err = r.parse2Msg(kmsg); err != nil {
 						utils.Logger.Error("try to parse kafka message got error",
 							zap.String("name", r.GetName()),

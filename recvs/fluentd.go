@@ -1,7 +1,6 @@
 package recvs
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"io"
@@ -10,7 +9,7 @@ import (
 	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
-	"github.com/ugorji/go/codec"
+	"github.com/tinylib/msgp/msgp"
 )
 
 type FluentdRecvCfg struct {
@@ -64,23 +63,22 @@ func (r *FluentdRecv) Run() {
 func (r *FluentdRecv) decodeMsg(conn net.Conn) {
 	defer conn.Close()
 	var (
-		_codec = libs.NewInputCodec()
-		dec    = codec.NewDecoder(bufio.NewReader(conn), _codec)
-		dec2   *codec.Decoder
-		reader *bytes.Reader
-		v      = []interface{}{nil, nil, nil} // tag, time, messages
-		v2     = []interface{}{nil, nil}
-		msg    *libs.FluentMsg
-		err    error
-		tag    string
-		ok     bool
-		entryI interface{}
+		reader = msgp.NewReader(conn)
+		v      = libs.FluentBatchMsg{nil, nil, nil} // tag, time, messages
+		// 2 means inner decoder for embedded format such like [][]interface{tag, messages}
+		buf2    *bytes.Reader
+		reader2 *msgp.Reader
+		v2      = libs.FluentBatchMsg{nil, nil, nil} // tag, time, messages
+		msg     *libs.FluentMsg
+		err     error
+		tag     string
+		ok      bool
+		entryI  interface{}
+		eof     = msgp.WrapError(io.EOF)
 	)
+
 	for {
-		// utils.Logger.Debug("wait to decode new message")
-		v = []interface{}{}
-		err = dec.Decode(&v)
-		if err == io.EOF {
+		if err = v.DecodeMsg(reader); err == eof {
 			utils.Logger.Info("connection closed", zap.String("remote", conn.RemoteAddr().String()))
 			return
 		} else if err != nil {
@@ -88,19 +86,24 @@ func (r *FluentdRecv) decodeMsg(conn net.Conn) {
 			return
 		}
 
-		// fmt.Println(">> got raw", fmt.Sprintf("%+v", v))
+		if len(v) < 2 {
+			utils.Logger.Error("unknown message format for length", zap.String("msg", fmt.Sprint(v)))
+			continue
+		}
+
 		switch msgTag := v[0].(type) {
 		case []byte:
 			tag = string(msgTag)
+		case string:
+			tag = msgTag
 		default:
-			utils.Logger.Error("message[0] is not `[]byte`")
+			utils.Logger.Error("message[0] is not `[]byte` or string", zap.String("tag", fmt.Sprint(v[0])))
 			continue
 		}
 
 		switch msgBody := v[1].(type) {
 		case []interface{}:
 			utils.Logger.Debug("got message in format: `[]interface{}`")
-			// fmt.Printf("got: %+v\n", msgBody)
 			for _, entryI = range msgBody {
 				msg = r.msgPool.Get().(*libs.FluentMsg)
 				if msg.Message, ok = entryI.([]interface{})[1].(map[string]interface{}); !ok {
@@ -111,28 +114,29 @@ func (r *FluentdRecv) decodeMsg(conn net.Conn) {
 				msg.Tag = tag
 				r.SendMsg(msg)
 			}
-		case []byte:
-			// fmt.Printf(">> got: %+v\n", string(msgBody))
+		case []byte: // embedded format
 			utils.Logger.Debug("got message in format: `[]byte`")
-			if reader == nil {
-				reader = bytes.NewReader(msgBody)
+			if buf2 == nil {
+				buf2 = bytes.NewReader(msgBody)
 			} else {
-				reader.Reset(msgBody)
+				buf2.Reset(msgBody)
 			}
 
-			if dec2 != nil {
-				dec2.Reset(reader)
+			if reader2 == nil {
+				reader2 = msgp.NewReader(buf2)
 			} else {
-				dec2 = codec.NewDecoder(reader, _codec)
+				reader2.Reset(buf2)
 			}
 
-			for reader.Len() > 0 {
-				v2[1] = nil
-				if err = dec2.Decode(&v2); err == io.EOF {
+			for {
+				if err = v2.DecodeMsg(reader2); err == eof {
 					break
 				} else if err != nil {
 					utils.Logger.Error("failed to decode message")
-					break
+					continue
+				} else if len(v2) < 2 {
+					utils.Logger.Error("unknown message format for length", zap.String("msg", fmt.Sprint(v2)))
+					continue
 				} else {
 					msg = r.msgPool.Get().(*libs.FluentMsg)
 					if msg.Message, ok = v2[1].(map[string]interface{}); !ok {
@@ -145,10 +149,21 @@ func (r *FluentdRecv) decodeMsg(conn net.Conn) {
 				}
 			}
 		default:
+			if len(v) < 3 {
+				utils.Logger.Error("unknown message format for length", zap.String("msg", fmt.Sprint(v)))
+				continue
+			}
+
 			utils.Logger.Debug("got message in format: default")
-			msg = r.msgPool.Get().(*libs.FluentMsg)
-			msg.Message = v[2].(map[string]interface{})
-			v[2] = map[string]interface{}{} // create new map, avoid influenced by old data
+			switch msgBody := v[2].(type) {
+			case map[string]interface{}:
+				msg = r.msgPool.Get().(*libs.FluentMsg)
+				msg.Message = msgBody
+			default:
+				utils.Logger.Error("unknown msg format", zap.String("msg", fmt.Sprint(v)))
+				continue
+			}
+
 			msg.Tag = tag
 			r.SendMsg(msg)
 		}

@@ -1,5 +1,7 @@
 package libs
 
+//go:generate msgp
+
 // FluentMsg is the structure of fluent message
 type FluentMsg struct {
 	Tag     string
@@ -7,3 +9,5 @@ type FluentMsg struct {
 	Id      int64
 	ExtIds  []int64
 }
+
+type FluentBatchMsg []interface{}

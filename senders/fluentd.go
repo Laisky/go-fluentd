@@ -134,6 +134,7 @@ func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {
 					goto SEND_MSG
 				}
 
+				encoder.Flush()
 				utils.Logger.Debug("success sent message to backend",
 					zap.Int("batch", len(msgBatchDelivery)),
 					zap.String("backend", s.Addr),

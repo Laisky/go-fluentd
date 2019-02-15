@@ -27,6 +27,7 @@ docker-build:
     - docker push $DOCKER_IMAGE_NAME:$DOCKER_TAG
   only:
     - master
+  retry: 2
 
 marathon-deploy:
   stage: deploy
@@ -43,3 +44,4 @@ marathon-deploy:
   environment:
     name: sit
     url: http://logsrv-sit.pateo.com.cn/monitor
+  retry: 2

@@ -126,7 +126,6 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 			utils.Logger.Panic("unknown recv type",
 				zap.String("recv_type", utils.Settings.GetString("settings.acceptor.recvs.tenants."+name+".type")),
 				zap.String("recv_name", name))
-			continue
 		}
 		utils.Logger.Info("active recv",
 			zap.String("name", name),
@@ -176,7 +175,6 @@ func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorP
 			utils.Logger.Panic("unknown acceptorfilter type",
 				zap.String("recv_type", utils.Settings.GetString("settings.acceptor_filters.tenants."+name+".type")),
 				zap.String("recv_name", name))
-			continue
 		}
 		utils.Logger.Info("active acceptorfilter",
 			zap.String("name", name),
@@ -233,7 +231,6 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 			utils.Logger.Panic("unknown tagfilter type",
 				zap.String("recv_type", utils.Settings.GetString("settings.tag_filters.recvs.tenants."+name+".type")),
 				zap.String("recv_name", name))
-			continue
 		}
 		utils.Logger.Info("active tagfilter",
 			zap.String("name", name),
@@ -357,7 +354,6 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 			utils.Logger.Panic("unknown sender type",
 				zap.String("sender_type", utils.Settings.GetString("settings.producer.tenants."+name+".type")),
 				zap.String("sender_name", name))
-			continue
 		}
 		utils.Logger.Info("active sender",
 			zap.String("type", utils.Settings.GetString("settings.producer.tenants."+name+".type")),

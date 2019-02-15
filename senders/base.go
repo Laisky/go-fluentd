@@ -5,7 +5,10 @@ import (
 	"time"
 
 	"github.com/Laisky/go-fluentd/libs"
+	"github.com/json-iterator/go"
 )
+
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 type SenderItf interface {
 	Spawn(string) chan<- *libs.FluentMsg // Spawn(tag) inChan

@@ -71,7 +71,7 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 
 	for {
 		if len(c.slot) == 0 { // no msg waitting in slot
-			// utils.Logger.Debug("slot clear, waitting for new msg")
+			utils.Logger.Debug("slot clear, waitting for new msg")
 			msg = <-inChan
 		} else {
 			select {
@@ -104,6 +104,8 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 				continue
 			}
 		}
+
+		// fmt.Printf("%+v", string(msg.Message["log"].([]byte)))
 
 		timer.Reset(utils.Clock.GetUTCNow())
 
@@ -158,9 +160,9 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 
 		// replace exists msg in slot
 		if c.Regexp.Match(log) { // new line
-			// utils.Logger.Debug("got new line",
-			// 	zap.ByteString("log", log),
-			// 	zap.String("tag", msg.Tag))
+			utils.Logger.Debug("got new line",
+				zap.ByteString("log", log),
+				zap.String("tag", msg.Tag))
 			c.PutDownstream(c.slot[identifier].msg)
 			c.slot[identifier].msg = msg
 			c.slot[identifier].lastT = utils.Clock.GetUTCNow()
@@ -168,7 +170,7 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 		}
 
 		// need to concat
-		// utils.Logger.Debug("concat lines", zap.ByteString("log", msg.Message[c.MsgKey].([]byte)))
+		utils.Logger.Debug("concat lines", zap.ByteString("log", msg.Message[c.MsgKey].([]byte)))
 		c.slot[identifier].msg.Message[c.MsgKey] =
 			append(c.slot[identifier].msg.Message[c.MsgKey].([]byte), '\n')
 		c.slot[identifier].msg.Message[c.MsgKey] =

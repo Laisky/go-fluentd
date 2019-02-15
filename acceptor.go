@@ -42,8 +42,9 @@ func (a *Acceptor) Run() {
 	utils.Logger.Info("process legacy data...")
 	maxId, err := a.Journal.LoadMaxId()
 	if err != nil {
-		panic(fmt.Errorf("try to process legacy messages got error: %+v", err))
+		utils.Logger.Panic("try to process legacy messages got error", zap.Error(err))
 	}
+
 	couter, err := utils.NewRotateCounterFromN(maxId+1, a.MaxRotateId)
 	if err != nil {
 		panic(fmt.Errorf("try to create counter got error: %+v", err))

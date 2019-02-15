@@ -3,7 +3,6 @@ package senders
 import (
 	"bytes"
 	"compress/gzip"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"

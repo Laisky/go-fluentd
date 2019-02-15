@@ -1,5 +1,5 @@
-hash: 8a5520a8db94d9875158ca85b58bc2749208464eb1fc94820aed47eea3b6b23c
-updated: 2019-02-13T16:31:24.458232+08:00
+hash: 693f9d480c930670d07a52bce0c92472927f6a03efcd62fd57d75dd3574519d8
+updated: 2019-02-13T14:11:14.441086+08:00
 imports:
 - name: github.com/aymerick/raymond
   version: b565731e1464263de0bda75f2e45d97b54b60110
@@ -60,7 +60,7 @@ imports:
 - name: github.com/Joker/jade
   version: 8828253bfc54f2f91aaef5f32b44a244b0a98e4f
 - name: github.com/json-iterator/go
-  version: 7cceb6c2e37f896dc3817e031f83dce25b180a8b
+  version: 1624edc4454b8682399def8740d46db5e4362ba4
 - name: github.com/juju/errors
   version: c7d06af17c68cd34c835053720b21f6549d9b0ee
 - name: github.com/kataras/golog
@@ -113,7 +113,7 @@ imports:
   - internal/syslogparser/rfc3164
   - internal/syslogparser/rfc5424
 - name: github.com/Laisky/go-utils
-  version: 617977a79ab834488894b2db3228bb98a2263b8e
+  version: 7926682e8a322c8c1eb4323db1dd0c0e50741d4c
   vcs: git
   subpackages:
   - journal
@@ -173,7 +173,7 @@ imports:
 - name: github.com/spf13/viper
   version: f69c91abd383f6e61b17df94c1020943eefe0349
 - name: github.com/tinylib/msgp
-  version: c8cf64dff2009d53fa8f8a16df54d1cdfc64c4a7
+  version: af6442a0fcf6e2a1b824f70dd0c734f01e817751
   subpackages:
   - msgp
 - name: github.com/ugorji/go

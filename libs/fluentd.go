@@ -3,9 +3,19 @@ package libs
 import (
 	"bytes"
 	"io"
+	"sync"
 
+	"github.com/tinylib/msgp/msgp"
 	"github.com/ugorji/go/codec"
 )
+
+const BufByte = 1024 * 1024 * 4
+
+var fluentdWrapMsgPool = &sync.Pool{
+	New: func() interface{} {
+		return []interface{}{0, nil}
+	},
+}
 
 type TinyFluentRecord struct {
 	Timestamp uint64
@@ -13,37 +23,50 @@ type TinyFluentRecord struct {
 }
 
 type FluentEncoder struct {
-	wrap, batchWrap []interface{}
-	encoder         *codec.Encoder
+	wrap, batchWrap FluentBatchMsg
+	writer          *msgp.Writer
 	msgBuf          *bytes.Buffer
-	tmpMsg          *FluentMsg
 }
 
 func NewFluentEncoder(writer io.Writer) *FluentEncoder {
 	enc := &FluentEncoder{
-		wrap:      []interface{}{0, nil},
-		encoder:   codec.NewEncoder(writer, NewOutputCodec()),
+		wrap:      FluentBatchMsg{0, []interface{}{0, nil}},
+		batchWrap: FluentBatchMsg{0, []interface{}{}},
+		writer:    msgp.NewWriterSize(writer, BufByte),
 		msgBuf:    &bytes.Buffer{},
-		batchWrap: []interface{}{nil, nil, nil},
 	}
+
 	return enc
 }
 
 func (e *FluentEncoder) Encode(msg *FluentMsg) error {
 	e.wrap[0] = msg.Tag
-	e.wrap[1] = []*TinyFluentRecord{&TinyFluentRecord{Data: msg.Message}}
-	return e.encoder.Encode(e.wrap)
+	e.wrap[1].([]interface{})[1] = msg.Message
+	return e.wrap.EncodeMsg(e.writer)
 }
 
 func (e *FluentEncoder) EncodeBatch(tag string, msgBatch []*FluentMsg) (err error) {
-	msgs := []*TinyFluentRecord{}
-	for _, e.tmpMsg = range msgBatch {
-		msgs = append(msgs, &TinyFluentRecord{Data: e.tmpMsg.Message})
+	e.batchWrap[1] = e.batchWrap[1].([]interface{})[:0]
+	var tmpWrap []interface{}
+	for _, tmpMsg := range msgBatch {
+		tmpWrap = fluentdWrapMsgPool.Get().([]interface{})
+		tmpWrap[1] = tmpMsg.Message
+		e.batchWrap[1] = append(e.batchWrap[1].([]interface{}), tmpWrap)
 	}
-	e.wrap[0] = tag
-	e.wrap[1] = msgs
-	return e.encoder.Encode(e.wrap)
+	e.batchWrap[0] = tag
+	err = e.batchWrap.EncodeMsg(e.writer)
 
+	// recycle
+	for _, tmpWrapI := range e.batchWrap[1].([]interface{}) {
+		tmpWrap = tmpWrapI.([]interface{})
+		fluentdWrapMsgPool.Put(tmpWrap)
+	}
+
+	return err
+}
+
+func (e *FluentEncoder) Flush() error {
+	return e.writer.Flush()
 }
 
 type Decoder struct {

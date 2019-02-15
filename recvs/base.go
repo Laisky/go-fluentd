@@ -9,7 +9,10 @@ import (
 	"sync"
 
 	"github.com/Laisky/go-fluentd/libs"
+	"github.com/json-iterator/go"
 )
+
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 type AcceptorRecvItf interface {
 	SetSyncOutChan(chan<- *libs.FluentMsg)

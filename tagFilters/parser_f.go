@@ -1,7 +1,6 @@
 package tagFilters
 
 import (
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"sync"

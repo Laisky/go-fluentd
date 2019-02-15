@@ -1,14 +1,16 @@
 package monitor
 
 import (
-	"encoding/json"
-
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
+	"github.com/json-iterator/go"
 	"github.com/kataras/iris"
 )
 
-var metricGetter = map[string]func() map[string]interface{}{}
+var (
+	json         = jsoniter.ConfigCompatibleWithStandardLibrary
+	metricGetter = map[string]func() map[string]interface{}{}
+)
 
 func AddMetric(name string, metric func() map[string]interface{}) {
 	metricGetter[name] = metric

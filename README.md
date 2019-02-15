@@ -4,7 +4,7 @@ Rewrite fluentd-server by Golang, Higher performance with less resource requirem
 
 ([中文文档](docs/README_cn.md))
 
-[![Commitizen friendly](https://img.shields.io/badge/commitizen-friendly-brightgreen.svg)](http://commitizen.github.io/cz-cli/)
+[![pipeline status](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/badges/master/pipeline.svg)](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commits/master)
 
 Ready for production.
 

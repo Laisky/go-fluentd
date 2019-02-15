@@ -75,7 +75,7 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan, dumpChan chan *l
 	var (
 		i    = 0
 		msg  *libs.FluentMsg
-		data = map[string]interface{}{}
+		data = &journal.Data{Data: map[string]interface{}{}}
 	)
 
 	if !j.j.LockLegacy() { // avoid rotate
@@ -87,9 +87,9 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan, dumpChan chan *l
 		i++
 		msg = msgPool.Get().(*libs.FluentMsg)
 		// utils.Logger.Info(fmt.Sprintf("got %p", msg))
-		data["message"] = nil // alloc new map to avoid old data contaminate
+		data.Data["message"] = nil // alloc new map to avoid old data contaminate
 
-		if err = j.j.LoadLegacyBuf(&data); err == io.EOF {
+		if err = j.j.LoadLegacyBuf(data); err == io.EOF {
 			utils.Logger.Info("load legacy buf done", zap.Int("n", i), zap.Float64("sec", utils.Clock.GetUTCNow().Sub(startTs).Seconds()))
 			msgPool.Put(msg)
 			// utils.Logger.Info(fmt.Sprintf("recycle: %p", msg))
@@ -101,16 +101,16 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan, dumpChan chan *l
 			continue
 		}
 
-		if data["message"] == nil {
+		if data.Data["message"] == nil {
 			utils.Logger.Warn("lost message")
 			msgPool.Put(msg)
 			// utils.Logger.Info(fmt.Sprintf("recycle: %p, %v", msg))
 			continue
 		}
 
-		msg.Id = data["id"].(int64)
-		msg.Tag = string(data["tag"].([]byte))
-		msg.Message = data["message"].(map[string]interface{})
+		msg.Id = data.ID
+		msg.Tag = string(data.Data["tag"].(string))
+		msg.Message = data.Data["message"].(map[string]interface{})
 		if msg.Id > maxId {
 			maxId = msg.Id
 		}
@@ -144,7 +144,7 @@ func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, dumpChan, skipDumpChan chan *l
 	go func() {
 		var (
 			err      error
-			data     = map[string]interface{}{}
+			data     = &journal.Data{Data: map[string]interface{}{}}
 			nRetry   = 0
 			maxRetry = 5
 			msg      *libs.FluentMsg
@@ -152,12 +152,12 @@ func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, dumpChan, skipDumpChan chan *l
 		defer utils.Logger.Panic("legacy dumper exit", zap.String("msg", fmt.Sprint(msg)))
 
 		for msg = range dumpChan {
-			data["id"] = msg.Id
-			data["message"] = msg.Message
-			data["tag"] = msg.Tag
+			data.ID = msg.Id
+			data.Data["message"] = msg.Message
+			data.Data["tag"] = msg.Tag
 			// utils.Logger.Debug("got new message", zap.Int64("id", msg.Id), zap.String("tag", msg.Tag))
 			for {
-				if err = j.j.WriteData(&data); err != nil {
+				if err = j.j.WriteData(data); err != nil {
 					nRetry++
 					if nRetry < maxRetry {
 						utils.Logger.Warn("try to write data got error", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id), zap.Error(err))

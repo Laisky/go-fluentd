@@ -2,11 +2,20 @@
 
 Rewrite fluentd-server by Golang, Higher performance with less resource requirement.
 
-([中文文档](docs/README_cn.md))
-
 [![pipeline status](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/badges/master/pipeline.svg)](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commits/master)
 
+[![Commitizen friendly](https://img.shields.io/badge/commitizen-friendly-brightgreen.svg)](http://commitizen.github.io/cz-cli/)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Laisky/go-fluentd)](https://goreportcard.com/report/github.com/Laisky/go-fluentd)
+[![GoDoc](https://godoc.org/github.com/Laisky/go-fluentd?status.svg)](https://godoc.org/github.com/Laisky/go-fluentd)
+
 Ready for production.
+
+
+Documents:
+
+- [中文文档](docs/README_cn.md)
+- [Quick Start](docs/quickstart.md)
+- [Build with Docker](.docker)
 
 
 ## Description

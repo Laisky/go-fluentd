@@ -59,9 +59,10 @@ func NewParser(cfg *ParserCfg) *Parser {
 
 func (f *Parser) Run() {
 	var (
-		err  error
-		ok   bool
-		msg  *libs.FluentMsg
+		err error
+		ok  bool
+		msg *libs.FluentMsg
+		// vi   interface{}
 		k, v string
 		t    time.Time
 	)
@@ -112,22 +113,39 @@ func (f *Parser) Run() {
 
 		// parse json
 		if f.ParseJsonKey != "" {
-			switch msg.Message[f.ParseJsonKey].(type) {
-			case []byte:
-				if err = json.Unmarshal(msg.Message[f.ParseJsonKey].([]byte), &msg.Message); err != nil {
+			switch log := msg.Message[f.ParseJsonKey].(type) {
+			case string:
+				if err = json.UnmarshalFromString(log, &msg.Message); err != nil {
 					utils.Logger.Warn("json unmarshal connector args got error",
 						zap.Error(err),
-						zap.ByteString("args", msg.Message[f.ParseJsonKey].([]byte)))
+						zap.String("args", log))
+				}
+			case []byte:
+				if err = json.Unmarshal(log, &msg.Message); err != nil {
+					utils.Logger.Warn("json unmarshal connector args got error",
+						zap.Error(err),
+						zap.ByteString("args", log))
 				}
 			case nil:
+				utils.Logger.Warn("json key does not exists", zap.String("tag", msg.Tag))
 			default:
-				utils.Logger.Warn("unknown args type")
+				utils.Logger.Warn("unknown args type", zap.String("tag", msg.Tag))
 			}
 			delete(msg.Message, f.ParseJsonKey)
 		}
 
 		// flatten messages
 		libs.FlattenMap(msg.Message, "__") // do not use `.` as delimiter!
+
+		// // trim
+		// for k, vi = range msg.Message {
+		// 	switch log := vi.(type) {
+		// 	case string:
+		// 		msg.Message[k] = strings.TrimSpace(log)
+		// 	case []byte:
+		// 		msg.Message[k] = bytes.TrimSpace(log)
+		// 	}
+		// }
 
 		// add
 		if _, ok = f.Add[msg.Tag]; ok {
@@ -138,12 +156,18 @@ func (f *Parser) Run() {
 
 		// parse time
 		if f.TimeKey != "" {
-			switch msg.Message[f.TimeKey].(type) {
+			switch ts := msg.Message[f.TimeKey].(type) {
 			case []byte:
-				if t, err = time.Parse(f.TimeFormat, string(msg.Message[f.TimeKey].([]byte))+" "+f.AppendTimeZone); err != nil {
+				if f.AppendTimeZone != "" {
+					v = string(ts) + " " + f.AppendTimeZone
+				} else {
+					v = string(ts)
+				}
+
+				if t, err = time.Parse(f.TimeFormat, v); err != nil {
 					utils.Logger.Error("parse time got error",
 						zap.Error(err),
-						zap.ByteString("ts", msg.Message[f.TimeKey].([]byte)),
+						zap.ByteString("ts", ts),
 						zap.String("time_key", f.TimeKey),
 						zap.String("time_format", f.TimeFormat),
 						zap.String("append_time_zone", f.AppendTimeZone))
@@ -151,10 +175,16 @@ func (f *Parser) Run() {
 					continue
 				}
 			case string:
-				if t, err = time.Parse(f.TimeFormat, msg.Message[f.TimeKey].(string)+" "+f.AppendTimeZone); err != nil {
+				if f.AppendTimeZone != "" {
+					v = ts + " " + f.AppendTimeZone
+				} else {
+					v = ts
+				}
+
+				if t, err = time.Parse(f.TimeFormat, v); err != nil {
 					utils.Logger.Error("parse time got error",
 						zap.Error(err),
-						zap.String("ts", msg.Message[f.TimeKey].(string)),
+						zap.String("ts", ts),
 						zap.String("time_key", f.TimeKey),
 						zap.String("time_format", f.TimeFormat),
 						zap.String("append_time_zone", f.AppendTimeZone))

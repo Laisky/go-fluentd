@@ -1,40 +1,43 @@
-# 1. Go-Fluentd 设计文档
+
+# 使用 Golang 写一个取代 fluentd 的日志处理器
+
+## 起因
+
+我曾经写过一篇介绍 fluentd 的文章：<https://blog.laisky.com/p/fluentd/>，
+在此文中，我介绍了使用 fluentd 作为日志处理工具的用法，在工作中，我也使用了多年的 fluentd。而且 fluentd 还加入了 CNCF，发展潜力可观。
+
+不过在目前的公司中，因为较为特殊的需求，使用 fluentd 遇到了一些问题。
+首先是插件质量良莠不齐，而因为没有熟悉 ruby 的人，所以调试起来相当头疼。
+其次是 ruby 存在 GIL，性能被限制在单核上，而 process 扩展的可用场景有限。
+最后就是实际需求过于多样，fluentd 的很多插件没法满足需求，
+或是需要大量使用 rewrite 控制解析流，配置文件相当晦涩难懂。
+综合这些原因，正好最近没什么事，以及也想看看 golang 的能力，
+所以干脆决定用 golang 自己写一个。
+
+如果按照 collector, aggregator, concator, parser, forwarder 来理解日志流的话，
+那我就是实现了除 collector 外的所有功能，也就是说，实现了支持 fluentd 协议的完整服务端，
+客户端可以完全无感的继续按照过去使用 fluentd 的形式向远端推送日志。
+
+主要的开发工作大概花了 3 个月，然后在一个集群环境上完全取代了 fluentd，
+这个集群的日志量大约为 1.5 万条/秒，使用 fluentd 时开了 1 个 concator，4 个 parser + forwarder，
+在一台八核虚机上吃掉了绝大部分 CPU，golang 新版上线后 CPU 变化不大，
+然后又花了大概一个月进行性能优化（借助 pprof），这期间集群的流量也上升到了 2 万/秒（50 mbps），而且增加了日志内 json 解析的需求，但是 CPU 使用率下降到了 400% 以下，成效卓著。（在四核虚机上简单测试，应该能达到 2-30万/秒 的吞吐，不过性能和日志结构的相关性很大，仅作参考）
+
+此文大致介绍一下 go-fluentd 的设计和开发历程，留作参考。很多设计不一定最优甚至有些拙劣，不过在较短时间内，完全支撑了线上业务，并且留出了相当大的性能冗余，应该还可以算是有一定价值。
+
+项目代码：<https://github.com/Laisky/go-fluentd>
 
 
-<!-- TOC -->
-- [1. Go-Fluentd 设计文档](#1-go-fluentd-%E8%AE%BE%E8%AE%A1%E6%96%87%E6%A1%A3)
-  - [1.1. 概述](#11-%E6%A6%82%E8%BF%B0)
-  - [1.2. 功能](#12-%E5%8A%9F%E8%83%BD)
-    - [1.2.1. Acceptor & Recvs](#121-acceptor--recvs)
-    - [1.2.2. AcceptorPipeline](#122-acceptorpipeline)
-    - [1.2.3. Journal](#123-journal)
-    - [1.2.4. Dispatcher & tagFilters](#124-dispatcher--tagfilters)
-    - [1.2.5. PostPipeline](#125-postpipeline)
-    - [1.2.6. Producer & Senders](#126-producer--senders)
-    - [1.2.7. Controllor](#127-controllor)
-    - [1.2.8. Monitor](#128-monitor)
-  - [1.3. 使用](#13-%E4%BD%BF%E7%94%A8)
-    - [1.3.1. 运行](#131-%E8%BF%90%E8%A1%8C)
-    - [1.3.2. 配置](#132-%E9%85%8D%E7%BD%AE)
+---
 
-## 1.1. 概述
+## 功能组件
 
-取代 Fluentd，实现高性能的 log aggregator, parser 等功能。
+首先，最早的需求场景就是，数百个 IP 以 TCP 的形式推送日志流，每一条日志都有相对固定的格式，但是一条日志可能会被拆分为数个不同的数据，所以需要监听连接 -> 接收日志流 -> 解码日志 -> 然后识别拼接同一条日志 -> 将日志字符串解析为结构化的数据 -> 发送到后端（ElasticSearch）。
 
-原因是因为 fluentd 无法利用多核，已经出现性能瓶颈。
-而且我们目前的日志分化和解析逻辑非常多样化，开源组件已经无法满足需求，
-所以需要自行开发更为灵活和高性能的日志解析组件。
+然后在实际开发中，发现还需要实现日志 At Least Once 的保证，所以又增加了 journal 的设计，每当拿到一条日志数据后，进在文件中进行持久化，每当这条日志成功发送到后端后，再在文件中将该日志标记为已发送。
 
-
-使用语言：Golang v1.11.5
-
-
-## 1.2. 功能
-
-Go-Fluentd 采用插件化的设计，将日志从接收到转发的全部流程拆分为一个个不同的步骤，
-每个步骤都可以按需的插入功能组件（只要实现了所需的接口方法）。
-
-目前已经拆分的步骤有：
+所以我在设计上，采用了插件化的设计，将日志从接收到转发的全部流程拆分为一个个不同的步骤，
+每个步骤都可以按需的插入功能组件（只要插件实现了所要求的接口方法），然后每一个步骤在接收到日志数据后，按顺序调用一遍插件，然后再放入后续流程的 channel 即可，目前已经拆分的步骤有：
 
 - 日志接收：acceptor + recvs
 - 日志预处理：acceptorPipeline
@@ -44,15 +47,14 @@ Go-Fluentd 采用插件化的设计，将日志从接收到转发的全部流程
 - 日志转发：producer + senders
 
 
-除了步骤外，还有一些框架工具类：
+除了步骤外，还有两个工具类：
 
 - 监控：monitor
 - 控制：controllor
 
 ![architect](https://s3.laisky.com/uploads/2019/01/go-fluentd-architecture.jpg)
 
-
-需要强调的是，在整个流程中流转的都是 `*libs.Fluentd` 消息体（下文中以 msg 代称）：
+需要强调的是，在整个流程中流转的日志数据体，都封装为 `*libs.Fluentd` 数据结构（下文中以 msg 代称）：
 
 ```go
 type FluentMsg struct {
@@ -71,16 +73,13 @@ type FluentMsg struct {
 - `ExtIds`：当发生消息合并时，将被合并的消息的 id 保存其中。
 
 
-不过，在 Message 映射表中，也会有几个保留字段用来保存元数据：
+不过为了方便，在 Message 中，也放了几个保留字段用来保存元数据：
 
 - `tag`：用来保存该消息真实的 tag（因为 msg.Tag 有时候会为了流转而被不断的改动）；
 - `msgid`：等于 msg.Id，可用于对消息进行去重。
 
 
-BTW：为了保证性能，所有的 msg 必须通过 sync.Pool 进行回收。
-
-
-### 1.2.1. Acceptor & Recvs
+### Acceptor & Recvs
 
 Acceptor 是接收数据的框架。具体的接收方式是由 recvs 来实现的，任何 recv 只需要满足如下接口即可：
 
@@ -106,11 +105,35 @@ type AcceptorRecvItf interface {
 recvs 负责将接收到的数据流转换为 *libs.Fluentd 类型后统一输出（需要确定 tag 和 id），acceptor 提供的输出 channel 有两个：
 
 - `syncOutChan`：会被 journal 同步阻塞，主要用于 kafka 这类可以控速的来源；
-- `asyncOutChan`：不会被阻塞，journal 阻塞后会跳过 journal，如果后续仍然堵塞就会丢弃消息，
-  用于确保服务不会因为日志消费不及时受到影响；
+- `asyncOutChan`：不会被阻塞，journal 阻塞后会跳过 journal，如果后续仍然堵塞就会丢弃消息，用于确保服务不会因为日志消费不及时受到影响；
 
 
-### 1.2.2. AcceptorPipeline
+#### fluentd-recv 的一些问题
+
+fluentd 采取了 messagepack 的形式来编解码数据，最初一版里我采用了 <https://github.com/ugorji/go>，但是在开发过程中感觉这个库蛮难用的，后来在性能调优的时候，通过性能测试发现这个库的性能也很差，所以就换成了 <https://github.com/tinylib/msgp>。这个库不但使用简单，而且性能极强，目前在我的 pprof 火焰图中基本已经看不到 messagepack 编解码的消耗。
+
+然后发现了 docker 的一个坑（准确的说是一系列坑），对于 17、18 的几个版本，
+使用 `--log-driver=fluentd` 时，如果远端日志处理不及时导致缓存堆积，
+最终导致 tcp winsize 置为 0 时，docker 会阻塞内部进程的输出操作。
+目前我采取了两种方法，一是在客户端设置了
+
+```
+--log-opt fluentd-async-connect=true --log-opt mode=non-blocking
+```
+
+在 v17.05 上测试没问题，不过在 v18 上发现依然出现了阻塞。
+所以在设计 go-fluentd 的 fluentd-recv 时，加了一个策略，尽可能快的读取数据，
+如果后续处理不及时时，宁愿丢弃消息也不能阻塞 tcp。实现的方法就是上述的 `syncOutChan/asyncOutChan`。
+
+
+
+### AcceptorPipeline
+
+recv 会输出大量的 msg 数据，不过并不是所有的数据都是有效的（甚至有接近一半都是无效的），
+如果把这些数据全部都持久化硬盘的话有些不值，所以在 journal 前加了一步简单的过滤，
+过滤掉一些明显不符合要求的数据。
+
+除此之外，有一些 msg 需要根据内容改变自己的 tag，这一步也放在这里做了。
 
 AcceptorPipeline 负责对消息进行一些简单的前处理，会按顺序执行 acceptorFilters，
 各个 filter 自行判断如何处理消息（跳过、处理或丢弃）。任何 filter 需要满足如下接口：
@@ -132,13 +155,16 @@ type AcceptorFilterItf interface {
 - default：过滤掉不支持的 tag。
 
 
-各个 filters 返回 nil 的话，就会跳过后续的 filters。所以如果 filter 决定丢弃消息的话，需要自行处理回收。
+各个 filters 返回 nil 的话，就会跳过后续的 filters。
+但是由于 filter 可以将消息重新放入 inChan，
+所以即使返回 nil，Pipeline 也无法判定消息是否还要使用，
+如果丢弃消息的话，各个 filter 需要自行调用 `DiscardMsg` 进行回收。
 
 需要注意的是，acceptorFilters 早于 journal，消息尚未被持久化到磁盘，
 所以为了提高可靠性，不要在这里实现太复杂的逻辑，应该让 msg 尽可能快的通过。
 
 
-### 1.2.3. Journal
+### Journal
 
 Journal 扮演 redo log 的角色，将 AcceptorPipeline 后的所有消息都写入 data 文件，提供持久化。
 任何被后续流程处理的消息，也需要将其 id 提交给 journal 并写入到 ids 文件中。
@@ -146,19 +172,54 @@ Journal 扮演 redo log 的角色，将 AcceptorPipeline 后的所有消息都�
 journal 会定期的重新读取历史的 data 和 ids 文件，首先加载所有的 ids，然后再逐一的读取 data 中的 msg，
 如果 msg 的 id 已经存在于 ids 中，说明该消息已被处理，则跳过。
 如果 msg 的 id 未存在于 ids 中，说明该消息还没有被后续流程处理，则将该 msg 传递给 journal dump，
-也就是将其写入新的 data 文件，并进入后续流转。这样可以保证任何达到了 journal 的消息，至少会被消费一次，实现 At Least One 语义。
+也就是将其写入新的 data 文件，并进入后续流转。这样可以保证任何达到了 journal 的消息，至少会被消费一次，实现 At Least Once 语义。
 
 在程序中止时，只有 Acceptor 和 AccptorPipeline 内的消息和 Journal 内正在等待 dump 的消息会丢失，
 所以 Acceptor 和 AccptorPipeline 的处理要尽可能的快，而 Journal dump 的目标磁盘的 IO 也要尽可能的高。
 不过由于 Journal 使用的磁盘空间极小（视配置而定，一半小于 1 GB），而且全部采用顺序读写，所以应该能很好的利用页缓存，不会对磁盘带来太大压力。
 
+data 文件采用 messagePack 编码，因为这样最简单，该编码带长度信息，而且不需要预定义 schema，压缩大小和 protobuf 也差不太多。
 
-### 1.2.4. Dispatcher & tagFilters
+ids 文件采用简单的 binary Big Endian 存储定长的 int64。
 
-这是目前最主要的解析逻辑。其实最初导致 Fluentd 不能水平扩展的根本原因就在于我们需要让日志以 tag & container_id 来分流，
-而目前使用的 lb 只支持 roundrobin 或 ip source，都不符合需求。
-所以首先使用 dispatcher 按照 tag 对 msg 进行分流（channel），
+
+#### 问题
+
+这个组件设计的比较草率，因为一开始没意识到还需要 journal，后面加的时候也比较仓促。
+目前用下来最主要的几个问题有：
+
+- 消息重复
+- 文件损坏的处理
+- 性能
+
+因为消息被持久化到消息被消费间有一个时间差，这个时间差内如果 journal 文件发生了 rotate，
+那么这一批次的数据都会被重新放入流水线进行处理。目前采取的办法也很粗糙，
+每次 rotate 的时候同步创建和切换新的 data 和 id 文件，而且加快 rotate 的频率，
+尽可能的减少每次 rotate 的消息数量，目前线上来看消息的重复率已经相当的低。
+不过还有很大的优化空间。
+
+当初设计的时候没有考虑文件损坏的问题，其实如果在写入的时候断电或重启，
+由于缓存的存在，文件还是比较容易损坏。后来加入的临时解决办法是，
+一旦从文件中读取数据出错，就跳过该文件。至少保证了服务的稳健运行，
+而且由于机器重启或断电的概率极低，目前这还不构成问题。
+
+就目前的观察来说，性能问题不大，benchmark 的时候也可以轻松的跑满磁盘 IO
+（当然一个原因是因为我们线上用的是最便宜的网络磁盘，吞吐仅有 128 mbps）。
+而且通过 iostat 等工具观测，由于实际上 journal 产生的文件很小（默认每个 200 MB，一般总数不会超过 2 GB），
+所有的文件都可以被页缓存，对磁盘没有任何读操作。
+不过看上去写磁盘时并没有触发写合并，因为不是瓶颈所以没有再花时间去多看。
+
+另一个小问题是，从 pprof 上来看，`File.Stat` 的开销还不小，看来这个操作也挺费时的。
+
+
+### Dispatcher & tagFilters
+
+其实最初导致 Fluentd 不能水平扩展的根本原因就在于我们需要让日志以 tag & container_id 来分流，
+而目前使用的 lb（如 haproxy） 只支持 roundrobin 或 ip source，都不符合需求。
+所以首先使用 dispatcher 按照 tag 对 msg 进行分流（按照 tag 启动不同的 goroutine，并放入起 channel 中），
 每一个 channel 后都接上支持该 tag 的 tagfilters。最后再进行合流，以一个 channel 进行统一输出。
+
+简单的说，dispatcher 就是一个负载均衡，利用后续的多个 goroutine 来让解析压力分散到每一个 CPU 上。
 
 tagFilters 需要符合如下接口即可：
 
@@ -186,9 +247,25 @@ Pipeline 是对每一个 msg，由外部去调用每一个 filters 的 Filter �
 - parser：日志解析，将字符串按照正则解析为结构化数据。
 
 
-### 1.2.5. PostPipeline
+#### 问题
 
-负责对已解析的日志进行后处理，该步骤结束后就直接进入转发步骤。内部设计理念和 acceptorPipeline 完全一致，postFilters 的接口要求为：
+其实，一切问题的起源都是因为 docker 的 `--log-driver=fluentd` 会对消息按照 `\n` 进行拆行，
+为了拼接就必须负载均衡器必须要保证前后端连接的一致性，而保证这个一致性就导致 fluentd 性能不足，
+因为云环境上 IP 高度集中，采用 source ip 策略做 LB 后的流量高度倾斜，几乎全部压在几个节点上。
+而为了更好的 LB，就需要对 tag 做 LB，这也是 dispatcher 的设计目的。
+
+但其实…如果当初不用 docker 的 log-driver，而是用日志组件直接输出日志，那么就根本不存在拆行问题，
+如果不需要拼接的话，后端就不会有状态，而无状态的话就可以用 round robin 非常轻松的做 LB 和水平扩展…
+
+不过反正搞都搞了，而且在做解析需求的时候确实顺手了很多…
+
+目前，正则解析占了大约 25% 的 CPU。不过这是因为我们的数据都偏大，而且要做多次解析。
+
+
+### PostPipeline
+
+负责对已解析的日志进行后处理，该步骤结束后就直接进入转发步骤。
+内部设计理念和 acceptorPipeline 完全一致，postFilters 的接口要求为：
 
 
 ```go
@@ -209,9 +286,10 @@ type PostFilterItf interface {
 - default：将所有的 []byte 类型转换为 string 类型，以方便后面序列化为可读的 json（hardcoding 为最后一个 postFilter）。
 
 
-### 1.2.6. Producer & Senders
+### Producer & Senders
 
-Producer 负责分发消息，支持多 senders，按照 msg.Tag 传递给 sender 进行发送，
+Producer 负责转发消息到其他服务（如 ElasticSearch），
+支持多 senders，按照 msg.Tag 传递给 sender 进行发送，
 既允许一个 sender 转发多个 tag，也支持多个 senders 转发同一个 tag。
 senders 需要满足如下接口：
 
@@ -236,19 +314,33 @@ producer 的主要职责除了将 msg 传递给各个 senders 外，还负责统
 - 每一个 sender 在发送成功或失败后，会将 msg.Id 交还给 producer（通过 discardChan 或 discardWithoutCommitChan）；
 - producer 会对 senders 发回的 msg id 进行计数，当计数达到 n 时，认为该 msg 已经被所有 senders 处理，此时才回收该 msg。
   - 如果 msg id 全部是通过 discardChan 送回的，则在回收消息的同时，将 msg id 提交给 journal 进行记录；
-  - 如果有任意 msg id 是通过 discardWithoutCommitChan 送回的，则仅回收消息，但是不向 journal 提交（这会导致该条消息在稍后会被重新处理）。
+  - 如果有任意 msg id 是通过 discardWithoutCommitChan 送回的，则仅回收消息，
+    但是不向 journal 提交（这会导致该条消息在稍后会被重新处理，适用于消息发送失败，决定稍后重试的场景）。
 
 
-### 1.2.7. Controllor
+目前支持的 sender 有：
 
-这不是流程，而是代码的一个设计模式，在 controllor 内，对所有的流程组件进行初始化，并且进行拼接，最终实现完成的流程，可以理解为类似于 IoC 容器。
+- elasticsearch
+- fluentd
+- http
+- kafka
 
 
-### 1.2.8. Monitor
+### Controllor
+
+这不是流程，而是代码的一个设计模式，在 controllor 内，对所有的流程组件进行初始化，
+并且进行拼接，最终实现完成的流程，可以理解为类似于 IoC 容器。
+
+具体的代码就是 `controllor.go` 内，根据配置文件，加载不同的功能组件，
+通过 channel 串联或并联为流水线。
+
+
+### Monitor
 
 一个基于 iris 提供 HTTP 监控接口的组件。通过 `HTTP GET /monitor` 返回监控结果。
 
-在代码的任何地方，都可以通过调用 AddMetric 为最终的监控结果（以 json 呈现）中添加一个字段：
+需要手动采集监控数据，在代码的任何地方，
+都可以通过调用 monitor.AddMetric 为最终的监控结果（以 json 呈现）中添加一个字段：
 
 ```go
 func AddMetric(name string, metric func() map[string]interface{}) {
@@ -256,14 +348,14 @@ func AddMetric(name string, metric func() map[string]interface{}) {
 }
 ```
 
-
+其实就是定义一个函数，输出监控的字段和数值，每次监控接口被调用时，都会调用这些函数。
 其中的两个参数：
 
 - `name`：会呈现为 json 中的一个 key；
 - `metric`：一个返回 map 的 func，每当监控接口被调用时，该 func 就会被调用，并将结果拼合到最终的 json 之中。
 
-
-一个监控结果的例子：
+<details><summary>一个监控结果的例子：</summary>
+<p>
 
 ```go
 {
@@ -381,10 +473,13 @@ func AddMetric(name string, metric func() map[string]interface{}) {
 }
 ```
 
+</p>
+</details>
 
-## 1.3. 使用
 
-### 1.3.1. 运行
+---
+
+## 运行
 
 使用 glide 安装依赖，然后直接编译运行即可。
 
@@ -431,7 +526,7 @@ exit status 2
 
 
 
-### 1.3.2. 配置
+### 配置
 
 命令行参数只接收一些必要的参数，而运行插件所需的参数都来自于配置文件。目前支持两种读取配置的方式：
 
@@ -443,3 +538,130 @@ exit status 2
 从 config-server 读取，需要指定 `--config-server`、`--config-server-appname`、`--config-server-profile`、`--config-server-label`、`--config-server-key`。
 也就是会从 `{config-server}/{config-server-appname}/{config-server-profile}/{config-server-label}` 加载 json，
 并且从其中的 `{config-server-key}` key 中读取原始的 yml 文件内容进行解析。
+
+其中一些重要的经常变动的组件，如 senders、recvs、tagFilters，
+已经可以根据配置文件来加载所需的插件，而需要改动代码。不过并不支持动态加载。
+
+
+---
+
+## 性能调优
+
+golang 的性能调优真是器大活好！
+
+我使用了 iris 提供的 HTTP 在线导出 pprof 数据的功能。
+用法非常简单，只需要注册一个 endpoint：
+
+```go
+// supported action:
+// cmdline, profile, symbol, goroutine, heap, threadcreate, debug/block
+Server.Any("/admin/pprof/{action:path}", pprof.New())
+```
+
+然后就可以调用：
+
+- `/admin/pprof/cmdline`：启动时的命令行参数
+- `/admin/pprof/profile`：下载 CPU dump
+- `/admin/pprof/symbol`
+- `/admin/pprof/goroutine`：goroutine 信息
+- `/admin/pprof/heap`：下载 heap dump
+- `/admin/pprof/heap?debug=1`：一些运行时信息
+- `/admin/pprof/threadcreate`
+- `/admin/pprof/debug/block`
+- `/admin/pprof/`
+
+
+### CPU Profile
+
+针对 CPU 做优化时最常用的就是 profile，访问 `/admin/pprof/profile` 后，
+会自动启动采样，等待 30 秒后，会下载一个 `profile` 文件，然后就可以启动 go tool 的交互式工具：
+
+```sh
+go tool pprof --http=:8000 profile
+```
+
+默认显示的应该是 graph：
+
+![profile-graph](https://s3.laisky.com/uploads/2019/02/profile-graph.jpg)
+
+线条代表调用关系，方框代表函数，框越大代表占用的时间越多。
+
+graph 最大的优点在于让你可以一眼就看出什么函数占用了最长的执行时间。
+也就是对最热点的调用一目了然，让你在下一步的优化中可以有的放矢。
+
+比如你有一个工具函数被调用了绝大多数次，那么在 graph 中将会一目了然，
+而在 flamegraph 却可能因为调用链分散而体现不出来，
+这就是 graph 相对于 flamegragh 的优点。
+
+
+通过点击左上角的 view，还可以切换到 flamegraph：
+
+![profile-flamegraph](https://s3.laisky.com/uploads/2019/02/profile-flamegraph.jpg)
+
+火焰图可以更清晰的展示逻辑的调用链，从 root 开始，一层层的往下调用，
+每一次调用的耗时占比也是一目了然。让你知道你的代码逻辑中，哪一个步骤耗时最多。
+
+从性能分析中可以看出，go-fluentd 在当前的负载下，耗时最多的有：
+
+- `regexp.FindSubmatch`：大量的正则确实很费时；
+- `compress.gzip`：压缩也很耗 CPU；
+- `msgp.Decode`：recv 解码数据流，经过优化后已经少了很多；
+- `runtime.park_m`：goroutine 在等待资源，说明此时计算资源还相当的空闲；
+- `gc.bgMarkWorkers`：GC。
+
+
+可以看出，通过优化，messagepack 和 json 的编解码开销已经几乎可以忽略不计。
+顺带一提，当你发现有大量的 `runtime.park_m` 时，说明此时机器资源非常空闲，
+所以此时火焰图上呈现的数据不一定是瓶颈所在，比如你甚至可能看到大量的 `sleep` 调用占了很多的 CPU，
+但其实当负载上升后，这些调用的占比就会小到忽略不计。
+
+所以，建议在压测的时候做 profile，这时候最能体现出整个流程的瓶颈。
+而且，有很多问题，不在高负载下根本不会出现。比如下面提到的 zap 问题。
+
+
+### 日志 zap 的问题
+
+在压测的时候，通过 pprof 发现出现了大量的 `time.Now` 调用，
+严重时甚至能有占用超过 20% 的 CPU。
+
+![profile-zap](https://s3.laisky.com/uploads/2019/02/profile-zap.jpg)
+
+通过 strace 后发现确实有非常大量的 `clock_gettime` 调用。
+通过排查后发现，只要我注释掉 DEBUG 日志，这一问题就会消失（即使我的 log level 设置为 INFO）。
+
+所以我怀疑是我用的日志组件 zap 出了什么问题。查看 zap 源代码后找到了问题所在：
+
+```go
+func (log *Logger) check(lvl zapcore.Level, msg string) *zapcore.CheckedEntry {
+	// check must always be called directly by a method in the Logger interface
+	// (e.g., Check, Info, Fatal).
+	const callerSkipOffset = 2
+
+	// Create basic checked entry thru the core; this will be non-nil if the
+	// log message will actually be written somewhere.
+	ent := zapcore.Entry{
+		LoggerName: log.name,
+		Time:       time.Now(),
+		Level:      lvl,
+		Message:    msg,
+	}
+	ce := log.core.Check(ent, nil)
+	willWrite := ce != nil
+```
+
+在通过 `log.core.Check` 对 log level 进行检查前，先生成了 log entry，
+而且其中调用了 `time.Now()`。
+
+问题在于，`time.Now()` 会导致一次 `clock_gettime` 的系统调用，
+而对于 IO 密集型应用，每一次系统都应该精打细用，在高负载下，
+这一操作导致了大量的调用堆积，也导致 cpu load 畸高。
+
+解决思路有两个：一是对时间进行缓存，因为其实你并不需要每一次都请求精确的时间。
+另一个方法就更简单粗暴，只对要输出的日志生成时间，没达到输入级别的日志则直接丢弃。
+
+所以我就简单粗暴的加了一行 if，性能提升显著：
+
+![new-zap](https://s3.laisky.com/uploads/2019/02/zap_benchmark.jpeg)
+
+给 zap 提了一个 pr，但是一直没人理，所以现阶段，如果使用 zap 的话，
+建议换成我的：`import "github.com/Laisky/zap"`。

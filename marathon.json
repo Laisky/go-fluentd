@@ -23,6 +23,30 @@
                 {
                     "key": "device",
                     "value": "/dev/fuse"
+                },
+                {
+                    "key": "log-driver",
+                    "value": "fluentd"
+                },
+                {
+                    "key": "log-opt",
+                    "value": "tag=fluentd-forward.sit"
+                },
+                {
+                    "key": "log-opt",
+                    "value": "fluentd-address=fluentd-sit.ptcloud.t.home:24225"
+                },
+                {
+                    "key": "log-opt",
+                    "value": "fluentd-async-connect=true"
+                },
+                {
+                    "key": "log-opt",
+                    "value": "mode=non-blocking"
+                },
+                {
+                    "key": "log-opt",
+                    "value": "max-buffer-size=50m"
                 }
             ],
             "privileged": false,

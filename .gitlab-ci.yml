@@ -1,33 +1,58 @@
 image: registry:5000/docker:latest
 
+
 variables:
-  DOCKER_DRIVER: overlay
-  # DOCKER_IMAGE_NAME: $DOCKER_REGISTRY_URL/$CI_PROJECT_NAME:$CI_PIPELINE_IID
   APP_NAME: go-fluentd-forward
+
   DOCKER_REGISTRY_URL: registry:5000
   DOCKER_IMAGE_NAME: $DOCKER_REGISTRY_URL/$APP_NAME
+  DOCKER_TAG: $CI_PIPELINE_IID-$CI_COMMIT_SHORT_SHA
+
   SPRING_PROFILES_ACTIVE: gitlab-ci
+  DOCKER_DRIVER: overlay
   WORK_HOME: "."
-  DOCKERFILE: ./.docker/forward.Dockerfile
   MARATHON_CONFIG: ./marathon.json
+
+
+cache:
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - ~/.glide
+    - /root/.glide
+    - vendor
+
 
 stages:
   - build
+  - test
   - deploy
 
-docker-build:
+
+build:app:
   stage: build
   tags:
     - public
   image: registry:5000/docker:latest
   script:
     - rm -rf ./.git
-    - DOCKER_TAG=`SHA=$CI_COMMIT_SHA; echo ${SHA:0:10}`
-    - docker build -t $DOCKER_IMAGE_NAME:$DOCKER_TAG -f $DOCKERFILE .
+    - docker build . -t $DOCKER_IMAGE_NAME:$DOCKER_TAG -f ./.docker/forward.Dockerfile
     - docker push $DOCKER_IMAGE_NAME:$DOCKER_TAG
   only:
     - master
-  retry: 2
+  retry: 1
+
+
+test:run:
+  stage: test
+  tags:
+    - public
+  image: registry:5000/docker:latest
+  script:
+    - docker pull registry:5000/gobase:1.11.5-alpine3.9  # pull latest image
+    - docker build . -f ./.docker/test.Dockerfile -t go-fluentd-test:$DOCKER_TAG
+    - docker run -i --rm go-fluentd-test:$DOCKER_TAG
+  retry: 1
+
 
 marathon-deploy:
   stage: deploy
@@ -35,7 +60,6 @@ marathon-deploy:
     - public
   image: registry:5000/appropriate/curl:latest
   script:
-    - DOCKER_TAG=`SHA=$CI_COMMIT_SHA; echo ${SHA:0:10}`
     - "sed -i \"s#DOCKER_IMAGE_NAME#$DOCKER_IMAGE_NAME:$DOCKER_TAG#g\" $MARATHON_CONFIG"
     - "cat $MARATHON_CONFIG"
     - "curl -X PUT -H 'Content-Type: application/json' \"http://172.16.5.11/marathon/v2/apps/paas/$APP_NAME?force=true\" -d @$MARATHON_CONFIG"
@@ -44,4 +68,4 @@ marathon-deploy:
   environment:
     name: sit
     url: http://logsrv-sit.pateo.com.cn/monitor
-  retry: 2
+  retry: 1

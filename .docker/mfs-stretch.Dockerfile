@@ -1,5 +1,5 @@
-# docker build . -f ./.docker/mfs-stretch -t registry:5000/mfs-stretch:20180116
-# docker push registry:5000/mfs-stretch
+# docker build . -f ./.docker/mfs-stretch.Dockerfile -t registry:5000/mfs-stretch:20190116
+# docker push registry:5000/mfs-stretch:20190116
 FROM debian:stretch
 
 ENV HTTP_PROXY=http://172.16.4.26:17777

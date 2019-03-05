@@ -1,5 +1,5 @@
 hash: 693f9d480c930670d07a52bce0c92472927f6a03efcd62fd57d75dd3574519d8
-updated: 2019-02-13T14:11:14.441086+08:00
+updated: 2019-03-01T16:49:59.295835+08:00
 imports:
 - name: github.com/aymerick/raymond
   version: b565731e1464263de0bda75f2e45d97b54b60110
@@ -113,7 +113,7 @@ imports:
   - internal/syslogparser/rfc3164
   - internal/syslogparser/rfc5424
 - name: github.com/Laisky/go-utils
-  version: 7926682e8a322c8c1eb4323db1dd0c0e50741d4c
+  version: 9b55cbe75f337fadf84f7c44e0fc5ab34677dc49
   vcs: git
   subpackages:
   - journal

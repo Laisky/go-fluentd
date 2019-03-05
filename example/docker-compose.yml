@@ -21,7 +21,7 @@ services:
     command: python /app.py
 
   go-fluentd:
-    image: ppcelery/go-fluentd:1.7
+    image: ppcelery/go-fluentd:1.7.2
     restart: "on-failure"
     networks:
       - fluentd-test

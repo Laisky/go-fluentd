@@ -13,7 +13,7 @@ settings:
     sync_out_chan_size: 10000
     max_rotate_id: 372036854775807  # do not change to smaller number
     recvs:
-      tenants:
+      plugins:
         fluentd:
           type: fluentd
           active_env:
@@ -24,7 +24,7 @@ settings:
   producer:
     discard_chan_size: 50000
     sender_inchan_size: 50000
-    tenants:
+    plugins:
       fluentd:
         type: fluentd
         active_env:
@@ -49,7 +49,7 @@ settings:
     is_throttle: false
     throttle_max: 10000
     throttle_per_sec: 5000
-    tenants:
+    plugins:
       spark:
         type: spark
         msg_key: log
@@ -70,26 +70,15 @@ settings:
     reenter_chan_len: 5000
     out_chan_size: 10000
     fork: 4
-    tenants:
+    plugins:
       default:
         msg_key: log
         max_len: 307200
-      forward_tag_rewriter:
-        tag_key: tag
-        tag: forward-wechat
-      es_dispatcher:
-        # tags: *all-tags
-        tags:
-          - kafkabuf
-        tag_key: tag
-        rewrite_tag_map:
-          # es-general
-          app.spring.{env}: es-general.{env}
   dispatcher:
     out_chan_size: 10000
   tag_filters:
     internal_chan_size: 10000
-    tenants:
+    plugins:
       spring:
         type: parser
         tags:
@@ -118,7 +107,7 @@ settings:
         type: concator
         config:
           max_length: 100000
-        tenants:
+        plugins:
           test:
             msg_key: log
             identifier: container_id

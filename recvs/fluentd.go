@@ -12,16 +12,23 @@ import (
 	"github.com/tinylib/msgp/msgp"
 )
 
+// FluentdRecvCfg configuration of FluentdRecv
 type FluentdRecvCfg struct {
-	Name, Addr, TagKey     string
+	// Addr: like `127.0.0.1:24225;`
+	// TagKey: set `msg.Message[TagKey] = tag`
+	Name, Addr, TagKey string
+
+	// if IsRewriteTagFromTagKey, set `msg.Tag = msg.Message[TagKey]`
 	IsRewriteTagFromTagKey bool
 }
 
+// FluentdRecv recv for fluentd format
 type FluentdRecv struct {
 	*BaseRecv
 	*FluentdRecvCfg
 }
 
+// NewFluentdRecv create new FluentdRecv
 func NewFluentdRecv(cfg *FluentdRecvCfg) *FluentdRecv {
 	utils.Logger.Info("create FluentdRecv")
 	return &FluentdRecv{
@@ -30,10 +37,12 @@ func NewFluentdRecv(cfg *FluentdRecvCfg) *FluentdRecv {
 	}
 }
 
+// GetName return the name of this recv
 func (r *FluentdRecv) GetName() string {
 	return r.Name
 }
 
+// Run starting this recv
 func (r *FluentdRecv) Run() {
 	utils.Logger.Info("run FluentdRecv")
 	var (
@@ -170,6 +179,7 @@ func (r *FluentdRecv) decodeMsg(conn net.Conn) {
 	}
 }
 
+// SendMsg put msg into downstream
 func (r *FluentdRecv) SendMsg(msg *libs.FluentMsg) {
 	if r.IsRewriteTagFromTagKey {
 		switch msg.Message[r.TagKey].(type) {

@@ -73,19 +73,20 @@ Then Producer can send logs to anywhere (depends on Senders).
 
 ## Run
 
-build:
+directly run:
 
 ```sh
-docker build . -t ppcelery/go-fluentd:latest
+go run -race entrypoints/main.go --config=/Users/laisky/repo/pateo/configs/go-fluentd/localtest --env=sit --log-level=debug
 ```
 
-run:
+run by docker:
 
 ```sh
 docker run -itd --rm --name=go-fluentd -p 24225:24225 -p 8080:8080 \
-    -v /opt/configs/go-fluentd:/etc/go-fluentd \
+    -v /etc/configs/go-fluentd:/etc/go-fluentd \
     -v /data/log/fluentd/go-fluentd:/data/log/fluentd/go-fluentd
-    ppcelery/go-fluentd:latest go-fluentd \
+    ppcelery/go-fluentd:1.7.2 \
+    ./go-fluentd \
         --config=/etc/go-fluentd \
         --env=perf \
         --addr=0.0.0.0:8080

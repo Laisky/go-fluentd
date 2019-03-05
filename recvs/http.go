@@ -14,32 +14,46 @@ import (
 	"github.com/kataras/iris"
 )
 
-const (
-	SIGNATURE_KEY = "sig"
-	TIMESTAMP_KEY = "@timestamp"
-)
-
+// HTTPRecvCfg is the configuration for HTTPRecv
 type HTTPRecvCfg struct {
-	HTTPSrv                                *iris.Application
-	MaxBodySize                            int64
-	Path, Env                              string
-	Name, OrigTag, Tag, TagKey, MsgKey     string
-	TimeKey, NewTimeKey, NewTimeFormat     string
-	TimeFormat                             string
-	SigSalt                                []byte
-	TSRegexp                               *regexp.Regexp
+	HTTPSrv     *iris.Application
+	MaxBodySize int64
+	// Name: recv name
+	// Path: url endpoint
+	Name, Path, Env string
+
+	// Tag: set `msg.Tag = Tag`
+	// OrigTag & TagKey: set `msg.Message[TagKey] = OrigTag`
+	OrigTag, Tag, TagKey, MsgKey string
+
+	// TSRegexp: validate time string
+	// TimeKey: load time string from `msg.Message[TimeKey].(string)`
+	// TimeFormat: `time.Parse(ts, TimeFormat)`
+	TimeKey, TimeFormat string
+	TSRegexp            *regexp.Regexp
+
+	// SigKey: load signature from `msg.Message[SigKey].([]byte)`
+	// SigSalt: calculate signature by `md5(ts + SigSalt)`
+	SigKey  string
+	SigSalt []byte
+
 	MaxAllowedDelaySec, MaxAllowedAheadSec time.Duration
 }
 
+// HTTPRecv recv for HTTP
 type HTTPRecv struct {
 	*BaseRecv
 	*HTTPRecvCfg
 }
 
+// NewHTTPRecv return new HTTPRecv
 func NewHTTPRecv(cfg *HTTPRecvCfg) *HTTPRecv {
 	utils.Logger.Info("create HTTPRecv",
 		zap.String("tag", cfg.Tag),
-		zap.String("path", cfg.Path))
+		zap.String("path", cfg.Path),
+		zap.Duration("MaxAllowedAheadSec", cfg.MaxAllowedAheadSec),
+		zap.Duration("MaxAllowedDelaySec", cfg.MaxAllowedDelaySec),
+	)
 
 	if cfg.Path == "" {
 		utils.Logger.Panic("path should not be emqty")
@@ -56,73 +70,77 @@ func NewHTTPRecv(cfg *HTTPRecvCfg) *HTTPRecv {
 	return r
 }
 
+// GetName get current HTTPRecv instance's name
 func (r *HTTPRecv) GetName() string {
 	return r.Name
 }
 
+// Run useless, just capatable for RecvItf
 func (r *HTTPRecv) Run() {
 	utils.Logger.Info("run HTTPRecv")
 }
 
 func (r *HTTPRecv) validate(ctx iris.Context, msg *libs.FluentMsg) bool {
-	switch msg.Message[TIMESTAMP_KEY].(type) {
+	switch msg.Message[r.TimeKey].(type) {
 	case nil:
-		utils.Logger.Warn("message should contains `@timestamp`")
-		r.BadRequest(ctx, "message should contains `@timestamp`")
+		utils.Logger.Warn("timekey missed")
+		r.BadRequest(ctx, "message should contains "+r.TimeKey)
 		return false
 	case string:
-		msg.Message[TIMESTAMP_KEY] = []byte(msg.Message[TIMESTAMP_KEY].(string))
+		msg.Message[r.TimeKey] = []byte(msg.Message[r.TimeKey].(string))
 	case []byte:
 	default:
-		utils.Logger.Warn("unknown type of `@timestamp`", zap.String(TIMESTAMP_KEY, fmt.Sprint(msg.Message[TIMESTAMP_KEY])))
-		r.BadRequest(ctx, "unknown type of `@timestamp`")
+		utils.Logger.Warn("unknown type of timekey", zap.String(r.TimeKey, fmt.Sprint(msg.Message[r.TimeKey])))
+		r.BadRequest(ctx, "unknown type of timekey")
 		return false
 	}
 
-	if !r.TSRegexp.Match(msg.Message[TIMESTAMP_KEY].([]byte)) {
-		utils.Logger.Warn("unknown format of `@timestamp`", zap.ByteString(TIMESTAMP_KEY, msg.Message[TIMESTAMP_KEY].([]byte)))
-		r.BadRequest(ctx, "unknown format of `@timestamp`")
+	if !r.TSRegexp.Match(msg.Message[r.TimeKey].([]byte)) {
+		utils.Logger.Warn("unknown format of timekey", zap.ByteString(r.TimeKey, msg.Message[r.TimeKey].([]byte)))
+		r.BadRequest(ctx, "unknown format of timekey")
 		return false
 	}
 
 	// signature
-	switch msg.Message[SIGNATURE_KEY].(type) {
+	switch msg.Message[r.SigKey].(type) {
 	case nil:
 		utils.Logger.Warn("`sig` not exists")
 		r.BadRequest(ctx, "`sig` not exists")
 		return false
 	case []byte:
 	case string:
-		msg.Message[SIGNATURE_KEY] = []byte(msg.Message[SIGNATURE_KEY].(string))
+		msg.Message[r.SigKey] = []byte(msg.Message[r.SigKey].(string))
 	default:
-		utils.Logger.Warn("`unknown type of `sig`", zap.String(SIGNATURE_KEY, fmt.Sprint(msg.Message[SIGNATURE_KEY])))
+		utils.Logger.Warn("`unknown type of `sig`", zap.String(r.SigKey, fmt.Sprint(msg.Message[r.SigKey])))
 		r.BadRequest(ctx, "`unknown type of `sig`")
 		return false
 	}
-	hash := md5.Sum(append(msg.Message[TIMESTAMP_KEY].([]byte), r.SigSalt...))
+	hash := md5.Sum(append(msg.Message[r.TimeKey].([]byte), r.SigSalt...))
 	sig := hex.EncodeToString(hash[:])
-	if sig != string(msg.Message[SIGNATURE_KEY].([]byte)) {
-		utils.Logger.Warn("signature of `@timestamp` incorrect",
+	if sig != string(msg.Message[r.SigKey].([]byte)) {
+		utils.Logger.Warn("signature of timekey incorrect",
 			zap.String("expect", sig),
-			zap.ByteString("got", msg.Message[SIGNATURE_KEY].([]byte)))
+			zap.ByteString("got", msg.Message[r.SigKey].([]byte)))
 		r.BadRequest(ctx, "signature error")
 		return false
 	}
 
 	// check whether @timestamp is expires
 	now := utils.Clock.GetUTCNow()
-	if ts, err := time.Parse(r.TimeFormat, string(msg.Message[TIMESTAMP_KEY].([]byte))); err != nil {
+	if ts, err := time.Parse(r.TimeFormat, string(msg.Message[r.TimeKey].([]byte))); err != nil {
 		utils.Logger.Error("parse ts got error",
 			zap.Error(err),
-			zap.ByteString(TIMESTAMP_KEY, msg.Message[TIMESTAMP_KEY].([]byte)))
+			zap.ByteString(r.TimeKey, msg.Message[r.TimeKey].([]byte)))
 		r.BadRequest(ctx, "signature error")
 		return false
 	} else if now.Sub(ts) > r.MaxAllowedDelaySec {
-		utils.Logger.Warn("@timestamp expires", zap.Time("ts", ts))
+		utils.Logger.Warn("timekey expires", zap.Time("ts", ts))
 		r.BadRequest(ctx, "expires")
 		return false
 	} else if ts.Sub(now) > r.MaxAllowedAheadSec {
-		utils.Logger.Warn("@timestamp ahead of now", zap.Time("ts", ts))
+		utils.Logger.Warn("timekey ahead of now",
+			zap.Time("ts", ts),
+			zap.Time("now", now))
 		r.BadRequest(ctx, "come from future?")
 		return false
 	}
@@ -130,11 +148,13 @@ func (r *HTTPRecv) validate(ctx iris.Context, msg *libs.FluentMsg) bool {
 	return true
 }
 
+// BadRequest set bad http response
 func (r *HTTPRecv) BadRequest(ctx iris.Context, msg string) {
 	ctx.StatusCode(iris.StatusBadRequest)
 	ctx.WriteString(msg)
 }
 
+// HTTPLogHandler process log received by HTTP
 func (r *HTTPRecv) HTTPLogHandler(ctx iris.Context) {
 	env := ctx.Params().Get("env")
 	switch env {
@@ -181,6 +201,6 @@ func (r *HTTPRecv) HTTPLogHandler(ctx iris.Context) {
 	msg.Message[r.TagKey] = r.OrigTag + "." + env
 	msg.Id = r.counter.Count()
 	utils.Logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id))
-	ctx.Writef(`'{"msgid": %d}'`, msg.Id)
+	ctx.Writef(`{"msgid": %d}`, msg.Id)
 	r.asyncOutChan <- msg
 }

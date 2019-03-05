@@ -14,7 +14,8 @@ build on machine that should installed docker & golang & glide.
 glide i
 
 # build base image
-docker build . -f ./.docker/gobase.Dockerfile -t registry:5000/gobase:1.11.5-alpine3.9
+docker build . -f ./.docker/gobase.Dockerfile -t registry:5000/gobase:1.12-alpine3.9
+docker push registry:5000/gobase:1.12-alpine3.9
 
 # build image
 docker build . -f ./.docker/Dockerfile -t registry:5000/go-fluentd:1.6.1
@@ -34,8 +35,8 @@ build on machine that should installed docker.
 
 ```sh
 # build golang-stretch
-docker build . -f ./.docker/golang-stretch.Dockerfile -t registry:5000/golang:1.11.5-stretch
-docker push registry:5000/golang:1.11.5-stretch
+docker build . -f ./.docker/golang-stretch.Dockerfile -t registry:5000/golang:1.12-stretch
+docker push registry:5000/golang:1.12-stretch
 
 # build mfs-stretch
 docker build . -f ./.docker/mfs-stretch.Dockerfile -t registry:5000/mfs-stretch:20190116

@@ -2,6 +2,34 @@
 *CURRENT*
 ---
 
+- 2019-03-04 (Laisky) feat(paas-312): postfilter support plugins
+- 2019-03-01 (Laisky) docs: add push at docker doc
+- 2019-03-01 (Laisky) build: upgrade to golang:1.12
+- 2019-03-01 (Laisky) build: upgrade to golang:1.12
+- 2019-03-01 (Laisky) build: upgrade go-utils to v9.1
+- 2019-03-01 (Laisky) fix(paas-312): add some tests and fix some bugs
+- 2019-02-28 (Laisky) docs: update changelog
+
+*1.7.1*
+---
+
+- 2019-02-28 (Laisky) docs: fix settings demo
+- 2019-02-28 (Laisky) docs: add quick start
+- 2019-02-21 (Laisky) fix: more details in log
+- 2019-02-21 (Laisky) feat(paas-288): add fluentd-forward log
+- 2019-02-20 (Laisky) ci: add id into docker tag
+- 2019-02-20 (Laisky) fix
+- 2019-02-20 (Laisky) fix
+- 2019-02-19 (Laisky) test: fix test readme
+- 2019-02-15 (Laisky) ci: fix test
+- 2019-02-15 (Laisky) ci: fix test
+- 2019-02-15 (Laisky) ci: fix test
+- 2019-02-15 (Laisky) ci: add test
+- 2019-02-15 (Laisky) docs: update changelog
+
+*1.7*
+---
+
 - 2019-02-15 (Laisky) build: upgrade to alpine3.9
 - 2019-02-14 (Laisky) perf: reduce memory usage in recv
 - 2019-02-14 (Laisky) ci: add ci retry

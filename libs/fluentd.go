@@ -30,7 +30,10 @@ type FluentEncoder struct {
 
 func NewFluentEncoder(writer io.Writer) *FluentEncoder {
 	enc := &FluentEncoder{
-		wrap:      FluentBatchMsg{0, []interface{}{0, nil}},
+		// wrap: tag, [[ts, msg], [ts, msg], ...]
+		wrap: FluentBatchMsg{0, []interface{}{
+			[]interface{}{0, nil},
+		}},
 		batchWrap: FluentBatchMsg{0, []interface{}{}},
 		writer:    msgp.NewWriterSize(writer, BufByte),
 		msgBuf:    &bytes.Buffer{},
@@ -41,7 +44,7 @@ func NewFluentEncoder(writer io.Writer) *FluentEncoder {
 
 func (e *FluentEncoder) Encode(msg *FluentMsg) error {
 	e.wrap[0] = msg.Tag
-	e.wrap[1].([]interface{})[1] = msg.Message
+	e.wrap[1].([]interface{})[0].([]interface{})[1] = msg.Message
 	return e.wrap.EncodeMsg(e.writer)
 }
 

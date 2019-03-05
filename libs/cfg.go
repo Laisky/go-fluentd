@@ -11,9 +11,9 @@ type ConcatorTagCfg struct {
 }
 
 // LoadConcatorTagConfigs return the configurations about dispatch rules
-func LoadConcatorTagConfigs(env string, tenants map[string]interface{}) (concatorcfgs map[string]*ConcatorTagCfg) {
+func LoadConcatorTagConfigs(env string, plugins map[string]interface{}) (concatorcfgs map[string]*ConcatorTagCfg) {
 	concatorcfgs = map[string]*ConcatorTagCfg{}
-	for tag, tagcfgI := range tenants {
+	for tag, tagcfgI := range plugins {
 		cfg := tagcfgI.(map[string]interface{})
 		concatorcfgs[tag+"."+env] = &ConcatorTagCfg{
 			MsgKey:     cfg["msg_key"].(string),

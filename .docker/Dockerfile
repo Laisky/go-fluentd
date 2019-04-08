@@ -1,4 +1,4 @@
-FROM registry:5000/gobase:1.12-alpine3.9 AS gobuild
+FROM registry:5000/gobase:1.12.1-alpine3.9 AS gobuild
 
 ADD . /go/src/github.com/Laisky/go-fluentd
 WORKDIR /go/src/github.com/Laisky/go-fluentd

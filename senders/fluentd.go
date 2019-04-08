@@ -58,7 +58,7 @@ func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {
 			defer utils.Logger.Panic("producer exits", zap.String("tag", tag), zap.String("name", s.GetName()))
 
 			var (
-				nRetry           = 0
+				nRetry           int
 				maxRetry         = 3
 				msg              *libs.FluentMsg
 				msgBatch         = make([]*libs.FluentMsg, s.BatchSize)

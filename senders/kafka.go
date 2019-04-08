@@ -68,7 +68,7 @@ func (s *KafkaSender) Spawn(tag string) chan<- *libs.FluentMsg {
 			defer utils.Logger.Panic("kafka sender exit", zap.String("tag", tag), zap.String("name", s.GetName()))
 			var (
 				jb                []byte
-				nRetry            = 0
+				nRetry            int
 				maxRetry          = 3
 				msgBatch          = make([]*libs.FluentMsg, s.BatchSize)
 				kmsgBatchDelivery = make([]*sarama.ProducerMessage, s.BatchSize)

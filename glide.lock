@@ -1,5 +1,5 @@
-hash: 693f9d480c930670d07a52bce0c92472927f6a03efcd62fd57d75dd3574519d8
-updated: 2019-03-01T16:49:59.295835+08:00
+hash: 458fd87e09d0d806ffcc9f26245c3634d7464008c4526f1b80da818fc1bad896
+updated: 2019-04-02T11:41:08.608753+08:00
 imports:
 - name: github.com/aymerick/raymond
   version: b565731e1464263de0bda75f2e45d97b54b60110
@@ -11,6 +11,8 @@ imports:
   version: c618e605e15c0d7535f6c96ff8efbb0dba4fd66c
 - name: github.com/BurntSushi/toml
   version: a368813c5e648fee92e5f6c30e3944ff9d5e8895
+- name: github.com/cespare/xxhash
+  version: 3b82fb7d186719faeedd0c2864f868c74fbf79a1
 - name: github.com/davecgh/go-spew
   version: 8991bc29aa16c548c550c7ff78260e27b9ab7c73
   subpackages:
@@ -60,7 +62,7 @@ imports:
 - name: github.com/Joker/jade
   version: 8828253bfc54f2f91aaef5f32b44a244b0a98e4f
 - name: github.com/json-iterator/go
-  version: 1624edc4454b8682399def8740d46db5e4362ba4
+  version: 0ff49de124c6f76f8494e194af75bde0f1a49a29
 - name: github.com/juju/errors
   version: c7d06af17c68cd34c835053720b21f6549d9b0ee
 - name: github.com/kataras/golog
@@ -151,7 +153,7 @@ imports:
 - name: github.com/rcrowley/go-metrics
   version: e2704e165165ec55d062f5919b4b29494e9fa790
 - name: github.com/RoaringBitmap/roaring
-  version: 3d677d3262197ee558b85029301eb69b8239f91a
+  version: 8d778e47dd84f169ef4436abb474b0e0101a6dae
 - name: github.com/ryanuber/columnize
   version: abc90934186a77966e2beeac62ed966aac0561d5
 - name: github.com/Shopify/goreferrer

@@ -27,6 +27,21 @@ type Concator struct {
 	slot map[string]*PendingMsg
 }
 
+// LoadConcatorTagConfigs return the configurations about dispatch rules
+func LoadConcatorTagConfigs(env string, plugins map[string]interface{}) (concatorcfgs map[string]*ConcatorCfg) {
+	concatorcfgs = map[string]*ConcatorCfg{}
+	for tag, tagcfgI := range plugins {
+		cfg := tagcfgI.(map[string]interface{})
+		concatorcfgs[tag+"."+env] = &ConcatorCfg{
+			MsgKey:     cfg["msg_key"].(string),
+			Identifier: cfg["identifier"].(string),
+			Regexp:     regexp.MustCompile(cfg["regex"].(string)),
+		}
+	}
+
+	return concatorcfgs
+}
+
 // PendingMsg is the message wait tobe concatenate
 type PendingMsg struct {
 	msg   *libs.FluentMsg
@@ -198,8 +213,9 @@ func (c *Concator) PutDownstream(msg *libs.FluentMsg) {
 }
 
 type ConcatorFactCfg struct {
-	MaxLen       int
-	ConcatorCfgs map[string]*libs.ConcatorTagCfg
+	NFork, MaxLen int
+	LBKey         string
+	Plugins       map[string]*ConcatorCfg
 }
 
 // ConcatorFactory can spawn new Concator
@@ -217,6 +233,10 @@ func NewConcatorFact(cfg *ConcatorFactCfg) *ConcatorFactory {
 		utils.Logger.Panic("concator max_length should bigger than 0")
 	} else if cfg.MaxLen < 10000 {
 		utils.Logger.Warn("concator max_length maybe too short", zap.Int("len", cfg.MaxLen))
+	}
+
+	if cfg.NFork < 1 {
+		utils.Logger.Panic("nfork should bigger than 1")
 	}
 
 	cf := &ConcatorFactory{
@@ -237,24 +257,32 @@ func (cf *ConcatorFactory) GetName() string {
 
 func (cf *ConcatorFactory) IsTagSupported(tag string) bool {
 	// utils.Logger.Debug("IsTagSupported", zap.String("tag", tag))
-	_, ok := cf.ConcatorCfgs[tag]
+	_, ok := cf.Plugins[tag]
 	return ok
 }
 
 // Spawn create and run new Concator for new tag
 func (cf *ConcatorFactory) Spawn(tag string, outChan chan<- *libs.FluentMsg) chan<- *libs.FluentMsg {
 	utils.Logger.Info("spawn concator tagfilter", zap.String("tag", tag))
-	inChan := make(chan *libs.FluentMsg, cf.defaultInternalChanSize)
-	concator := NewConcator(&ConcatorCfg{
-		Cf:         cf,
-		MaxLen:     cf.MaxLen,
-		Tag:        tag,
-		OutChan:    outChan,
-		MsgKey:     cf.ConcatorCfgs[tag].MsgKey,
-		Identifier: cf.ConcatorCfgs[tag].Identifier,
-		PMsgPool:   cf.pMsgPool,
-		Regexp:     cf.ConcatorCfgs[tag].Regexp,
-	})
-	go concator.Run(inChan)
+	var (
+		inChan  = make(chan *libs.FluentMsg, cf.defaultInternalChanSize)
+		inchans = []chan *libs.FluentMsg{}
+		cfg     *ConcatorCfg
+	)
+	for i := 0; i < cf.NFork; i++ {
+		cfg = cf.Plugins[tag]
+		cfg.Cf = cf
+		cfg.MaxLen = cf.MaxLen
+		cfg.Tag = tag
+		cfg.OutChan = outChan
+		cfg.PMsgPool = cf.pMsgPool
+
+		concator := NewConcator(cfg)
+		eachInchan := make(chan *libs.FluentMsg, cf.defaultInternalChanSize)
+		go concator.Run(eachInchan)
+		inchans = append(inchans, eachInchan)
+	}
+
+	go cf.runLB(cf.LBKey, cf.NFork, inChan, inchans)
 	return inChan
 }

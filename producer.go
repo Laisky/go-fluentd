@@ -182,11 +182,10 @@ func (p *Producer) Run() {
 
 	var (
 		msg              *libs.FluentMsg
-		ok               bool
+		ok, isSkip       bool
 		s                senders.SenderItf
 		unSupportedTags  = map[string]struct{}{}
 		nSenderForTagMap = &sync.Map{} // map[tag]nSender
-		isSkip           = true
 		itf              interface{}
 		senderChanMap    *sync.Map // sender: chan
 		nSender          int

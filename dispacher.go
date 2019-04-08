@@ -14,9 +14,9 @@ import (
 )
 
 type DispatcherCfg struct {
-	InChan      chan *libs.FluentMsg
-	TagPipeline *tagFilters.TagPipeline
-	OutChanSize int
+	InChan             chan *libs.FluentMsg
+	TagPipeline        *tagFilters.TagPipeline
+	NFork, OutChanSize int
 }
 
 // Dispatcher dispatch messages by tag to different concator
@@ -38,6 +38,11 @@ type ConcatorFactoryItf interface {
 // NewDispatcher create new Dispatcher
 func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 	utils.Logger.Info("create Dispatcher")
+
+	if cfg.NFork < 0 {
+		utils.Logger.Panic("nfork should bigger than 1")
+	}
+
 	return &Dispatcher{
 		DispatcherCfg: cfg,
 		outChan:       make(chan *libs.FluentMsg, cfg.OutChanSize),
@@ -47,54 +52,56 @@ func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 	}
 }
 
-// Run dispacher to distrubute messages to different concators
+// Run dispacher to dispatch messages to different concators
 func (d *Dispatcher) Run() {
 	utils.Logger.Info("run dispacher...")
 	d.registerMonitor()
-	go func() {
-		var (
-			inChanForEachTagi interface{}
-			inChanForEachTag  chan<- *libs.FluentMsg
-			ok                bool
-			err               error
-			counterI          interface{}
-			msg               *libs.FluentMsg
-		)
-		defer utils.Logger.Panic("dispatcher exit with msg", zap.String("msg", fmt.Sprint(msg)))
 
-		// send each message to appropriate tagfilter by `tag`
-		for msg = range d.InChan {
-			d.counter.Count()
-			if inChanForEachTagi, ok = d.concatorMap.Load(msg.Tag); !ok {
-				// new tag, create new tagfilter and its inchan
-				utils.Logger.Info("got new tag", zap.String("tag", msg.Tag))
-				if inChanForEachTag, err = d.TagPipeline.Spawn(msg.Tag, d.outChan); err != nil {
-					utils.Logger.Error("try to spawn new tagpipeline got error",
-						zap.Error(err),
-						zap.String("tag", msg.Tag))
-					continue
+	for i := 0; i < d.NFork; i++ {
+		go func() {
+			var (
+				inChanForEachTagi interface{}
+				inChanForEachTag  chan<- *libs.FluentMsg
+				ok                bool
+				err               error
+				counterI          interface{}
+				msg               *libs.FluentMsg
+			)
+			defer utils.Logger.Panic("dispatcher exit with msg", zap.String("msg", fmt.Sprint(msg)))
+			// send each message to appropriate tagfilter by `tag`
+			for msg = range d.InChan {
+				d.counter.Count()
+				if inChanForEachTagi, ok = d.concatorMap.Load(msg.Tag); !ok {
+					// new tag, create new tagfilter and its inchan
+					utils.Logger.Info("got new tag", zap.String("tag", msg.Tag))
+					if inChanForEachTag, err = d.TagPipeline.Spawn(msg.Tag, d.outChan); err != nil {
+						utils.Logger.Error("try to spawn new tagpipeline got error",
+							zap.Error(err),
+							zap.String("tag", msg.Tag))
+						continue
+					}
+
+					d.concatorMap.Store(msg.Tag, inChanForEachTag)
+					d.tagsCounter.Store(msg.Tag, utils.NewCounter())
+				} else {
+					inChanForEachTag = inChanForEachTagi.(chan<- *libs.FluentMsg)
 				}
 
-				d.concatorMap.Store(msg.Tag, inChanForEachTag)
-				d.tagsCounter.Store(msg.Tag, utils.NewCounter())
-			} else {
-				inChanForEachTag = inChanForEachTagi.(chan<- *libs.FluentMsg)
-			}
+				// count
+				if counterI, ok = d.tagsCounter.Load(msg.Tag); !ok {
+					utils.Logger.Panic("counter must exists", zap.String("tag", msg.Tag))
+				}
+				counterI.(*utils.Counter).Count()
 
-			// count
-			if counterI, ok = d.tagsCounter.Load(msg.Tag); !ok {
-				utils.Logger.Panic("counter must exists", zap.String("tag", msg.Tag))
+				// put msg into tagfilter's inchan
+				select {
+				case inChanForEachTag <- msg:
+				default:
+					utils.Logger.Warn("tagfilter's inchan is blocked", zap.String("tag", msg.Tag))
+				}
 			}
-			counterI.(*utils.Counter).Count()
-
-			// put msg into tagfilter's inchan
-			select {
-			case inChanForEachTag <- msg:
-			default:
-				utils.Logger.Warn("tagfilter's inchan is blocked", zap.String("tag", msg.Tag))
-			}
-		}
-	}()
+		}()
+	}
 }
 
 func (d *Dispatcher) registerMonitor() {

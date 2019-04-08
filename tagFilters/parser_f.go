@@ -36,7 +36,6 @@ type ParserCfg struct {
 	Tag, MsgKey                                                    string
 	Regexp                                                         *regexp.Regexp
 	OutChan                                                        chan<- *libs.FluentMsg
-	InChan                                                         <-chan *libs.FluentMsg
 	MsgPool                                                        *sync.Pool
 	IsRemoveOrigLog                                                bool
 	Add                                                            map[string]map[string]string
@@ -57,7 +56,7 @@ func NewParser(cfg *ParserCfg) *Parser {
 	}
 }
 
-func (f *Parser) Run() {
+func (f *Parser) Run(inChan <-chan *libs.FluentMsg) {
 	var (
 		err error
 		ok  bool
@@ -66,7 +65,7 @@ func (f *Parser) Run() {
 		k, v string
 		t    time.Time
 	)
-	for msg = range f.InChan {
+	for msg = range inChan {
 		if !f.Cf.IsTagSupported(msg.Tag) {
 			f.OutChan <- msg
 		}
@@ -214,7 +213,8 @@ func (f *Parser) Run() {
 }
 
 type ParserFactCfg struct {
-	Name                                                           string
+	NFork                                                          int
+	Name, LBKey                                                    string
 	Tags                                                           []string
 	Env, MsgKey                                                    string
 	Regexp                                                         *regexp.Regexp
@@ -234,6 +234,11 @@ type ParserFact struct {
 
 func NewParserFact(cfg *ParserFactCfg) *ParserFact {
 	utils.Logger.Info("create new connectorfactory")
+
+	if cfg.NFork < 1 {
+		utils.Logger.Panic("nfork should bigger than 1")
+	}
+
 	cf := &ParserFact{
 		BaseTagFilterFactory: &BaseTagFilterFactory{},
 		ParserFactCfg:        cfg,
@@ -260,25 +265,32 @@ func (cf *ParserFact) IsTagSupported(tag string) (ok bool) {
 func (cf *ParserFact) Spawn(tag string, outChan chan<- *libs.FluentMsg) chan<- *libs.FluentMsg {
 	utils.Logger.Info("spawn parser tagfilter", zap.String("tag", tag))
 	inChan := make(chan *libs.FluentMsg, cf.defaultInternalChanSize)
-	f := NewParser(&ParserCfg{
-		Cf:              cf,
-		Tag:             tag,
-		InChan:          inChan,
-		OutChan:         outChan,
-		MsgKey:          cf.MsgKey,
-		MsgPool:         cf.MsgPool,
-		Regexp:          cf.Regexp,
-		IsRemoveOrigLog: cf.IsRemoveOrigLog,
-		Add:             cf.Add,
-		ParseJsonKey:    cf.ParseJsonKey,
-		MustInclude:     cf.MustInclude,
-		TimeKey:         cf.TimeKey,
-		TimeFormat:      cf.TimeFormat,
-		NewTimeKey:      cf.NewTimeKey,
-		AppendTimeZone:  cf.AppendTimeZone,
-		NewTimeFormat:   cf.NewTimeFormat,
-		ReservedTimeKey: cf.ReservedTimeKey,
-	})
-	go f.Run()
+
+	inchans := []chan *libs.FluentMsg{}
+	for i := 0; i < cf.NFork; i++ {
+		f := NewParser(&ParserCfg{
+			Cf:              cf,
+			Tag:             tag,
+			OutChan:         outChan,
+			MsgKey:          cf.MsgKey,
+			MsgPool:         cf.MsgPool,
+			Regexp:          cf.Regexp,
+			IsRemoveOrigLog: cf.IsRemoveOrigLog,
+			Add:             cf.Add,
+			ParseJsonKey:    cf.ParseJsonKey,
+			MustInclude:     cf.MustInclude,
+			TimeKey:         cf.TimeKey,
+			TimeFormat:      cf.TimeFormat,
+			NewTimeKey:      cf.NewTimeKey,
+			AppendTimeZone:  cf.AppendTimeZone,
+			NewTimeFormat:   cf.NewTimeFormat,
+			ReservedTimeKey: cf.ReservedTimeKey,
+		})
+		eachInchan := make(chan *libs.FluentMsg, cf.defaultInternalChanSize)
+		go f.Run(eachInchan)
+		inchans = append(inchans, eachInchan)
+	}
+
+	go cf.runLB(cf.LBKey, cf.NFork, inChan, inchans)
 	return inChan
 }

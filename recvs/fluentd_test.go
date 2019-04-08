@@ -60,17 +60,17 @@ func TestFluentdRecv(t *testing.T) {
 	// send msg batch
 	cnt += 3
 	msgBatch := []*libs.FluentMsg{
-		&libs.FluentMsg{
+		{
 			Tag:     tag,
 			Message: map[string]interface{}{"a": "b"},
 			Id:      123,
 		},
-		&libs.FluentMsg{
+		{
 			Tag:     tag,
 			Message: map[string]interface{}{"a": "b"},
 			Id:      123,
 		},
-		&libs.FluentMsg{
+		{
 			Tag:     tag,
 			Message: map[string]interface{}{"a": "b"},
 			Id:      123,

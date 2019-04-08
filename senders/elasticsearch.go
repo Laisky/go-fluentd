@@ -198,7 +198,6 @@ func (s *ElasticSearchSender) Spawn(tag string) chan<- *libs.FluentMsg {
 			defer utils.Logger.Error("producer exits", zap.String("tag", tag), zap.String("name", s.GetName()))
 
 			var (
-				nRetry           = 0
 				maxRetry         = 3
 				msg              *libs.FluentMsg
 				msgBatch         = make([]*libs.FluentMsg, s.BatchSize)
@@ -207,7 +206,7 @@ func (s *ElasticSearchSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				lastT            = time.Unix(0, 0)
 				err              error
 				ctx              = &BulkOpCtx{}
-				j                int
+				nRetry, j        int
 			)
 
 			ctx.buf = &bytes.Buffer{}

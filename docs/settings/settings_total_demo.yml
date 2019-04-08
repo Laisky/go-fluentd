@@ -53,7 +53,9 @@ settings:
         #   orig_tag: wechat
         #   tag: forward-wechat
         #   ts_regexp: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$
+        #   time_key: "@timestamp"
         #   time_format: "2006-01-02T15:04:05.000Z"
+        #   signature_key: sig
         #   signature_salt: ri3j2ij3fjf23ofjsjfwifjpie02a
         #   tag_key: tag
         #   name: wechat-mini-program
@@ -305,8 +307,8 @@ settings:
           - new_tag: app.spring.{env}
             regexp: .*
   post_filters:
-    reenter_chan_len: 5000
-    out_chan_size: 10000
+    reenter_chan_len: 10000
+    out_chan_size: 50000
     fork: 4
     plugins:
       default:
@@ -337,12 +339,15 @@ settings:
           # es-geely
           geely.{env}: es-geely.{env}
   dispatcher:
+    nfork: 2
     out_chan_size: 10000
   tag_filters:
     internal_chan_size: 10000
     plugins:
       go-apps:
         type: parser
+        lb_key: container_id
+        nfork: 3
         tags:
           - fluentd-forward
           - httpguard
@@ -364,6 +369,8 @@ settings:
             datasource: ramjet
       connector:
         type: parser
+        lb_key: container_id
+        nfork: 3
         tags:
           - connector
           - gateway
@@ -389,6 +396,8 @@ settings:
           prod: "+0800"
       geely:
         type: parser
+        lb_key: container_id
+        nfork: 3
         tags:
           - geely
         msg_key: log
@@ -409,6 +418,8 @@ settings:
           prod: "+0800"
       emqtt:
         type: parser
+        lb_key: container_id
+        nfork: 3
         tags:
           - emqtt
         add:
@@ -416,6 +427,8 @@ settings:
             datasource: emqtt
       spark:
         type: parser
+        lb_key: container_id
+        nfork: 3
         tags:
           - spark
         msg_key: log
@@ -436,6 +449,8 @@ settings:
           prod: "+0800"
       ptdeployer:
         type: parser
+        lb_key: container_id
+        nfork: 3
         tags:
           - ptdeployer
         msg_key: log
@@ -459,6 +474,8 @@ settings:
           prod: "+0800"
       cp:
         type: parser
+        lb_key: container_id
+        nfork: 3
         tags:
           - cp
         msg_key: log
@@ -482,6 +499,8 @@ settings:
           prod: "+0800"
       spring:
         type: parser
+        lb_key: container_id
+        nfork: 3
         tags:
           - app.spring
           - ai
@@ -520,6 +539,8 @@ settings:
         type: concator
         config:
           max_length: 100000
+          lb_key: container_id
+          nfork: 3
         plugins:
           test:
             msg_key: log

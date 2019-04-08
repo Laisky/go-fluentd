@@ -228,6 +228,8 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 				fs = append(fs, tagFilters.NewParserFact(&tagFilters.ParserFactCfg{
 					Name:            name,
 					Env:             env,
+					NFork:           utils.Settings.GetInt("settings.tag_filters.plugins." + name + ".nfork"),
+					LBKey:           utils.Settings.GetString("settings.tag_filters.plugins." + name + ".lb_key"),
 					Tags:            utils.Settings.GetStringSlice("settings.tag_filters.plugins." + name + ".tags"),
 					MsgKey:          utils.Settings.GetString("settings.tag_filters.plugins." + name + ".msg_key"),
 					Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.plugins." + name + ".pattern")),
@@ -260,8 +262,10 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 
 	// concatorFilter must in the front
 	fs = append([]tagFilters.TagFilterFactoryItf{tagFilters.NewConcatorFact(&tagFilters.ConcatorFactCfg{
-		MaxLen:       utils.Settings.GetInt("settings.tag_filters.plugins.concator.config.max_length"),
-		ConcatorCfgs: libs.LoadConcatorTagConfigs(env, utils.Settings.Get("settings.tag_filters.plugins.concator.plugins").(map[string]interface{})),
+		NFork:   utils.Settings.GetInt("settings.tag_filters.plugins.concator.config.nfork"),
+		LBKey:   utils.Settings.GetString("settings.tag_filters.plugins.concator.config.lb_key"),
+		MaxLen:  utils.Settings.GetInt("settings.tag_filters.plugins.concator.config.max_length"),
+		Plugins: tagFilters.LoadConcatorTagConfigs(env, utils.Settings.Get("settings.tag_filters.plugins.concator.plugins").(map[string]interface{})),
 	})}, fs...)
 
 	return tagFilters.NewTagPipeline(&tagFilters.TagPipelineCfg{
@@ -277,6 +281,7 @@ func (c *Controllor) initDispatcher(waitDispatchChan chan *libs.FluentMsg, tagPi
 	dispatcher := NewDispatcher(&DispatcherCfg{
 		InChan:      waitDispatchChan,
 		TagPipeline: tagPipeline,
+		NFork:       utils.Settings.GetInt("settings.dispatcher.nfork"),
 		OutChanSize: utils.Settings.GetInt("settings.dispatcher.out_chan_size"),
 	})
 	dispatcher.Run()

@@ -21,7 +21,7 @@ type JournalCfg struct {
 }
 
 // Journal dumps all messages to files,
-// then check every msg with commited id to make sure no msg lost
+// then check every msg with committed id to make sure no msg lost
 type Journal struct {
 	*JournalCfg
 	j          *journal.Journal
@@ -49,7 +49,7 @@ func NewJournal(cfg *JournalCfg) *Journal {
 	}
 }
 
-// LoadMaxId load the max commited id from journal
+// LoadMaxId load the max committed id from journal
 func (j *Journal) LoadMaxId() (int64, error) {
 	return j.j.LoadMaxId()
 }
@@ -116,7 +116,7 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan, dumpChan chan *l
 		}
 
 		// rewrite data into journal
-		// only commited id can really remove a msg
+		// only committed id can really remove a msg
 		dumpChan <- msg
 	}
 }

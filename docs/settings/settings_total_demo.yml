@@ -1,3 +1,5 @@
+# 这里放一些常数项，方便后续配置时引用。
+# 主要起文档作用，不会被直接使用
 consts:
   ports:
     "18083": rsyslog recv
@@ -36,51 +38,64 @@ consts:
       - perf
       - uat
       - prod
+
+
+# settings 里是真正的会被程序使用到的配置
+# 按照各个不同的组件进行拆分。
+# 如果键名为 plugins，说明这部分配置是可以按需求进行增／删的
 settings:
+  # 针对 acceptor 组件的配置
   acceptor:
+    # 传给 acceptPipeline 的两个出口，分别是同步阻塞的和非阻塞的
     async_out_chan_size: 100000
     sync_out_chan_size: 10000
+    # 用来滚动 msgid 的值，随手敲了个大数
     max_rotate_id: 372036854775807  # do not change to smaller number
+    # 配置 recv 插件，每一个 recv 都用来接受一种类型的数据
     recvs:
       plugins:
-        # wechat_mini_program_forward:
-        #   type: http
-        #   active_env: *all-env
-        #   msg_key: log
-        #   max_body_byte: 1048576
-        #   max_allowed_delay_sec: 300
-        #   max_allowed_ahead_sec: 60
-        #   orig_tag: wechat
-        #   tag: forward-wechat
-        #   ts_regexp: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$
-        #   time_key: "@timestamp"
-        #   time_format: "2006-01-02T15:04:05.000Z"
-        #   signature_key: sig
-        #   signature_salt: ri3j2ij3fjf23ofjsjfwifjpie02a
-        #   tag_key: tag
-        #   name: wechat-mini-program
-        #   path: /api/v1/log/wechat/{env:string}
+
+
+        # 解析 fluentd 协议的插件
         fluentd:
+          # 指定插件类型
           type: fluentd
+          # 对哪些环境生效
           active_env: *all-env
+          # 消息体里内用来标记 tag 的 key
           tag_key: tag
+          # 监听地址
           addr: 0.0.0.0:24225
+          # 是否使用消息体内 tag 覆盖 msg.Tag
           is_rewrite_tag_from_tag_key: false
+
+
+        # 同样是解析 fluentd 协议，不过这个接口专门用来处理由 go-fluetd-forward 转发而来的数据
         fluentd-forward:
           type: fluentd
           active_env: *all-env
           tag_key: tag
           addr: 0.0.0.0:24226
+          # 需要使用消息体里的 tag 改写 msg.Tag
           is_rewrite_tag_from_tag_key: true
+
+
+        # 解析 rsyslog 的 udp 数据，目前用于接受 emqtt 数据
         rsyslog:
           type: rsyslog
           active_env: *all-env
           tag_key: tag
           addr: 0.0.0.0:24514
+          # 从 rsyslog 中加载时间戳
           time_key: timestamp
           msg_key: content
+          # 重命名时间戳（和其他日志保持统一）
           new_time_key: "@timestamp"
+          # 修改时间格式（和其他日志保持统一）
           new_time_format: "2006-01-02T15:04:05.000Z"
+
+
+        # 从 kafka 拉取数据，目前仅用于 kafka
         spark:
           type: kafka
           active_env: *all-env
@@ -90,7 +105,9 @@ settings:
           msg_key: log
           tag_key: tag
           is_json_format: false
+          # meta 用来给消息体添加新的键值对
           meta:
+            # 添加 container_id，因为后续的很多流程都会用到
             container_id: "go-fluentd"
           groups:
             sit: paas_spark_log_sit_v2
@@ -112,41 +129,22 @@ settings:
             uat: *1-1-1-1-9092
             perf: *1-1-1-1-9092
             prod: *2-2-2-2-9092
-        # kafkabuf:
-        #   type: kafka
-        #   active_env: *all-env
-        #   interval_num: 5000
-        #   interval_sec: 3
-        #   nconsumer: 6
-        #   msg_key: log
-        #   is_json_format: true
-        #   json_tag_key: tag
-        #   tag_key: tag
-        #   # rewrite_tag: kafkabuf
-        #   groups:
-        #     sit: paas_log_platform_sit
-        #     perf: paas_log_platform_perf
-        #     uat: paas_log_platform_uat
-        #     prod: paas_log_platform_prod
-        #   topics:
-        #     sit: logbuf_sit
-        #     uat: logbuf_uat
-        #     perf: logbuf_perf
-        #     prod: logbuf_prod
-        #   brokers:
-        #     sit: *2-2-2-2-9092
-        #     uat: *2-2-2-2-9092
-        #     perf: *2-2-2-2-9092
-        #     prod: *2-2-2-2-9092
+
+
+  # producer 组件的配置
   producer:
-    discard_chan_size: 50000
-    sender_inchan_size: 50000
-    # senders
+    discard_chan_size: 50000   # 用于提交已发送的 msgid
+    sender_inchan_size: 50000  # 入队缓冲
+    # senders 插件的配置
     # support types: fluentd/kafka/es
     plugins:
+
+
+      # 给 ES 发送 HTTP 的 sender
       es_general:
         type: es
         active_env: *all-env
+        # 支持的 tags
         tags:
           # - es-general
           - test
@@ -167,11 +165,15 @@ settings:
           - kafkabuf
           - wechat
         forks: 3
+        # 目标 es 地址
         addr: http://es/_bulk
+        # 发送的契机，每 1000 条发送一次，每 3 秒发送一次
         msg_batch_size: 1000
         max_wait_sec: 3
         tag_key: tag
+        # 发送失败后，重试队列的长度
         retry_chan_len: 10000
+        # tag->index 的对应关系，因为不同 tag 会存到不同的 index 里
         indices:
           ramjet.{env}: "{env}-spring-logs-write"
           httpguard.{env}: "{env}-spring-logs-write"
@@ -188,7 +190,13 @@ settings:
           spark.{env}: "{env}-spark-logs-write"
           emqtt.{env}: "{env}-emqtt-logs-write"
           wechat.{env}: "{env}-wechat-logs-write"
+        # 当 sender 处理不过来时，是否要丢弃数据。
+        # 一般来说不应该，因为丢弃数据会导致该 tag 对应的本批次 sender 全部重试。
         is_discard_when_blocked: false
+
+
+      # 也是 es 的sender，不过是负责处理 geely 的，
+      # 因为 geely 的节点独立，所以需要指向不同的 addr
       es_geely_v2:
         type: es
         active_env: *all-env
@@ -204,38 +212,9 @@ settings:
         indices:
           geely.{env}: "{env}-geely-logs-write"
         is_discard_when_blocked: false
-      # kafkabuf:
-      #   type: es
-      #   active_env: *all-env
-      #   tag_key: tag
-      #   brokers:
-      #     - 172.16.4.63:9092
-      #     - 172.16.4.64:9092
-      #     - 172.16.4.65:9092
-      #   topic:
-      #     sit: logbuf_sit
-      #     perf: logbuf_perf
-      #     uat: logbuf_uat
-      #     prod: logbuf_prod
-      #   tags:  # all-tags exclude `kafkabuf`
-      #     - test
-      #     - app.spring
-      #     - gateway
-      #     - connector
-      #     - cp
-      #     - ptdeployer
-      #     - tsp
-      #     - ai
-      #     - base
-      #     - geely
-      #     - bot
-      #     - spark
-      #     - emqtt
-      #   forks: 3
-      #   msg_batch_size: 10000
-      #   max_wait_sec: 5
-      #   retry_chan_len: 100000
-      #   is_discard_when_blocked: false
+
+
+      # kafka 的 sender，因为 cp 的日志需要往大数据的 kafka 发送一份
       kafka_cp:
         type: kafka
         active_env: *all-env
@@ -253,6 +232,9 @@ settings:
         max_wait_sec: 5
         retry_chan_len: 100000
         is_discard_when_blocked: false
+
+
+      # fluentd 协议的 sender，将日志发送给 backup 服务器做冷备份
       fluentd_backup_geely:
         type: fluentd
         active_env:
@@ -277,24 +259,44 @@ settings:
         max_wait_sec: 5
         retry_chan_len: 50000
         is_discard_when_blocked: true
+
+
+  # journal 组件，负责在磁盘上对所有日志做持久化，以保证 at-least-once 的日志处理
   journal:
+    # 持久化文件所在路径
     buf_dir_path: /data/log/fluentd/go-concator
+    # 每一个持久化文件的大小
     buf_file_bytes: 209315200  # 200 MB
+    # 缓冲区
     journal_out_chan_len: 100000
     commit_id_chan_len: 500000
+
+
+  # acceptorPipeline 组件，负责在 recvs 收到数据后，做一些很简单的前处理
   acceptor_filters:
     out_buf_len: 150000
     reenter_chan_len: 5000
     fork: 4
+    # 是否限速，以及一些限速的配置（使用令牌法）
     is_throttle: false
+    # 允许的瞬间 burst 值
     throttle_max: 10000
+    # 每秒新加的令牌数
     throttle_per_sec: 5000
     plugins:
+
+
+      # 对 spark 日志的前处理
+      # 简单的忽略一些不符合格式的日志
       spark:
         type: spark
         msg_key: log
         identifier: container_id
         ignore_regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2},\d{3} +\[
+
+
+      # 对 spring 日志的前处理
+      # 因为 cp、baidubot 和普通应用日志都使用的 spring 作为 tag，所以需要根据日志格式对其分流到不同的 tag
       spring:
         type: spring
         msg_key: log
@@ -306,44 +308,40 @@ settings:
             regexp: ms_\w+\ {0,}\|
           - new_tag: app.spring.{env}
             regexp: .*
+
+
+  # postPipeline 组件，处在 tagPipeline 到 senders
   post_filters:
     reenter_chan_len: 10000
     out_chan_size: 50000
     fork: 4
     plugins:
+      # 默认插件，限制日志的最大长度
       default:
         msg_key: log
         max_len: 307200
+
+
+      # 重写 msg.Tag="forward-wechat" 的 tag 为 msg.Message[tag_key]
       forward_tag_rewriter:
         type: tag-rewriter
         tag_key: tag
         tag: forward-wechat
-      es_dispatcher:
-        type: es-dispatcher
-        tags:
-          - kafkabuf
-        tag_key: tag
-        rewrite_tag_map:
-          # es-general
-          app.spring.{env}: es-general.{env}
-          gateway.{env}: es-general.{env}
-          connector.{env}: es-general.{env}
-          cp.{env}: es-general.{env}
-          ptdeployer.{env}: es-general.{env}
-          tsp.{env}: es-general.{env}
-          ai.{env}: es-general.{env}
-          base.{env}: es-general.{env}
-          bot.{env}: es-general.{env}
-          spark.{env}: es-general.{env}
-          emqtt.{env}: es-general.{env}
-          # es-geely
-          geely.{env}: es-geely.{env}
+
+
+  # dispatcher 组件，这个组件在 acceptorFilters 之后，负责把 msg 分发给 tagFilters
   dispatcher:
     nfork: 2
     out_chan_size: 10000
+
+
+  # tag_filters 最重要的职责就是拼接和解析。
   tag_filters:
     internal_chan_size: 10000
     plugins:
+
+
+      # 解析 golang 应用的日志
       go-apps:
         type: parser
         lb_key: container_id
@@ -352,14 +350,20 @@ settings:
           - fluentd-forward
           - httpguard
           - ramjet
+        # 是否需要对消息体内的某些字段应用 json 解析
         parse_json_key: log
-        # ⬇⬇ time
+        # 对日志时间的处理
+        # 读取时间字段和格式
         time_key: ts
         time_format: "2006-01-02T15:04:05.000-0700"
+        # 改写为新的日期格式
         new_time_format: "2006-01-02T15:04:05.000000Z"
+        # 是否保留原日期字段
         reserved_time_key: false
+        # 新的日期字段
         new_time_key: "@timestamp"
-        # ⬇⬇ fields
+        # 添加新的字段
+        # 为指定的 tag 添加新的 key: value
         add:  # optional
           fluentd-forward:
             datasource: fluentd-forward
@@ -367,6 +371,9 @@ settings:
             datasource: httpguard
           ramjet:
             datasource: ramjet
+
+
+      # 解析 connector 的日志
       connector:
         type: parser
         lb_key: container_id
@@ -374,14 +381,17 @@ settings:
         tags:
           - connector
           - gateway
+        # 日志所在的字段
         msg_key: log
         # 2018-04-02 02:02:10.928 | sh-datamining | INFO | http-nio-8080-exec-80 | com.pateo.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74 | {"key": "value"}: xxx
         # 2018-04-02 02:02:10.928 | sh-datamining | INFO | http-nio-8080-exec-80 | com.pateo.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74 | xxx
         # 2018-03-12 02:02:10.928 | gateway | INFO | http-nio-8080-exec-80 | com.pateo.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74: {"key": "value"}:xxx
         # 2019-02-18 15:42:06.635 | usertracking | DEBUG | kafka-producer-network-thread | producer-1 | com.pateo.qingcloud.base.usertracking.service.KafkaServiceBase$ProducerCallBack | 63: onCompletion when sendMessage to topic:UserTracking,partition:0  success!!
+        # 使用正则解析
         pattern: (?ms)^(?P<time>.{23}) {0,}\| {0,}(?P<app>[^\|]+) {0,}\| {0,}(?P<level>[^\|]+) {0,}\| {0,}(?P<thread>[^\|]+) {0,}\| {0,}((?P<producer>[\w\d\-]+) {0,}\| {0,}){0,1}(?P<class>[^\|]+) {0,}\| {0,}(?P<line>\d+) {0,}([\|:] {0,}(?P<args>\{.*\}))?([\|:] {0,}(?P<message>.*))?
         is_remove_orig_log: true
         parse_json_key: args
+        # 解析后必须包含该此段，否则就丢弃
         must_include: app
         # ⬇⬇ time
         time_key: time
@@ -389,11 +399,15 @@ settings:
         new_time_format: "2006-01-02T15:04:05.000000Z"
         reserved_time_key: false
         new_time_key: "@timestamp"
+        # 解析日期前，先为原日期字符串添加上时区信息
         append_time_zone:
           sit: "+0800"
           perf: "+0800"
           uat: "+0800"
           prod: "+0800"
+
+
+      # 解析 geely 的日志格式
       geely:
         type: parser
         lb_key: container_id
@@ -416,6 +430,9 @@ settings:
           perf: "+0800"
           uat: "+0800"
           prod: "+0800"
+
+
+      # 解析 emqtt 的日志
       emqtt:
         type: parser
         lb_key: container_id
@@ -425,6 +442,9 @@ settings:
         add:
           emqtt:
             datasource: emqtt
+
+
+      # 解析 spark 的日志
       spark:
         type: parser
         lb_key: container_id
@@ -447,6 +467,9 @@ settings:
           perf: "+0000"
           uat: "+0000"
           prod: "+0800"
+
+
+      # 解析 ptdeployer 的日志
       ptdeployer:
         type: parser
         lb_key: container_id
@@ -472,6 +495,9 @@ settings:
           perf: "+0800"
           uat: "+0800"
           prod: "+0800"
+
+
+      # 解析 cp 的日志
       cp:
         type: parser
         lb_key: container_id
@@ -497,6 +523,9 @@ settings:
           perf: "+0800"
           uat: "+0800"
           prod: "+0800"
+
+
+      # 解析 spring 的日志
       spring:
         type: parser
         lb_key: container_id
@@ -535,6 +564,9 @@ settings:
             datasource: bot
           app.spring:
             datasource: spring
+
+
+      # concator 插件，负责日志拼接
       concator:
         type: concator
         config:
@@ -547,9 +579,12 @@ settings:
             identifier: container_id
             regex: ^\d{4}-\d{2}-\d{2}
 
+          # 拼接 spark 日志
           spark:
             msg_key: log
+            # 相同 identifier 的，会被拼接在一起
             identifier: container_id
+            # 首行匹配的正则，不符合匹配规则的消息会被拼接到上一行日志后面。
             regex: ^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}.\d{3} \w+
           cp:
             msg_key: log

@@ -85,7 +85,7 @@ run by docker:
 docker run -itd --rm --name=go-fluentd -p 24225:24225 -p 8080:8080 \
     -v /etc/configs/go-fluentd:/etc/go-fluentd \
     -v /data/log/fluentd/go-fluentd:/data/log/fluentd/go-fluentd
-    ppcelery/go-fluentd:1.8 \
+    ppcelery/go-fluentd:1.8.1 \
     ./go-fluentd \
         --config=/etc/go-fluentd \
         --env=perf \

@@ -56,6 +56,7 @@ func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 func (d *Dispatcher) Run() {
 	utils.Logger.Info("run dispacher...")
 	d.registerMonitor()
+	lock := &sync.Mutex{}
 
 	for i := 0; i < d.NFork; i++ {
 		go func() {
@@ -72,17 +73,24 @@ func (d *Dispatcher) Run() {
 			for msg = range d.InChan {
 				d.counter.Count()
 				if inChanForEachTagi, ok = d.concatorMap.Load(msg.Tag); !ok {
-					// new tag, create new tagfilter and its inchan
-					utils.Logger.Info("got new tag", zap.String("tag", msg.Tag))
-					if inChanForEachTag, err = d.TagPipeline.Spawn(msg.Tag, d.outChan); err != nil {
-						utils.Logger.Error("try to spawn new tagpipeline got error",
-							zap.Error(err),
-							zap.String("tag", msg.Tag))
-						continue
-					}
+					// create new inChanForEachTag
+					lock.Lock()
+					if inChanForEachTagi, ok = d.concatorMap.Load(msg.Tag); !ok { // double check
+						// new tag, create new tagfilter and its inchan
+						utils.Logger.Info("got new tag", zap.String("tag", msg.Tag))
+						if inChanForEachTag, err = d.TagPipeline.Spawn(msg.Tag, d.outChan); err != nil {
+							utils.Logger.Error("try to spawn new tagpipeline got error",
+								zap.Error(err),
+								zap.String("tag", msg.Tag))
+							continue
+						}
 
-					d.concatorMap.Store(msg.Tag, inChanForEachTag)
-					d.tagsCounter.Store(msg.Tag, utils.NewCounter())
+						d.concatorMap.Store(msg.Tag, inChanForEachTag)
+						d.tagsCounter.Store(msg.Tag, utils.NewCounter())
+					} else {
+						inChanForEachTag = inChanForEachTagi.(chan<- *libs.FluentMsg)
+					}
+					lock.Unlock()
 				} else {
 					inChanForEachTag = inChanForEachTagi.(chan<- *libs.FluentMsg)
 				}

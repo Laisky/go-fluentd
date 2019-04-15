@@ -2,6 +2,23 @@
 *CURRENT*
 ---
 
+- 2019-04-12 (Laisky) docs: add dockerfile relations
+
+*1.8.1*
+---
+
+- 2019-04-09 (Laisky) fix(paas-320): dispatcher conflict with inChanForEachTag
+
+*1.8*
+---
+
+- 2019-04-04 (Laisky) feat(paas-320): let dispatcher & tagpipeline parallel
+- 2019-03-05 (Laisky) style: format improve
+
+*1.7.2*
+---
+
+- 2019-03-04 (Laisky) docs: update changelog
 - 2019-03-04 (Laisky) feat(paas-312): postfilter support plugins
 - 2019-03-01 (Laisky) docs: add push at docker doc
 - 2019-03-01 (Laisky) build: upgrade to golang:1.12

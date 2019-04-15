@@ -5,6 +5,8 @@ there are two kinds of runner container:
 - go-fluentd
 - go-fluentd-forward
 
+![relations](./dockerfile-relations.jpg)
+
 
 ## go-fluentd
 

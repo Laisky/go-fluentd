@@ -3,6 +3,7 @@ package tagFilters
 import (
 	"fmt"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -162,36 +163,26 @@ func (f *Parser) Run(inChan <-chan *libs.FluentMsg) {
 				} else {
 					v = string(ts)
 				}
-
-				if t, err = time.Parse(f.TimeFormat, v); err != nil {
-					utils.Logger.Error("parse time got error",
-						zap.Error(err),
-						zap.ByteString("ts", ts),
-						zap.String("time_key", f.TimeKey),
-						zap.String("time_format", f.TimeFormat),
-						zap.String("append_time_zone", f.AppendTimeZone))
-					f.Cf.DiscardMsg(msg)
-					continue
-				}
 			case string:
 				if f.AppendTimeZone != "" {
 					v = ts + " " + f.AppendTimeZone
 				} else {
 					v = ts
 				}
-
-				if t, err = time.Parse(f.TimeFormat, v); err != nil {
-					utils.Logger.Error("parse time got error",
-						zap.Error(err),
-						zap.String("ts", ts),
-						zap.String("time_key", f.TimeKey),
-						zap.String("time_format", f.TimeFormat),
-						zap.String("append_time_zone", f.AppendTimeZone))
-					f.Cf.DiscardMsg(msg)
-					continue
-				}
 			default:
 				utils.Logger.Error("unknown time format",
+					zap.Error(err),
+					zap.String("ts", fmt.Sprint(msg.Message[f.TimeKey])),
+					zap.String("time_key", f.TimeKey),
+					zap.String("time_format", f.TimeFormat),
+					zap.String("append_time_zone", f.AppendTimeZone))
+				f.Cf.DiscardMsg(msg)
+				continue
+			}
+
+			v = strings.Replace(v, ",", ".", -1)
+			if t, err = time.Parse(f.TimeFormat, v); err != nil {
+				utils.Logger.Error("parse time got error",
 					zap.Error(err),
 					zap.String("ts", fmt.Sprint(msg.Message[f.TimeKey])),
 					zap.String("time_key", f.TimeKey),
@@ -254,7 +245,7 @@ func NewParserFact(cfg *ParserFactCfg) *ParserFact {
 }
 
 func (cf *ParserFact) GetName() string {
-	return cf.Name
+	return cf.Name + "-parser"
 }
 
 func (cf *ParserFact) IsTagSupported(tag string) (ok bool) {

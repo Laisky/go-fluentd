@@ -252,7 +252,7 @@ func NewConcatorFact(cfg *ConcatorFactCfg) *ConcatorFactory {
 }
 
 func (cf *ConcatorFactory) GetName() string {
-	return "concator_tagfilter"
+	return "concator"
 }
 
 func (cf *ConcatorFactory) IsTagSupported(tag string) bool {

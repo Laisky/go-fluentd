@@ -65,7 +65,7 @@ func SetupSettings() {
 		utils.Settings.GetString("config-server-label") != "" &&
 		utils.Settings.GetString("config-server-key") != "" {
 		cfgSrvCfg := &utils.ConfigServerCfg{
-			Url:     utils.Settings.GetString("config-server"),
+			URL:     utils.Settings.GetString("config-server"),
 			Profile: utils.Settings.GetString("config-server-profile"),
 			Label:   utils.Settings.GetString("config-server-label"),
 			App:     utils.Settings.GetString("config-server-appname"),

@@ -8,21 +8,18 @@ FROM registry:5000/golang:1.12.1-stretch AS gobin
 ENV HTTP_PROXY=http://172.16.4.26:17777
 ENV HTTPS_PROXY=http://172.16.4.26:17777
 
-RUN mkdir -p /go/src/github.com/Laisky/go-fluentd
-ADD . /go/src/github.com/Laisky/go-fluentd
-WORKDIR /go/src/github.com/Laisky/go-fluentd
-
-# install dependencies
-RUN glide i
+ADD . /go-fluentd
+WORKDIR /go-fluentd
 
 # static build
+RUN go mod download
 RUN go build --ldflags '-extldflags "-static"' entrypoints/main.go
 
 # copy executable file and certs to a pure container
 FROM registry:5000/mfs-stretch:20190116
 
 COPY --from=gobin /etc/ssl/certs /etc/ssl/certs
-COPY --from=gobin /go/src/github.com/Laisky/go-fluentd/main go-fluentd
+COPY --from=gobin /go-fluentd/main go-fluentd
 ADD ./startApp.sh .
 
 CMD ["sh", "startApp.sh"]

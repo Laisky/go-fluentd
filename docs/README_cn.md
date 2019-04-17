@@ -481,11 +481,11 @@ func AddMetric(name string, metric func() map[string]interface{}) {
 
 ## 运行
 
-使用 glide 安装依赖，然后直接编译运行即可。
+使用 go mod 安装依赖，然后直接编译运行即可。
 
 ```sh
 # 安装依赖
-glide i
+go mod download
 
 # 运行
 ➜  go-fluentd git:(master) go run ./entrypoints/main.go --help

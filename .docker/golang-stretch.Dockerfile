@@ -10,6 +10,3 @@ ENV HTTPS_PROXY=http://172.16.4.26:17777
 RUN apt-get update && \
     apt-get install -y --no-install-recommends g++ make gcc git build-essential ca-certificates curl && \
     update-ca-certificates
-
-# glide install go dependencies
-RUN curl https://glide.sh/get | sh

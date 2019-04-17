@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/tinylib/msgp/msgp"
-	"github.com/ugorji/go/codec"
 )
 
 const BufByte = 1024 * 1024 * 4
@@ -72,25 +71,25 @@ func (e *FluentEncoder) Flush() error {
 	return e.writer.Flush()
 }
 
-type Decoder struct {
-	wrap    []interface{}
-	decoder *codec.Decoder
-}
+// type Decoder struct {
+// 	wrap    []interface{}
+// 	decoder *codec.Decoder
+// }
 
-func NewDecoder(reader io.Reader) *Decoder {
-	return &Decoder{
-		wrap:    []interface{}{nil, nil, nil},
-		decoder: codec.NewDecoder(reader, NewOutputCodec()),
-	}
-}
+// func NewDecoder(reader io.Reader) *Decoder {
+// 	return &Decoder{
+// 		wrap:    []interface{}{nil, nil, nil},
+// 		decoder: codec.NewDecoder(reader, NewOutputCodec()),
+// 	}
+// }
 
-func (d *Decoder) Decode(msg *FluentMsg) (err error) {
-	d.wrap[2] = make(map[string]interface{}) // create new map, avoid influenced by old data
-	if err = d.decoder.Decode(&d.wrap); err != nil {
-		return err
-	}
+// func (d *Decoder) Decode(msg *FluentMsg) (err error) {
+// 	d.wrap[2] = make(map[string]interface{}) // create new map, avoid influenced by old data
+// 	if err = d.decoder.Decode(&d.wrap); err != nil {
+// 		return err
+// 	}
 
-	msg.Tag = string(d.wrap[0].([]byte))
-	msg.Message = d.wrap[2].(map[string]interface{})
-	return nil
-}
+// 	msg.Tag = string(d.wrap[0].([]byte))
+// 	msg.Message = d.wrap[2].(map[string]interface{})
+// 	return nil
+// }

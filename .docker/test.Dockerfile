@@ -6,9 +6,9 @@ FROM registry:5000/gobase:1.12.1-alpine3.9
 ENV HTTP_PROXY=http://172.16.4.26:17777
 ENV HTTPS_PROXY=http://172.16.4.26:17777
 
-ADD . /go/src/github.com/Laisky/go-fluentd
-WORKDIR /go/src/github.com/Laisky/go-fluentd
+ADD . /go-fluentd
+WORKDIR /go-fluentd
 
-RUN glide i
+RUN go mod download
 
 CMD go test -cover ./...

@@ -4,7 +4,6 @@ ADD . /go-fluentd
 WORKDIR /go-fluentd
 
 # static build
-RUN go mod download
 RUN go build -a --ldflags '-extldflags "-static"' entrypoints/main.go
 
 

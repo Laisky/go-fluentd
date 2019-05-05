@@ -9,6 +9,4 @@ ENV HTTPS_PROXY=http://172.16.4.26:17777
 ADD . /go-fluentd
 WORKDIR /go-fluentd
 
-RUN go mod download
-
 CMD go test -cover ./...

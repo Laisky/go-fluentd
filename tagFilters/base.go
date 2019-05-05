@@ -54,27 +54,40 @@ func (f *BaseTagFilterFactory) DiscardMsg(msg *libs.FluentMsg) {
 	f.msgPool.Put(msg)
 }
 
-func (f *BaseTagFilterFactory) runLB(lbkey string, nfork int, inChan chan *libs.FluentMsg, inchans []chan *libs.FluentMsg) {
+func (f *BaseTagFilterFactory) runLB(lbkey string, inChan chan *libs.FluentMsg, inchans []chan *libs.FluentMsg) {
+	if len(inchans) < 1 {
+		utils.Logger.Panic("nfork or inchans's length error",
+			zap.Int("inchans_len", len(inchans)))
+	}
 	defer utils.Logger.Panic("concator lb exit")
-	emptyHashkey := xxhash.Sum64String("")
-	var hashkey uint64
+
+	var (
+		nfork        = len(inchans)
+		hashkey      uint64
+		emptyHashkey = xxhash.Sum64String("")
+		downChan     = inchans[0]
+	)
 	for msg := range inChan {
-		switch key := msg.Message[lbkey].(type) {
-		case []byte:
-			hashkey = xxhash.Sum64(key)
-		case string:
-			hashkey = xxhash.Sum64String(key)
-		case nil:
-			hashkey = emptyHashkey
-		default:
-			utils.Logger.Warn("unknown type of hash key",
-				zap.String("lb_key", lbkey),
-				zap.String("val", fmt.Sprint(key)))
-			hashkey = emptyHashkey
+		if nfork != 1 {
+			switch msg.Message[lbkey].(type) {
+			case []byte:
+				hashkey = xxhash.Sum64(msg.Message[lbkey].([]byte))
+			case string:
+				hashkey = xxhash.Sum64String(msg.Message[lbkey].(string))
+			case nil:
+				hashkey = emptyHashkey
+			default:
+				utils.Logger.Warn("unknown type of hash key",
+					zap.String("lb_key", lbkey),
+					zap.String("val", fmt.Sprint(msg.Message[lbkey])))
+				hashkey = emptyHashkey
+			}
+
+			downChan = inchans[int(hashkey%uint64(nfork))]
 		}
 
 		select {
-		case inchans[int(hashkey%uint64(nfork))] <- msg:
+		case downChan <- msg:
 		default:
 			utils.Logger.Warn("concator worker's inchan is full",
 				zap.String("tag", msg.Tag),

@@ -282,6 +282,6 @@ func (cf *ParserFact) Spawn(tag string, outChan chan<- *libs.FluentMsg) chan<- *
 		inchans = append(inchans, eachInchan)
 	}
 
-	go cf.runLB(cf.LBKey, cf.NFork, inChan, inchans)
+	go cf.runLB(cf.LBKey, inChan, inchans)
 	return inChan
 }

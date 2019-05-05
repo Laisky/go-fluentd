@@ -12,7 +12,6 @@ ADD . /go-fluentd
 WORKDIR /go-fluentd
 
 # static build
-RUN go mod download
 RUN go build --ldflags '-extldflags "-static"' entrypoints/main.go
 
 # copy executable file and certs to a pure container

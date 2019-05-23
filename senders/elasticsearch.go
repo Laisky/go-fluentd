@@ -71,10 +71,12 @@ func (s *ElasticSearchSender) GetName() string {
 	return s.Name
 }
 
-type BulkOpCtx struct {
-	body     []byte
+type bulkOpCtx struct {
 	buf      *bytes.Buffer
 	gzWriter *gzip.Writer
+	cnt      []byte
+	starting []byte
+	msg      *libs.FluentMsg
 }
 
 func (s *ElasticSearchSender) getMsgStarting(msg *libs.FluentMsg) ([]byte, error) {
@@ -90,32 +92,30 @@ func (s *ElasticSearchSender) getMsgStarting(msg *libs.FluentMsg) ([]byte, error
 	return []byte("{\"index\": {\"_index\": \"" + index + "\", \"_type\": \"logs\"}}\n"), nil
 }
 
-func (s *ElasticSearchSender) SendBulkMsgs(ctx *BulkOpCtx, msgs []*libs.FluentMsg) (err error) {
-	cnt := []byte{}
-	var starting []byte
-	for _, m := range msgs {
-		if starting, err = s.getMsgStarting(m); err != nil {
+func (s *ElasticSearchSender) SendBulkMsgs(ctx *bulkOpCtx, msgs []*libs.FluentMsg) (err error) {
+	ctx.cnt = ctx.cnt[:0]
+	for _, ctx.msg = range msgs {
+		if ctx.starting, err = s.getMsgStarting(ctx.msg); err != nil {
 			utils.Logger.Warn("try to generate bulk index got error", zap.Error(err))
 			continue
 		}
 
-		b, err := json.Marshal(m.Message)
+		b, err := json.Marshal(ctx.msg.Message)
 		if err != nil {
 			return errors.Wrap(err, "try to marshal messages got error")
 		}
 
 		utils.Logger.Debug("prepare bulk content send to es",
-			zap.ByteString("starting", starting),
+			zap.ByteString("starting", ctx.starting),
 			zap.ByteString("body", b))
-		cnt = append(cnt, starting...)
-		cnt = append(cnt, b...)
-		cnt = append(cnt, '\n')
+		ctx.cnt = append(ctx.cnt, ctx.starting...)
+		ctx.cnt = append(ctx.cnt, b...)
+		ctx.cnt = append(ctx.cnt, '\n')
 	}
 
 	ctx.buf.Reset()
 	ctx.gzWriter.Reset(ctx.buf)
-	// ctx.gzWriter = gzip.NewWriter(ctx.buf)
-	if _, err = ctx.gzWriter.Write(cnt); err != nil {
+	if _, err = ctx.gzWriter.Write(ctx.cnt); err != nil {
 		return errors.Wrap(err, "try to compress messages got error")
 	}
 
@@ -205,8 +205,10 @@ func (s *ElasticSearchSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				iBatch           = 0
 				lastT            = time.Unix(0, 0)
 				err              error
-				ctx              = &BulkOpCtx{}
-				nRetry, j        int
+				ctx              = &bulkOpCtx{
+					cnt: []byte{},
+				}
+				nRetry, j int
 			)
 
 			ctx.buf = &bytes.Buffer{}
@@ -244,12 +246,13 @@ func (s *ElasticSearchSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				if err = s.SendBulkMsgs(ctx, msgBatchDelivery); err != nil {
 					nRetry++
 					if nRetry > maxRetry {
-						utils.Logger.Error("try send message got error", zap.Error(err), zap.String("tag", tag))
-						utils.Logger.Error("discard msg since of sender err", zap.String("tag", msg.Tag), zap.Int("num", len(msgBatchDelivery)))
+						utils.Logger.Error("try send message got error",
+							zap.Error(err),
+							zap.String("tag", tag),
+							zap.Int("num", len(msgBatchDelivery)))
 						for _, msg = range msgBatchDelivery {
 							s.discardWithoutCommitChan <- msg
 						}
-
 						continue
 					}
 					goto SEND_MSG

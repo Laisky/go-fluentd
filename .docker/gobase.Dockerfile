@@ -1,6 +1,6 @@
-# docker build . -f ./.docker/gobase.Dockerfile -t registry:5000/gobase:1.12.1-alpine3.9
-# docker push registry:5000/gobase:1.12.1-alpine3.9
-FROM golang:1.12.1-alpine3.9
+# docker build . -f ./.docker/gobase.Dockerfile -t registry:5000/gobase:1.12.5-alpine3.9
+# docker push registry:5000/gobase:1.12.5-alpine3.9
+FROM golang:1.12.5-alpine3.9
 
 # http proxy
 ENV HTTP_PROXY=http://172.16.4.26:17777

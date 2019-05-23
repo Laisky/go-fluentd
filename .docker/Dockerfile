@@ -1,4 +1,4 @@
-FROM registry:5000/gobase:1.12.1-alpine3.9 AS gobuild
+FROM registry:5000/gobase:1.12.5-alpine3.9 AS gobuild
 
 ENV GO111MODULE=on
 WORKDIR /go-fluentd

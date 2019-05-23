@@ -73,7 +73,7 @@ func (s *HTTPSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				msgBatchDelivery []*libs.FluentMsg
 				iBatch           = 0
 				lastT            = time.Unix(0, 0)
-				ctx              = &BulkOpCtx{}
+				ctx              = &bulkOpCtx{}
 				err              error
 			)
 
@@ -136,7 +136,7 @@ func (s *HTTPSender) Spawn(tag string) chan<- *libs.FluentMsg {
 	return inChan
 }
 
-func (s *HTTPSender) SendBulkMsgs(ctx *BulkOpCtx, msgs []*libs.FluentMsg) (err error) {
+func (s *HTTPSender) SendBulkMsgs(ctx *bulkOpCtx, msgs []*libs.FluentMsg) (err error) {
 	msgCnts := make([]map[string]interface{}, len(msgs))
 	for i, m := range msgs {
 		msgCnts[i] = m.Message

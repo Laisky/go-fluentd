@@ -555,25 +555,25 @@ golang 的性能调优真是器大活好！
 ```go
 // supported action:
 // cmdline, profile, symbol, goroutine, heap, threadcreate, debug/block
-Server.Any("/admin/pprof/{action:path}", pprof.New())
+Server.Any("/pprof/{action:path}", pprof.New())
 ```
 
 然后就可以调用：
 
-- `/admin/pprof/cmdline`：启动时的命令行参数
-- `/admin/pprof/profile`：下载 CPU dump
-- `/admin/pprof/symbol`
-- `/admin/pprof/goroutine`：goroutine 信息
-- `/admin/pprof/heap`：下载 heap dump
-- `/admin/pprof/heap?debug=1`：一些运行时信息
-- `/admin/pprof/threadcreate`
-- `/admin/pprof/debug/block`
-- `/admin/pprof/`
+- `/pprof/cmdline`：启动时的命令行参数
+- `/pprof/profile`：下载 CPU dump
+- `/pprof/symbol`
+- `/pprof/goroutine`：goroutine 信息
+- `/pprof/heap`：下载 heap dump
+- `/pprof/heap?debug=1`：一些运行时信息
+- `/pprof/threadcreate`
+- `/pprof/debug/block`
+- `/pprof/`
 
 
 ### CPU Profile
 
-针对 CPU 做优化时最常用的就是 profile，访问 `/admin/pprof/profile` 后，
+针对 CPU 做优化时最常用的就是 profile，访问 `/pprof/profile` 后，
 会自动启动采样，等待 30 秒后，会下载一个 `profile` 文件，然后就可以启动 go tool 的交互式工具：
 
 ```sh

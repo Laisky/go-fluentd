@@ -1,9 +1,13 @@
 FROM registry:5000/gobase:1.12.1-alpine3.9 AS gobuild
 
-ADD . /go-fluentd
+ENV GO111MODULE=on
 WORKDIR /go-fluentd
+COPY go.mod .
+COPY go.sum .
+RUN go mod download
 
 # static build
+ADD . .
 RUN go build -a --ldflags '-extldflags "-static"' entrypoints/main.go
 
 

@@ -4,6 +4,22 @@
 
 
 
+*v1.8.6*
+---
+
+- 2019-05-23 (Laisky) perf: reduce alloc in es sender
+- 2019-05-22 (Laisky) ci: upgrade golang to 1.12.5
+- 2019-05-22 (Laisky) perf: only allow one rotate waiting
+- 2019-05-22 (Laisky) perf: only load all ids once
+- 2019-05-22 (Laisky) fix: upgrade go-utils to v1.3.1
+
+*1.8.5*
+---
+
+- 2019-05-15 (Laisky) docs: update readme
+- 2019-05-14 (Laisky) ci: improve docker cache
+- 2019-05-08 (Laisky) feat(paas-344): add prometheus metrics at `/metrics`
+
 *1.8.4*
 ---
 

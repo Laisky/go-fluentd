@@ -82,6 +82,7 @@ func (d *Dispatcher) Run() {
 							utils.Logger.Error("try to spawn new tagpipeline got error",
 								zap.Error(err),
 								zap.String("tag", msg.Tag))
+							continue
 						} else {
 							d.concatorMap.Store(msg.Tag, inChanForEachTag)
 							d.tagsCounter.Store(msg.Tag, utils.NewCounter())

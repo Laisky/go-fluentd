@@ -160,13 +160,13 @@ You can load monitor metrics by <http://localhost:8080/monitor>
 
 This HTTP API also support pprof endpoints:
 
-- <http://localhost:8080/admin/pprof/profile>
-- <http://localhost:8080/admin/pprof/cmdline>
-- <http://localhost:8080/admin/pprof/symbol>
-- <http://localhost:8080/admin/pprof/goroutine>
-- <http://localhost:8080/admin/pprof/heap>
-- <http://localhost:8080/admin/pprof/heap?debug=1>
-- <http://localhost:8080/admin/pprof/threadcreate>
-- <http://localhost:8080/admin/pprof/debug/block>
-- <http://localhost:8080/admin/pprof/>
+- <http://localhost:8080/pprof/profile>
+- <http://localhost:8080/pprof/cmdline>
+- <http://localhost:8080/pprof/symbol>
+- <http://localhost:8080/pprof/goroutine>
+- <http://localhost:8080/pprof/heap>
+- <http://localhost:8080/pprof/heap?debug=1>
+- <http://localhost:8080/pprof/threadcreate>
+- <http://localhost:8080/pprof/debug/block>
+- <http://localhost:8080/pprof/>
 

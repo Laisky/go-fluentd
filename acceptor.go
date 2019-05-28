@@ -10,11 +10,12 @@ import (
 	"github.com/Laisky/zap"
 )
 
+// AcceptorCfg is the configuation of Acceptor
 type AcceptorCfg struct {
 	MsgPool                           *sync.Pool
 	Journal                           *Journal
 	AsyncOutChanSize, SyncOutChanSize int
-	MaxRotateId                       int64
+	MaxRotateID                       int64
 }
 
 // Acceptor listening tcp connection, and decode messages
@@ -40,12 +41,12 @@ func NewAcceptor(cfg *AcceptorCfg, recvs ...recvs.AcceptorRecvItf) *Acceptor {
 func (a *Acceptor) Run() {
 	// got exists max id from legacy
 	utils.Logger.Info("process legacy data...")
-	maxId, err := a.Journal.LoadMaxId()
+	maxID, err := a.Journal.LoadMaxID()
 	if err != nil {
 		utils.Logger.Panic("try to process legacy messages got error", zap.Error(err))
 	}
 
-	couter, err := utils.NewRotateCounterFromN(maxId+1, a.MaxRotateId)
+	couter, err := utils.NewRotateCounterFromN(maxID+1, a.MaxRotateID)
 	if err != nil {
 		panic(fmt.Errorf("try to create counter got error: %+v", err))
 	}

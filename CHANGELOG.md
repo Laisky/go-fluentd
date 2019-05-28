@@ -2,7 +2,21 @@
 *CURRENT*
 ---
 
+- 2019-05-28 (Laisky) fix: recvs check active env
+- 2019-05-28 (Laisky) feat: add null sender
+- 2019-05-27 (Laisky) ci: upgrade go-utils
+- 2019-05-27 (Laisky) docs: update readme
 
+*v1.8.8*
+---
+
+- 2019-05-24 (Laisky) fix(paas-357): journal memory leak
+
+*v1.8.7*
+---
+
+- 2019-05-23 (Laisky) ci: update gomod
+- 2019-05-23 (Laisky) docs: update readme
 
 *v1.8.6*
 ---

@@ -49,7 +49,7 @@ func (s *FluentSender) GetName() string {
 }
 
 func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {
-	utils.Logger.Info("SpawnForTag", zap.String("tag", tag))
+	utils.Logger.Info("spawn for tag", zap.String("tag", tag))
 	inChan := make(chan *libs.FluentMsg, s.InChanSize) // for each tag
 	go s.runFlusher(inChan)
 

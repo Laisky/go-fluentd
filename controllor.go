@@ -63,16 +63,19 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 	switch utils.Settings.Get("settings.acceptor.recvs.plugins").(type) {
 	case map[string]interface{}:
 		for name := range utils.Settings.Get("settings.acceptor.recvs.plugins").(map[string]interface{}) {
+			if !StringListContains(utils.Settings.GetStringSlice("settings.acceptor.recvs.plugins."+name+".active_env"), env) {
+				utils.Logger.Info("recv not support current env", zap.String("name", name), zap.String("env", env))
+				continue
+			}
+
 			switch utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".type") {
 			case "fluentd":
-				if StringListContains(utils.Settings.GetStringSlice("settings.acceptor.recvs.plugins."+name+".active_env"), env) {
-					receivers = append(receivers, recvs.NewFluentdRecv(&recvs.FluentdRecvCfg{
-						Name:                   name,
-						Addr:                   utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".addr"),
-						TagKey:                 utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tag_key"),
-						IsRewriteTagFromTagKey: utils.Settings.GetBool("settings.acceptor.recvs.plugins." + name + ".is_rewrite_tag_from_tag_key"),
-					}))
-				}
+				receivers = append(receivers, recvs.NewFluentdRecv(&recvs.FluentdRecvCfg{
+					Name:                   name,
+					Addr:                   utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".addr"),
+					TagKey:                 utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tag_key"),
+					IsRewriteTagFromTagKey: utils.Settings.GetBool("settings.acceptor.recvs.plugins." + name + ".is_rewrite_tag_from_tag_key"),
+				}))
 			case "rsyslog":
 				receivers = append(receivers, recvs.NewRsyslogRecv(&recvs.RsyslogCfg{
 					Name:          name,
@@ -147,7 +150,7 @@ func (c *Controllor) initAcceptor(journal *Journal, receivers []recvs.AcceptorRe
 	acceptor := NewAcceptor(&AcceptorCfg{
 		MsgPool:          c.msgPool,
 		Journal:          journal,
-		MaxRotateId:      utils.Settings.GetInt64("settings.acceptor.max_rotate_id"),
+		MaxRotateID:      utils.Settings.GetInt64("settings.acceptor.max_rotate_id"),
 		AsyncOutChanSize: utils.Settings.GetInt("settings.acceptor.async_out_chan_size"),
 		SyncOutChanSize:  utils.Settings.GetInt("settings.acceptor.sync_out_chan_size"),
 	},
@@ -354,57 +357,64 @@ func StringListContains(ls []string, v string) bool {
 
 func (c *Controllor) initSenders(env string) []senders.SenderItf {
 	ss := []senders.SenderItf{}
-
 	switch utils.Settings.Get("settings.producer.plugins").(type) {
 	case map[string]interface{}:
 		for name := range utils.Settings.Get("settings.producer.plugins").(map[string]interface{}) {
+			if !StringListContains(utils.Settings.GetStringSlice("settings.producer.plugins."+name+".active_env"), env) {
+				utils.Logger.Info("sender not support current env", zap.String("name", name), zap.String("env", env))
+				continue
+			}
+
 			switch utils.Settings.GetString("settings.producer.plugins." + name + ".type") {
 			case "fluentd":
-				if StringListContains(utils.Settings.GetStringSlice("settings.producer.plugins."+name+".active_env"), env) {
-					ss = append(ss, senders.NewFluentSender(&senders.FluentSenderCfg{
-						Name:                 name,
-						Addr:                 utils.Settings.GetString("settings.producer.plugins." + name + ".addr"),
-						BatchSize:            utils.Settings.GetInt("settings.producer.plugins." + name + ".msg_batch_size"),
-						MaxWait:              utils.Settings.GetDuration("settings.producer.plugins."+name+".max_wait_sec") * time.Second,
-						RetryChanSize:        utils.Settings.GetInt("settings.producer.plugins." + name + ".retry_chan_len"),
-						InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
-						NFork:                utils.Settings.GetInt("settings.producer.plugins." + name + ".forks"),
-						Tags:                 utils.Settings.GetStringSlice("settings.producer.plugins." + name + ".tags"), // do not append env
-						IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.plugins." + name + ".is_discard_when_blocked"),
-					}))
-				}
+				ss = append(ss, senders.NewFluentSender(&senders.FluentSenderCfg{
+					Name:                 name,
+					Addr:                 utils.Settings.GetString("settings.producer.plugins." + name + ".addr"),
+					BatchSize:            utils.Settings.GetInt("settings.producer.plugins." + name + ".msg_batch_size"),
+					MaxWait:              utils.Settings.GetDuration("settings.producer.plugins."+name+".max_wait_sec") * time.Second,
+					RetryChanSize:        utils.Settings.GetInt("settings.producer.plugins." + name + ".retry_chan_len"),
+					InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
+					NFork:                utils.Settings.GetInt("settings.producer.plugins." + name + ".forks"),
+					Tags:                 utils.Settings.GetStringSlice("settings.producer.plugins." + name + ".tags"), // do not append env
+					IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.plugins." + name + ".is_discard_when_blocked"),
+				}))
 			case "kafka":
-				if StringListContains(utils.Settings.GetStringSlice("settings.producer.plugins."+name+".active_env"), env) {
-					ss = append(ss, senders.NewKafkaSender(&senders.KafkaSenderCfg{
-						Name:                 name,
-						Brokers:              utils.Settings.GetStringSlice("settings.producer.plugins." + name + ".brokers." + env),
-						Topic:                utils.Settings.GetString("settings.producer.plugins." + name + ".topic"),
-						TagKey:               utils.Settings.GetString("settings.producer.plugins." + name + ".tag_key"),
-						BatchSize:            utils.Settings.GetInt("settings.producer.plugins." + name + ".msg_batch_size"),
-						MaxWait:              utils.Settings.GetDuration("settings.producer.plugins."+name+".max_wait_sec") * time.Second,
-						RetryChanSize:        utils.Settings.GetInt("settings.producer.plugins." + name + ".retry_chan_len"),
-						InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
-						NFork:                utils.Settings.GetInt("settings.producer.plugins." + name + ".forks"),
-						Tags:                 libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
-						IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.plugins." + name + ".is_discard_when_blocked"),
-					}))
-				}
+				ss = append(ss, senders.NewKafkaSender(&senders.KafkaSenderCfg{
+					Name:                 name,
+					Brokers:              utils.Settings.GetStringSlice("settings.producer.plugins." + name + ".brokers." + env),
+					Topic:                utils.Settings.GetString("settings.producer.plugins." + name + ".topic"),
+					TagKey:               utils.Settings.GetString("settings.producer.plugins." + name + ".tag_key"),
+					BatchSize:            utils.Settings.GetInt("settings.producer.plugins." + name + ".msg_batch_size"),
+					MaxWait:              utils.Settings.GetDuration("settings.producer.plugins."+name+".max_wait_sec") * time.Second,
+					RetryChanSize:        utils.Settings.GetInt("settings.producer.plugins." + name + ".retry_chan_len"),
+					InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
+					NFork:                utils.Settings.GetInt("settings.producer.plugins." + name + ".forks"),
+					Tags:                 libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
+					IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.plugins." + name + ".is_discard_when_blocked"),
+				}))
 			case "es":
-				if StringListContains(utils.Settings.GetStringSlice("settings.producer.plugins."+name+".active_env"), env) {
-					ss = append(ss, senders.NewElasticSearchSender(&senders.ElasticSearchSenderCfg{
-						Name:                 name,
-						BatchSize:            utils.Settings.GetInt("settings.producer.plugins." + name + ".msg_batch_size"),
-						Addr:                 utils.Settings.GetString("settings.producer.plugins." + name + ".addr"),
-						MaxWait:              utils.Settings.GetDuration("settings.producer.plugins."+name+".max_wait_sec") * time.Second,
-						RetryChanSize:        utils.Settings.GetInt("settings.producer.plugins." + name + ".retry_chan_len"),
-						InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
-						NFork:                utils.Settings.GetInt("settings.producer.plugins." + name + ".forks"),
-						TagKey:               utils.Settings.GetString("settings.producer.plugins." + name + ".tag_key"),
-						Tags:                 libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
-						TagIndexMap:          senders.LoadESTagIndexMap(env, utils.Settings.Get("settings.producer.plugins."+name+".indices")),
-						IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.plugins." + name + ".is_discard_when_blocked"),
-					}))
-				}
+				ss = append(ss, senders.NewElasticSearchSender(&senders.ElasticSearchSenderCfg{
+					Name:                 name,
+					BatchSize:            utils.Settings.GetInt("settings.producer.plugins." + name + ".msg_batch_size"),
+					Addr:                 utils.Settings.GetString("settings.producer.plugins." + name + ".addr"),
+					MaxWait:              utils.Settings.GetDuration("settings.producer.plugins."+name+".max_wait_sec") * time.Second,
+					RetryChanSize:        utils.Settings.GetInt("settings.producer.plugins." + name + ".retry_chan_len"),
+					InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
+					NFork:                utils.Settings.GetInt("settings.producer.plugins." + name + ".forks"),
+					TagKey:               utils.Settings.GetString("settings.producer.plugins." + name + ".tag_key"),
+					Tags:                 libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
+					TagIndexMap:          senders.LoadESTagIndexMap(env, utils.Settings.Get("settings.producer.plugins."+name+".indices")),
+					IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.plugins." + name + ".is_discard_when_blocked"),
+				}))
+			case "null":
+				ss = append(ss, senders.NewNullSender(&senders.NullSenderCfg{
+					Name:                 name,
+					Tags:                 libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
+					LogLevel:             utils.Settings.GetString("settings.producer.plugins." + name + ".log_level"),
+					InChanSize:           utils.Settings.GetInt("settings.producer.plugins." + name + ".sender_inchan_size"),
+					IsCommit:             utils.Settings.GetBool("settings.producer.plugins." + name + ".is_commit"),
+					IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.plugins." + name + ".is_discard_when_blocked"),
+				}))
 			default:
 				utils.Logger.Panic("unknown sender type",
 					zap.String("sender_type", utils.Settings.GetString("settings.producer.plugins."+name+".type")),

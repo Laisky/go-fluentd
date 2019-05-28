@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Laisky/go-fluentd/libs"
+	"github.com/Laisky/go-fluentd/monitor"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/go-utils/journal"
 	"github.com/Laisky/zap"
@@ -38,7 +39,7 @@ func NewJournal(cfg *JournalCfg) *Journal {
 		utils.Logger.Warn("journal buf file size too small", zap.Int64("size", cfg.BufSizeBytes))
 	}
 
-	return &Journal{
+	j := &Journal{
 		JournalCfg: cfg,
 		j: journal.NewJournal(&journal.JournalConfig{
 			BufDirPath:   cfg.BufDirPath,
@@ -47,10 +48,12 @@ func NewJournal(cfg *JournalCfg) *Journal {
 		legacyLock: 0,
 		outChan:    make(chan *libs.FluentMsg, cfg.JournalOutChanLen),
 	}
+	j.registerMonitor()
+	return j
 }
 
-// LoadMaxId load the max committed id from journal
-func (j *Journal) LoadMaxId() (int64, error) {
+// LoadMaxID load the max committed id from journal
+func (j *Journal) LoadMaxID() (int64, error) {
 	return j.j.LoadMaxId()
 }
 
@@ -216,4 +219,10 @@ func (j *Journal) GetCommitChan() chan<- int64 {
 	}()
 
 	return commitChan
+}
+
+func (j *Journal) registerMonitor() {
+	monitor.AddMetric("journal", func() map[string]interface{} {
+		return j.j.GetMetric()
+	})
 }

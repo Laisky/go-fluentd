@@ -2,8 +2,10 @@
 
 Rewrite fluentd-server by Golang, Higher performance with less resource requirement.
 
-[![pipeline status](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/badges/master/pipeline.svg)](http://gitlab.pateo.com.cn:10080/PaaS/go-fluentd/commits/master)
-
+![GitHub release](https://img.shields.io/github/release/Laisky/go-fluentd.svg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Build Status](https://travis-ci.org/Laisky/go-fluentd.svg?branch=master)](https://travis-ci.org/Laisky/go-fluentd)
+[![codecov](https://codecov.io/gh/Laisky/go-fluentd/branch/master/graph/badge.svg)](https://codecov.io/gh/Laisky/go-fluentd)
 [![Commitizen friendly](https://img.shields.io/badge/commitizen-friendly-brightgreen.svg)](http://commitizen.github.io/cz-cli/)
 [![Go Report Card](https://goreportcard.com/badge/github.com/Laisky/go-fluentd)](https://goreportcard.com/report/github.com/Laisky/go-fluentd)
 [![GoDoc](https://godoc.org/github.com/Laisky/go-fluentd?status.svg)](https://godoc.org/github.com/Laisky/go-fluentd)

@@ -4,7 +4,7 @@ go 1.12
 
 require (
 	github.com/Laisky/go-syslog v2.3.3+incompatible
-	github.com/Laisky/go-utils v1.3.2
+	github.com/Laisky/go-utils v1.3.4
 	github.com/Laisky/zap v1.9.2
 	github.com/Shopify/sarama v1.22.0
 	github.com/cespare/xxhash v1.1.0

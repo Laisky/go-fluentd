@@ -155,8 +155,12 @@ type ESIndexResp struct {
 	Status int    `json:"status"`
 }
 
+func isStatusCodeOk(s int) bool {
+	return s/100 == 2
+}
+
 func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
-	if utils.FloorDivision(resp.StatusCode, 100) != 2 {
+	if !isStatusCodeOk(resp.StatusCode) {
 		return fmt.Errorf("server return error code %v", resp.StatusCode)
 	}
 
@@ -175,7 +179,7 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
 	}
 
 	for _, v := range ret.Items {
-		if utils.FloorDivision(v.Index.Status, 100) != 2 {
+		if !isStatusCodeOk(resp.StatusCode) {
 			// do not retry if there is part of msgs got error
 			utils.Logger.Warn("bulk got error for idx",
 				zap.ByteString("body", bb),

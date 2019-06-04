@@ -1,10 +1,12 @@
 package monitor
 
 import (
+	"net/http"
+
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
-	"github.com/json-iterator/go"
-	"github.com/kataras/iris"
+	"github.com/gin-gonic/gin"
+	jsoniter "github.com/json-iterator/go"
 )
 
 var (
@@ -16,12 +18,12 @@ func AddMetric(name string, metric func() map[string]interface{}) {
 	metricGetter[name] = metric
 }
 
-func BindHTTP(srv *iris.Application) {
+func BindHTTP(srv *gin.Engine) {
 	var (
 		b   []byte
 		err error
 	)
-	srv.Get("/monitor", func(ctx iris.Context) {
+	srv.GET("/monitor", func(ctx *gin.Context) {
 		metrics := map[string]interface{}{
 			"ts": utils.Clock.GetTimeInRFC3339Nano(),
 		}
@@ -33,6 +35,6 @@ func BindHTTP(srv *iris.Application) {
 			return
 		}
 
-		ctx.Write(b)
+		ctx.String(http.StatusOK, string(b))
 	})
 }

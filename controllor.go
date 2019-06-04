@@ -90,7 +90,7 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 			case "http":
 				receivers = append(receivers, recvs.NewHTTPRecv(&recvs.HTTPRecvCfg{ // wechat mini program
 					Name:               name,
-					HTTPSrv:            Server,
+					HTTPSrv:            server,
 					Env:                env,
 					MsgKey:             utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".msg_key"),
 					TagKey:             utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tag_key"),
@@ -411,7 +411,8 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 					Name:                 name,
 					Tags:                 libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
 					LogLevel:             utils.Settings.GetString("settings.producer.plugins." + name + ".log_level"),
-					InChanSize:           utils.Settings.GetInt("settings.producer.plugins." + name + ".sender_inchan_size"),
+					InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
+					NFork:                utils.Settings.GetInt("settings.producer.plugins." + name + ".forks"),
 					IsCommit:             utils.Settings.GetBool("settings.producer.plugins." + name + ".is_commit"),
 					IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.plugins." + name + ".is_discard_when_blocked"),
 				}))
@@ -439,6 +440,7 @@ func (c *Controllor) initProducer(env string, waitProduceChan chan *libs.FluentM
 			InChan:          waitProduceChan,
 			MsgPool:         c.msgPool,
 			CommitChan:      commitChan,
+			NFork:           utils.Settings.GetInt("settings.producer.forks"),
 			DiscardChanSize: utils.Settings.GetInt("settings.producer.discard_chan_size"),
 		},
 		// senders...
@@ -508,7 +510,7 @@ func (c *Controllor) Run() {
 			"waitCommitChanCap":             cap(waitCommitChan),
 		}
 	})
-	monitor.BindHTTP(Server)
+	monitor.BindHTTP(server)
 
 	go producer.Run()
 	RunServer(utils.Settings.GetString("addr"))

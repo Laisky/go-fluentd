@@ -3,7 +3,6 @@ package acceptorFilters
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-fluentd/monitor"
@@ -59,13 +58,10 @@ func NewAcceptorPipeline(cfg *AcceptorPipelineCfg, filters ...AcceptorFilterItf)
 }
 
 func (f *AcceptorPipeline) registerMonitor() {
-	lastT := time.Now()
 	monitor.AddMetric("acceptorPipeline", func() map[string]interface{} {
 		metrics := map[string]interface{}{
-			"msgPerSec": utils.Round(float64(f.counter.Get())/(time.Now().Sub(lastT).Seconds()), .5, 1),
+			"msgPerSec": f.counter.GetSpeed(),
 		}
-		f.counter.Set(0)
-		lastT = time.Now()
 		return metrics
 	})
 }

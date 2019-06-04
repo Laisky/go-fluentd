@@ -5,18 +5,20 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"regexp"
 	"time"
+
+	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
-	"github.com/kataras/iris"
 )
 
 // HTTPRecvCfg is the configuration for HTTPRecv
 type HTTPRecvCfg struct {
-	HTTPSrv     *iris.Application
+	HTTPSrv     *gin.Engine
 	MaxBodySize int64
 	// Name: recv name
 	// Path: url endpoint
@@ -63,9 +65,9 @@ func NewHTTPRecv(cfg *HTTPRecvCfg) *HTTPRecv {
 		BaseRecv:    &BaseRecv{},
 		HTTPRecvCfg: cfg,
 	}
-	r.HTTPSrv.Post(r.Path, r.HTTPLogHandler)
-	r.HTTPSrv.Get(r.Path, func(ctx iris.Context) {
-		ctx.WriteString("HTTPrecv")
+	r.HTTPSrv.POST(r.Path, r.HTTPLogHandler)
+	r.HTTPSrv.GET(r.Path, func(ctx *gin.Context) {
+		ctx.String(200, "HTTPrecv")
 	})
 	return r
 }
@@ -80,7 +82,7 @@ func (r *HTTPRecv) Run() {
 	utils.Logger.Info("run HTTPRecv")
 }
 
-func (r *HTTPRecv) validate(ctx iris.Context, msg *libs.FluentMsg) bool {
+func (r *HTTPRecv) validate(ctx *gin.Context, msg *libs.FluentMsg) bool {
 	switch msg.Message[r.TimeKey].(type) {
 	case nil:
 		utils.Logger.Warn("timekey missed")
@@ -149,14 +151,13 @@ func (r *HTTPRecv) validate(ctx iris.Context, msg *libs.FluentMsg) bool {
 }
 
 // BadRequest set bad http response
-func (r *HTTPRecv) BadRequest(ctx iris.Context, msg string) {
-	ctx.StatusCode(iris.StatusBadRequest)
-	ctx.WriteString(msg)
+func (r *HTTPRecv) BadRequest(ctx *gin.Context, msg string) {
+	ctx.AbortWithError(http.StatusBadRequest, fmt.Errorf(msg))
 }
 
 // HTTPLogHandler process log received by HTTP
-func (r *HTTPRecv) HTTPLogHandler(ctx iris.Context) {
-	env := ctx.Params().Get("env")
+func (r *HTTPRecv) HTTPLogHandler(ctx *gin.Context) {
+	env := ctx.Param("env")
 	switch env {
 	case "sit":
 	case "perf":
@@ -169,14 +170,14 @@ func (r *HTTPRecv) HTTPLogHandler(ctx iris.Context) {
 	}
 	// utils.Logger.Debug("got new http log", zap.String("env", env))
 
-	if ctx.GetContentLength() > r.MaxBodySize {
-		utils.Logger.Warn("content size too big", zap.Int64("size", ctx.GetContentLength()))
+	if ctx.Request.ContentLength > r.MaxBodySize {
+		utils.Logger.Warn("content size too big", zap.Int64("size", ctx.Request.ContentLength))
 		r.BadRequest(ctx, fmt.Sprintf("content size must less than %d bytes", r.MaxBodySize))
 		return
 	}
 
 	msg := r.msgPool.Get().(*libs.FluentMsg)
-	if log, err := ioutil.ReadAll(ctx.Request().Body); err != nil {
+	if log, err := ioutil.ReadAll(ctx.Request.Body); err != nil {
 		utils.Logger.Warn("try to read log got error", zap.Error(err))
 		r.msgPool.Put(msg)
 		r.BadRequest(ctx, "can not load request body")
@@ -201,6 +202,6 @@ func (r *HTTPRecv) HTTPLogHandler(ctx iris.Context) {
 	msg.Message[r.TagKey] = r.OrigTag + "." + env
 	msg.Id = r.counter.Count()
 	utils.Logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id))
-	ctx.Writef(`{"msgid": %d}`, msg.Id)
+	ctx.JSON(http.StatusOK, map[string]int64{"msgid": msg.Id})
 	r.asyncOutChan <- msg
 }

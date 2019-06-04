@@ -28,6 +28,13 @@ type Acceptor struct {
 // NewAcceptor create new Acceptor
 func NewAcceptor(cfg *AcceptorCfg, recvs ...recvs.AcceptorRecvItf) *Acceptor {
 	utils.Logger.Info("create Acceptor")
+
+	if cfg.MaxRotateID < 100 {
+		utils.Logger.Error("MaxRotateID should not too small", zap.Int64("rotate", cfg.MaxRotateID))
+	} else if cfg.MaxRotateID < 1000000 {
+		utils.Logger.Warn("MaxRotateID should not too small", zap.Int64("rotate", cfg.MaxRotateID))
+	}
+
 	return &Acceptor{
 		AcceptorCfg:  cfg,
 		syncOutChan:  make(chan *libs.FluentMsg, cfg.SyncOutChanSize),
@@ -46,7 +53,7 @@ func (a *Acceptor) Run() {
 		utils.Logger.Panic("try to process legacy messages got error", zap.Error(err))
 	}
 
-	couter, err := utils.NewRotateCounterFromN(maxID+1, a.MaxRotateID)
+	couter, err := utils.NewRotateCounterFromN((maxID+1)%a.MaxRotateID, a.MaxRotateID)
 	if err != nil {
 		panic(fmt.Errorf("try to create counter got error: %+v", err))
 	}

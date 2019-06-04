@@ -8,15 +8,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-fluentd/recvs"
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
-	"github.com/kataras/iris"
 )
 
 var (
-	httpsrv = iris.New()
+	httpsrv = gin.New()
 	salt    = []byte("2ji3r32r932r32j932jf92")
 )
 
@@ -35,7 +36,7 @@ func TestHTTPRecv(t *testing.T) {
 		TagKey:             "tag",
 		OrigTag:            "wechat",
 		Tag:                "forward-wechat",
-		Path:               "/api/v1/log/wechat/{env:string}",
+		Path:               "/api/v1/log/wechat/:env",
 		SigKey:             "sig",
 		SigSalt:            salt,
 		MaxBodySize:        1000,
@@ -56,7 +57,7 @@ func TestHTTPRecv(t *testing.T) {
 	addr := fmt.Sprintf("localhost:%v", port)
 	go func() {
 		for {
-			if err := httpsrv.Run(iris.Addr(addr)); err != nil {
+			if err := httpsrv.Run(addr); err != nil {
 				utils.Logger.Error("try to run server got error", zap.Error(err))
 				port++
 				addr = fmt.Sprintf("localhost:%v", port)

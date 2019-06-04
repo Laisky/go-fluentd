@@ -173,6 +173,7 @@ func (f *Parser) Run(inChan <-chan *libs.FluentMsg) {
 				utils.Logger.Error("unknown time format",
 					zap.Error(err),
 					zap.String("ts", fmt.Sprint(msg.Message[f.TimeKey])),
+					zap.String("tag", msg.Tag),
 					zap.String("time_key", f.TimeKey),
 					zap.String("time_format", f.TimeFormat),
 					zap.String("append_time_zone", f.AppendTimeZone))
@@ -184,7 +185,8 @@ func (f *Parser) Run(inChan <-chan *libs.FluentMsg) {
 			if t, err = time.Parse(f.TimeFormat, v); err != nil {
 				utils.Logger.Error("parse time got error",
 					zap.Error(err),
-					zap.String("ts", fmt.Sprint(msg.Message[f.TimeKey])),
+					zap.String("ts", v),
+					zap.String("tag", msg.Tag),
 					zap.String("time_key", f.TimeKey),
 					zap.String("time_format", f.TimeFormat),
 					zap.String("append_time_zone", f.AppendTimeZone))

@@ -39,12 +39,13 @@ func NewJournal(cfg *JournalCfg) *Journal {
 		utils.Logger.Warn("journal buf file size too small", zap.Int64("size", cfg.BufSizeBytes))
 	}
 
+	jcfg := journal.NewConfig()
+	jcfg.BufDirPath = cfg.BufDirPath
+	jcfg.BufSizeBytes = cfg.BufSizeBytes
+
 	j := &Journal{
 		JournalCfg: cfg,
-		j: journal.NewJournal(&journal.JournalConfig{
-			BufDirPath:   cfg.BufDirPath,
-			BufSizeBytes: cfg.BufSizeBytes,
-		}),
+		j:          journal.NewJournal(jcfg),
 		legacyLock: 0,
 		outChan:    make(chan *libs.FluentMsg, cfg.JournalOutChanLen),
 	}
@@ -68,9 +69,9 @@ func (j *Journal) ConvertMsg2Buf(msg *libs.FluentMsg, data *map[string]interface
 }
 
 func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan, dumpChan chan *libs.FluentMsg) (maxId int64, err error) {
-	utils.Logger.Info("starting to process legacy data...")
+	utils.Logger.Debug("starting to process legacy data...")
 	if ok := atomic.CompareAndSwapUint32(&j.legacyLock, 0, 1); !ok {
-		utils.Logger.Info("legacy data already in processing")
+		utils.Logger.Debug("legacy data already in processing")
 		return 0, nil
 	}
 	defer atomic.StoreUint32(&j.legacyLock, 0)
@@ -93,7 +94,7 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan, dumpChan chan *l
 		data.Data["message"] = nil // alloc new map to avoid old data contaminate
 
 		if err = j.j.LoadLegacyBuf(data); err == io.EOF {
-			utils.Logger.Info("load legacy buf done", zap.Int("n", i), zap.Float64("sec", utils.Clock.GetUTCNow().Sub(startTs).Seconds()))
+			utils.Logger.Debug("load legacy buf done", zap.Int("n", i), zap.Float64("sec", utils.Clock.GetUTCNow().Sub(startTs).Seconds()))
 			msgPool.Put(msg)
 			// utils.Logger.Info(fmt.Sprintf("recycle: %p", msg))
 			return maxId, nil
@@ -124,16 +125,19 @@ func (j *Journal) ProcessLegacyMsg(msgPool *sync.Pool, msgChan, dumpChan chan *l
 	}
 }
 
+// IntervalToStartingLegacy interval to restarting legacy loading
+const IntervalToStartingLegacy = 3 * time.Second // arbitary
+
 func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, dumpChan, skipDumpChan chan *libs.FluentMsg) chan *libs.FluentMsg {
 	// deal with legacy
 	go func() {
 		defer utils.Logger.Panic("legacy processor exit")
 		var err error
-		for {
+		for { // try to starting legacy loading
 			if _, err = j.ProcessLegacyMsg(msgPool, j.outChan, dumpChan); err != nil {
 				utils.Logger.Error("process legacy got error", zap.Error(err))
 			}
-			time.Sleep(30 * time.Second)
+			time.Sleep(IntervalToStartingLegacy)
 		}
 	}()
 

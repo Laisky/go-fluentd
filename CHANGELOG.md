@@ -2,8 +2,25 @@
 *CURRENT*
 ---
 
+- 2019-06-04 (Laisky) style: add some comment
+- 2019-06-04 (Laisky) ci: add prometheus
+- 2019-06-04 (Laisky) ci: upgrade go-utils v1.4.0
+- 2019-06-04 (Laisky) fix(paas-361): replace iris by gin
+- 2019-05-31 (Laisky) fix(paas-360): corrupt file panic
+- 2019-05-31 (Laisky) ci: upgrade go-utils v1.3.8
+- 2019-05-31 (Laisky) fix(paas-357): reduce memory use
+- 2019-05-29 (Laisky) ci: upgrade go-utils v1.3.6
+- 2019-05-29 (Laisky) docs: add comment
+
+*v1.8.9*
+---
+
+- 2019-05-29 (Laisky) ci: upgrade go-utils
+- 2019-05-29 (Laisky) fix: compatable with smaller rotate id
+- 2019-05-28 (Laisky) docs: update readme
 - 2019-05-28 (Laisky) fix: recvs check active env
 - 2019-05-28 (Laisky) feat: add null sender
+- 2019-05-28 (Laisky) +null
 - 2019-05-27 (Laisky) ci: upgrade go-utils
 - 2019-05-27 (Laisky) docs: update readme
 

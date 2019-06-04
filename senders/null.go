@@ -12,7 +12,7 @@ import (
 type NullSenderCfg struct {
 	Name, LogLevel                 string
 	Tags                           []string
-	InChanSize                     int
+	NFork, InChanSize              int
 	IsCommit, IsDiscardWhenBlocked bool
 }
 
@@ -33,6 +33,9 @@ func NewNullSender(cfg *NullSenderCfg) *NullSender {
 	case "debug":
 	default:
 		utils.Logger.Panic("null sender's LogLevel should be info/debug", zap.String("level", cfg.LogLevel))
+	}
+	if cfg.InChanSize < 1000 {
+		utils.Logger.Warn("small inchan size could reduce performance")
 	}
 
 	s := &NullSender{
@@ -55,33 +58,34 @@ func (s *NullSender) Spawn(tag string) chan<- *libs.FluentMsg {
 	utils.Logger.Info("spawn for tag", zap.String("tag", tag))
 	inChan := make(chan *libs.FluentMsg, s.InChanSize) // for each tag
 
-	go func() {
-		defer func() {
-			if err := recover(); err != nil {
-				utils.Logger.Panic("null sender exit", zap.Error(err.(error)))
+	for i := 0; i < s.NFork; i++ {
+		go func() {
+			defer func() {
+				if err := recover(); err != nil {
+					utils.Logger.Panic("null sender exit", zap.Error(err.(error)))
+				}
+			}()
+
+			for {
+				for msg := range inChan {
+					if s.LogLevel == "info" {
+						utils.Logger.Info("consume msg",
+							zap.String("tag", msg.Tag),
+							zap.String("msg", fmt.Sprint(msg.Message)))
+					} else {
+						utils.Logger.Debug("consume msg",
+							zap.String("tag", msg.Tag),
+							zap.String("msg", fmt.Sprint(msg.Message)))
+					}
+
+					if s.IsCommit {
+						s.discardChan <- msg
+					} else {
+						s.discardWithoutCommitChan <- msg
+					}
+				}
 			}
 		}()
-
-		for {
-			for msg := range inChan {
-				if s.LogLevel == "info" {
-					utils.Logger.Info("consume msg",
-						zap.String("tag", msg.Tag),
-						zap.String("msg", fmt.Sprint(msg.Message)))
-				} else {
-					utils.Logger.Debug("consume msg",
-						zap.String("tag", msg.Tag),
-						zap.String("msg", fmt.Sprint(msg.Message)))
-				}
-
-				if s.IsCommit {
-					s.discardChan <- msg
-				} else {
-					s.discardWithoutCommitChan <- msg
-				}
-			}
-		}
-	}()
-
+	}
 	return inChan
 }

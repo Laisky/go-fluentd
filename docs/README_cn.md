@@ -337,7 +337,7 @@ producer 的主要职责除了将 msg 传递给各个 senders 外，还负责统
 
 ### Monitor
 
-一个基于 iris 提供 HTTP 监控接口的组件。通过 `HTTP GET /monitor` 返回监控结果。
+一个基于 gin 提供 HTTP 监控接口的组件。通过 `HTTP GET /monitor` 返回监控结果。
 
 需要手动采集监控数据，在代码的任何地方，
 都可以通过调用 monitor.AddMetric 为最终的监控结果（以 json 呈现）中添加一个字段：
@@ -549,7 +549,7 @@ exit status 2
 
 golang 的性能调优真是器大活好！
 
-我使用了 iris 提供的 HTTP 在线导出 pprof 数据的功能。
+我使用了 gin 提供的 HTTP 在线导出 pprof 数据的功能。
 用法非常简单，只需要注册一个 endpoint：
 
 ```go

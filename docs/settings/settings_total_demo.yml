@@ -30,6 +30,7 @@ consts:
       - wechat
       - forward-wechat
       - fluentd-forward
+      - usertracking
   envs:
     all-env: &all-env
       - sit
@@ -40,7 +41,7 @@ settings:
   acceptor:
     async_out_chan_size: 100000
     sync_out_chan_size: 10000
-    max_rotate_id: 372036854775807  # do not change to smaller number
+    max_rotate_id: 4294967295  # must <= 4294967295
     recvs:
       plugins:
         # wechat_mini_program_forward:
@@ -53,11 +54,13 @@ settings:
         #   orig_tag: wechat
         #   tag: forward-wechat
         #   ts_regexp: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$
+        #   time_key: "@timestamp"
         #   time_format: "2006-01-02T15:04:05.000Z"
+        #   signature_key: sig
         #   signature_salt: ri3j2ij3fjf23ofjsjfwifjpie02a
         #   tag_key: tag
         #   name: wechat-mini-program
-        #   path: /api/v1/log/wechat/{env:string}
+        #   path: "/api/v1/log/wechat/:env"
         fluentd:
           type: fluentd
           active_env: *all-env
@@ -110,6 +113,38 @@ settings:
             uat: *1-1-1-1-9092
             perf: *1-1-1-1-9092
             prod: *2-2-2-2-9092
+        usertracking:
+          type: kafka
+          active_env:
+            - perf
+            - uat
+            - prod
+          interval_num: 5000
+          interval_sec: 3
+          nconsumer: 6
+          msg_key: log
+          tag_key: tag
+          is_json_format: false
+          meta:
+            container_id: "go-fluentd"
+          groups:
+            perf: paas_spark_log_perf_v2
+            uat: paas_spark_log_uat_v2
+            prod: paas_spark_log_prod_v2
+          topics:
+            perf: UserTracking_perf
+            uat: UserTracking
+            prod: UserTracking
+          tags:
+            sit: usertracking.sit
+            uat: usertracking.uat
+            perf: usertracking.perf
+            prod: usertracking.prod
+          brokers:
+            sit: *1-1-1-1-9092
+            uat: *1-1-1-1-9092
+            perf: *1-1-1-1-9092
+            prod: *2-2-2-2-9092
         # kafkabuf:
         #   type: kafka
         #   active_env: *all-env
@@ -139,6 +174,7 @@ settings:
   producer:
     discard_chan_size: 50000
     sender_inchan_size: 50000
+    forks: 3
     # senders
     # support types: fluentd/kafka/es
     plugins:
@@ -164,6 +200,7 @@ settings:
           - emqtt
           - kafkabuf
           - wechat
+          - usertracking
         forks: 3
         addr: http://es/_bulk
         msg_batch_size: 1000
@@ -186,6 +223,7 @@ settings:
           spark.{env}: "{env}-spark-logs-write"
           emqtt.{env}: "{env}-emqtt-logs-write"
           wechat.{env}: "{env}-wechat-logs-write"
+          usertracking.{env}: "{env}-usertracking-logs-write"
         is_discard_when_blocked: false
       es_geely_v2:
         type: es
@@ -305,18 +343,19 @@ settings:
           - new_tag: app.spring.{env}
             regexp: .*
   post_filters:
-    reenter_chan_len: 5000
-    out_chan_size: 10000
+    reenter_chan_len: 10000
+    out_chan_size: 50000
     fork: 4
     plugins:
       default:
         msg_key: log
         max_len: 307200
       forward_tag_rewriter:
+        type: tag-rewriter
         tag_key: tag
         tag: forward-wechat
       es_dispatcher:
-        # tags: *all-tags
+        type: es-dispatcher
         tags:
           - kafkabuf
         tag_key: tag
@@ -336,12 +375,15 @@ settings:
           # es-geely
           geely.{env}: es-geely.{env}
   dispatcher:
+    nfork: 2
     out_chan_size: 10000
   tag_filters:
     internal_chan_size: 10000
     plugins:
       go-apps:
         type: parser
+        lb_key: container_id
+        nfork: 1
         tags:
           - fluentd-forward
           - httpguard
@@ -363,6 +405,8 @@ settings:
             datasource: ramjet
       connector:
         type: parser
+        lb_key: container_id
+        nfork: 3
         tags:
           - connector
           - gateway
@@ -388,6 +432,8 @@ settings:
           prod: "+0800"
       geely:
         type: parser
+        lb_key: container_id
+        nfork: 3
         tags:
           - geely
         msg_key: log
@@ -408,6 +454,8 @@ settings:
           prod: "+0800"
       emqtt:
         type: parser
+        lb_key: container_id
+        nfork: 1
         tags:
           - emqtt
         add:
@@ -415,6 +463,8 @@ settings:
             datasource: emqtt
       spark:
         type: parser
+        lb_key: container_id
+        nfork: 1
         tags:
           - spark
         msg_key: log
@@ -433,8 +483,31 @@ settings:
           perf: "+0000"
           uat: "+0000"
           prod: "+0800"
+      usertracking:
+        type: parser
+        lb_key: container_id
+        nfork: 1
+        parse_json_key: log
+        tags:
+          - usertracking
+        msg_key: log
+        pattern: (?ms).*happentime\\":\\"(?P<time>[\d\- :]+).*
+        is_remove_orig_log: false
+        # ⬇⬇ time
+        time_key: time
+        time_format: "2006-01-02 15:04:05 -0700"
+        new_time_format: "2006-01-02T15:04:05.000000Z"
+        reserved_time_key: false
+        new_time_key: "@timestamp"
+        append_time_zone:
+          sit: "+0800"
+          perf: "+0800"
+          uat: "+0800"
+          prod: "+0800"
       ptdeployer:
         type: parser
+        lb_key: container_id
+        nfork: 1
         tags:
           - ptdeployer
         msg_key: log
@@ -447,17 +520,19 @@ settings:
             datasource: ptdeployer
         # ⬇⬇ time
         time_key: time
-        time_format: "2006-01-02 15:04:05,000 -0700"
+        time_format: "2006-01-02 15:04:05.000 -0700"
         new_time_format: "2006-01-02T15:04:05.000000Z"
         reserved_time_key: false
         new_time_key: "@timestamp"
         append_time_zone:
-          sit: "+0800"
-          perf: "+0800"
-          uat: "+0800"
-          prod: "+0800"
+          sit: "+0000"
+          perf: "+0000"
+          uat: "+0000"
+          prod: "+0000"
       cp:
         type: parser
+        lb_key: container_id
+        nfork: 1
         tags:
           - cp
         msg_key: log
@@ -481,6 +556,8 @@ settings:
           prod: "+0800"
       spring:
         type: parser
+        lb_key: container_id
+        nfork: 3
         tags:
           - app.spring
           - ai
@@ -489,7 +566,8 @@ settings:
           - bot
         msg_key: log
         # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
-        pattern: (?ms)^(?P<time>.{23}) {0,}\| {0,}(?P<app>[^\|]+) {0,}\| {0,}(?P<level>[^\|]+) {0,}\| {0,}(?P<thread>[^\|]+) {0,}\| {0,}(?P<class>[^ ]+) {0,}\| {0,}(?P<line>\d+) {0,}([\|:] {0,}(?P<args>\{.*\}))?([\|:] {0,}(?P<message>.*))?
+        # 2019-04-23 17:02:09.733 | mswallet| DEBUG | http-nio-8080-exec-2 | org.apache.ibatis.logging.jdbc.BaseJdbcLogger | 145 | {c83dd4a0244146fe9ada4dfcc8a737b4}| ==> Parameters: 123(Long)
+        pattern: (?ms)^(?P<time>.{23}) {0,}\| {0,}(?P<app>[^\|]+) {0,}\| {0,}(?P<level>[^\|]+) {0,}\| {0,}(?P<thread>[^\|]+) {0,}\| {0,}(?P<class>[^ ]+) {0,}\| {0,}(?P<line>\d+) {0,}([\|:] {0,}(?P<args>\{[^\}]+\}))?( {0,}[\|:] {0,}(?P<message>.*))?
         is_remove_orig_log: true
         must_include: app
         # ⬇⬇ time
@@ -519,6 +597,8 @@ settings:
         type: concator
         config:
           max_length: 100000
+          lb_key: container_id
+          nfork: 3
         plugins:
           test:
             msg_key: log

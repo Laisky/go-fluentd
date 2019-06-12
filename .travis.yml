@@ -6,18 +6,26 @@ go:
   - 1.11.x
   - 1.12.x
 
+env:
+  - GO111MODULE=on
+
+install: true
+
 git:
   depth: 1
 
 cache:
   directories:
     - vendor
-    - $GOPATH/src
+    - $HOME/.cache/go-build
+    - $GOPATH/pkg/mod
+    # - $GOPATH/src
 
 
 script:
   - git checkout $TRAVIS_COMMIT .  # travis.ci will overwrite to master branch
-  - go test -race -coverprofile=coverage.txt -covermode=atomic ./...
+  - go mod vendor
+  - go test -race -mod=vendor -coverprofile=coverage.txt -covermode=atomic ./...
   # - go test -bench ./...
 
 after_script:

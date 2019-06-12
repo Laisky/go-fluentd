@@ -2,6 +2,16 @@
 *CURRENT*
 ---
 
+- 2019-06-12 (Laisky) build: fix package conflict
+- 2019-06-12 (Laisky) ci: update travis
+- 2019-06-12 (Laisky) ci: update cache
+- 2019-06-10 (Laisky) ci: fix dependencies error
+- 2019-06-10 (Laisky) fix: add uint32set & improve rotate
+- 2019-06-04 (Laisky) docs: update readme
+
+*v1.9.0*
+---
+
 - 2019-06-04 (Laisky) style: add some comment
 - 2019-06-04 (Laisky) ci: add prometheus
 - 2019-06-04 (Laisky) ci: upgrade go-utils v1.4.0

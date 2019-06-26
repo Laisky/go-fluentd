@@ -16,7 +16,6 @@ git:
 
 cache:
   directories:
-    - vendor
     - $HOME/.cache/go-build
     - $GOPATH/pkg/mod
     # - $GOPATH/src
@@ -24,9 +23,8 @@ cache:
 
 script:
   - git checkout $TRAVIS_COMMIT .  # travis.ci will overwrite to master branch
-  - go mod vendor
-  - go test -race -mod=vendor -coverprofile=coverage.txt -covermode=atomic ./...
-  # - go test -bench ./...
+  - go mod download
+  - go test -race -coverprofile=coverage.txt -covermode=atomic ./...
 
 after_script:
   - bash <(curl -s https://codecov.io/bash)

@@ -2,6 +2,19 @@
 *CURRENT*
 ---
 
+- 2019-06-26 (Laisky) fix: go mod conflict
+- 2019-06-21 (Laisky) build: upgrade to golang:1.12.6
+- 2019-06-12 (Laisky) ci: disable vendor cache
+- 2019-06-12 (Laisky) test: fix test docket
+
+*v1.9.1*
+---
+
+- 2019-06-12 (Laisky) test: fix test docket
+- 2019-06-12 (Laisky) test: fix test docket
+- 2019-06-12 (Laisky) ci: update dockerfile
+- 2019-06-12 (Laisky) ci: update dockerfile
+- 2019-06-12 (Laisky) docs: update readme
 - 2019-06-12 (Laisky) build: fix package conflict
 - 2019-06-12 (Laisky) ci: update travis
 - 2019-06-12 (Laisky) ci: update cache

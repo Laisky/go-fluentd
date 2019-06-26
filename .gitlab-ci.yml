@@ -18,6 +18,7 @@ cache:
   key: ${CI_COMMIT_REF_SLUG}
   paths:
     - /go/pkg
+    - $HOME/.cache/go-build
 
 
 stages:
@@ -46,9 +47,8 @@ test:run:
     - public
   image: registry:5000/docker:latest
   script:
-    - docker pull registry:5000/gobase:1.12.5-alpine3.9  # pull latest image
+    - docker pull registry:5000/gobase:1.12.6-alpine3.9  # pull latest image
     - docker build . -f ./.docker/test.Dockerfile -t go-fluentd-test:$DOCKER_TAG
-    - docker run -i --rm go-fluentd-test:$DOCKER_TAG
   retry: 1
 
 

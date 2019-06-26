@@ -1,6 +1,6 @@
-# docker build . -f ./.docker/golang-stretch.Dockerfile -t registry:5000/golang:1.12.5-stretch
-# docker push registry:5000/golang:1.12.5-stretch
-FROM golang:1.12.5-stretch
+# docker build . -f ./.docker/golang-stretch.Dockerfile -t registry:5000/golang:1.12.6-stretch
+# docker push registry:5000/golang:1.12.6-stretch
+FROM golang:1.12.6-stretch
 
 # http proxy
 ENV HTTP_PROXY=http://172.16.4.26:17777

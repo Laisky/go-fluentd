@@ -24,6 +24,19 @@ type KafkaCommitCfg struct {
 	IntervalDuration time.Duration
 }
 
+/*KafkaCfg kafka client configuration
+
+Args:
+	IsJSONFormat: unmarshal json into `msg.Message`
+	MsgKey: put kafka msg body into `msg.Message[MsgKey]`
+	TagKey: set tag into `msg.Message[TagKey]`
+	Name: name of this recv plugin
+	KMsgPool: sync.Pool for `*utils.kafka.KafkaMsg`
+	Meta: add new field and value into `msg.Message`
+	IsJSONFormat: is unmarshal kafka msg
+	JSONTagKey: load tag from kafka message(only work when IsJSONFormat is true)
+	RewriteTag: rewrite `msg.Tag`, `msg.Message["tag"]` will keep origin value
+*/
 type KafkaCfg struct {
 	*KafkaCommitCfg
 	Topics, Brokers                  []string
@@ -31,8 +44,8 @@ type KafkaCfg struct {
 	NConsumer                        int
 	KMsgPool                         *sync.Pool
 	Meta                             map[string]interface{}
-	IsJsonFormat                     bool   // is unmarshal kafka msg
-	JsonTagKey                       string // load tag from kafka message(only work when IsJsonFormat is true)
+	IsJSONFormat                     bool
+	JSONTagKey                       string
 	RewriteTag                       string
 }
 
@@ -42,12 +55,17 @@ type KafkaRecv struct {
 }
 
 func NewKafkaRecv(cfg *KafkaCfg) *KafkaRecv {
+	if cfg.MsgKey == "" && !cfg.IsJSONFormat {
+		utils.Logger.Panic("at least set one of MsgKey and IsJSONFormat")
+	}
+
 	utils.Logger.Info("create KafkaRecv",
 		zap.Strings("topics", cfg.Topics),
 		zap.Strings("brokers", cfg.Brokers),
-		zap.Bool("IsJsonFormat", cfg.IsJsonFormat),
+		zap.Bool("IsJSONFormat", cfg.IsJSONFormat),
 		zap.String("TagKey", cfg.TagKey),
-		zap.String("JsonTagKey", cfg.JsonTagKey))
+		zap.String("JSONTagKey", cfg.JSONTagKey))
+
 	return &KafkaRecv{
 		BaseRecv: &BaseRecv{},
 		KafkaCfg: cfg,
@@ -122,23 +140,27 @@ func (r *KafkaRecv) parse2Msg(kmsg *kafka.KafkaMsg) (msg *libs.FluentMsg, err er
 	msg.Message = map[string]interface{}{}
 
 	for metaK, metaV := range r.Meta {
+		if metaV.(string) == RandomValOperator {
+			msg.Message[metaK] = utils.RandomStringWithLength(10)
+			continue
+		}
 		msg.Message[metaK] = []byte(metaV.(string))
 	}
 
-	if r.IsJsonFormat {
+	if r.IsJSONFormat {
 		if err = json.Unmarshal(kmsg.Message, &msg.Message); err != nil {
 			r.msgPool.Put(msg)
 			return nil, errors.Wrap(err, "try to unmarshal kmsg got error")
 		}
 
-		if r.JsonTagKey != "" { // load msg.Tag from json
-			switch msg.Message[r.JsonTagKey].(type) {
+		if r.JSONTagKey != "" { // load msg.Tag from json
+			switch msg.Message[r.JSONTagKey].(type) {
 			case []byte:
-				msg.Tag = string(msg.Message[r.JsonTagKey].([]byte))
+				msg.Tag = string(msg.Message[r.JSONTagKey].([]byte))
 			case string:
-				msg.Tag = msg.Message[r.JsonTagKey].(string)
+				msg.Tag = msg.Message[r.JSONTagKey].(string)
 			default:
-				utils.Logger.Error("unknown tagkey format", zap.String("tagkey", r.JsonTagKey))
+				utils.Logger.Error("unknown tagkey format", zap.String("tagkey", r.JSONTagKey))
 				r.msgPool.Put(msg)
 				return nil, errors.New("unknown tagkey format")
 			}

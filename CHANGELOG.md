@@ -2,6 +2,13 @@
 *CURRENT*
 ---
 
+- 2019-08-14 (Laisky) feat: support `@RANDOM_STRING`
+- 2019-08-14 (Laisky) build: upgrade to go 1.12.7
+- 2019-08-14 (Laisky) feat(paas-390): add wuling mapping
+- 2019-07-23 (Laisky) perf: upgrade go-utils to v1.5.3
+- 2019-07-17 (Laisky) fix: optimize regexp
+- 2019-07-17 (Laisky) docs: update example settings
+- 2019-06-26 (Laisky) build: upgrade go-utils to v1.5.1
 - 2019-06-26 (Laisky) fix: go mod conflict
 - 2019-06-21 (Laisky) build: upgrade to golang:1.12.6
 - 2019-06-12 (Laisky) ci: disable vendor cache

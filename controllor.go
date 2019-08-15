@@ -119,9 +119,9 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 					Topics:       []string{utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".topics." + env)},
 					Group:        utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".groups." + env),
 					Tag:          utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tags." + env),
-					IsJsonFormat: utils.Settings.GetBool("settings.acceptor.recvs.plugins." + name + ".is_json_format"),
+					IsJSONFormat: utils.Settings.GetBool("settings.acceptor.recvs.plugins." + name + ".is_json_format"),
 					TagKey:       utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tag_key"),
-					JsonTagKey:   utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".json_tag_key"),
+					JSONTagKey:   utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".json_tag_key"),
 					RewriteTag:   recvs.GetKafkaRewriteTag(utils.Settings.GetString("settings.acceptor.recvs.plugins."+name+".rewrite_tag"), env),
 					NConsumer:    utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".nconsumer"),
 					KafkaCommitCfg: &recvs.KafkaCommitCfg{
@@ -311,14 +311,25 @@ func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- int64) *
 			switch utils.Settings.GetString("settings.post_filters.plugins." + name + ".type") {
 			case "es-dispatcher":
 				fs = append(fs, postFilters.NewESDispatcherFilter(&postFilters.ESDispatcherFilterCfg{
-					Tags:     libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.post_filters.plugins.es_dispatcher.tags")),
-					TagKey:   utils.Settings.GetString("settings.post_filters.plugins.es_dispatcher.tag_key"),
-					ReTagMap: postFilters.LoadReTagMap(env, utils.Settings.Get("settings.post_filters.plugins.es_dispatcher.rewrite_tag_map")),
+					Tags:     libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.post_filters.plugins."+name+".tags")),
+					TagKey:   utils.Settings.GetString("settings.post_filters.plugins." + name + ".tag_key"),
+					ReTagMap: postFilters.LoadReTagMap(env, utils.Settings.Get("settings.post_filters.plugins."+name+".rewrite_tag_map")),
 				}))
 			case "tag-rewriter":
 				fs = append(fs, postFilters.NewForwardTagRewriterFilter(&postFilters.ForwardTagRewriterFilterCfg{ // wechat mini program
-					Tag:    utils.Settings.GetString("settings.post_filters.plugins.forward_tag_rewriter.tag") + "." + env,
-					TagKey: utils.Settings.GetString("settings.post_filters.plugins.forward_tag_rewriter.tag_key"),
+					Tag:    utils.Settings.GetString("settings.post_filters.plugins."+name+".tag") + "." + env,
+					TagKey: utils.Settings.GetString("settings.post_filters.plugins." + name + ".tag_key"),
+				}))
+			case "fields":
+				fs = append(fs, postFilters.NewFieldsFilter(&postFilters.FieldsFilterCfg{
+					Tags:              libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.post_filters.plugins."+name+".tags")),
+					IncludeFields:     utils.Settings.GetStringSlice("settings.post_filters.plugins." + name + ".include_fields"),
+					ExcludeFields:     utils.Settings.GetStringSlice("settings.post_filters.plugins." + name + ".exclude_fields"),
+					NewFieldTemplates: utils.Settings.GetStringMapString("settings.post_filters.plugins." + name + ".new_fields"),
+				}))
+			case "custom-bigdata":
+				fs = append(fs, postFilters.NewCustomBigDataFilter(&postFilters.CustomBigDataFilterCfg{
+					Tags: libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.post_filters.plugins."+name+".tags")),
 				}))
 			default:
 				utils.Logger.Panic("unknown post_filter type",
@@ -335,6 +346,13 @@ func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- int64) *
 	default:
 		utils.Logger.Panic("post_filter configuration error")
 	}
+
+	fs = append(fs,
+		postFilters.NewDefaultFilter(&postFilters.DefaultFilterCfg{
+			MsgKey: utils.Settings.GetString("settings.post_filters.plugins.default.msg_key"),
+			MaxLen: utils.Settings.GetInt("settings.post_filters.plugins.default.max_len"),
+		}),
+	)
 
 	return postFilters.NewPostPipeline(&postFilters.PostPipelineCfg{
 		MsgPool:         c.msgPool,

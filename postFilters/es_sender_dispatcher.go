@@ -16,7 +16,7 @@ type ESDispatcherFilterCfg struct {
 }
 
 type ESDispatcherFilter struct {
-	*BaseFilter
+	BaseFilter
 	*ESDispatcherFilterCfg
 	supportedTags map[string]struct{}
 }
@@ -36,7 +36,6 @@ func NewESDispatcherFilter(cfg *ESDispatcherFilterCfg) *ESDispatcherFilter {
 	utils.Logger.Info("new ESDispatcherFilter",
 		zap.Strings("tags", cfg.Tags))
 	f := &ESDispatcherFilter{
-		BaseFilter:            &BaseFilter{},
 		ESDispatcherFilterCfg: cfg,
 	}
 

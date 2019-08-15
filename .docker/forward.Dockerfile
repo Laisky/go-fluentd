@@ -4,6 +4,10 @@
 # cp /forward/settings.yml /data/Sit/go-fluentd/settings/.
 FROM registry:5000/golang:1.12.6-stretch AS gobin
 
+# http proxy
+ENV HTTP_PROXY=http://172.16.4.26:17777
+ENV HTTPS_PROXY=http://172.16.4.26:17777
+
 ENV GO111MODULE=on
 WORKDIR /go-fluentd
 COPY go.mod .

@@ -15,18 +15,15 @@ type DefaultFilterCfg struct {
 }
 
 type DefaultFilter struct {
-	*BaseFilter
+	BaseFilter
 	*DefaultFilterCfg
 }
 
 func NewDefaultFilter(cfg *DefaultFilterCfg) *DefaultFilter {
 	return &DefaultFilter{
-		BaseFilter:       &BaseFilter{},
 		DefaultFilterCfg: cfg,
 	}
 }
-
-const DefaultSearchField = "message"
 
 func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	for k, v := range msg.Message {
@@ -42,16 +39,26 @@ func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 		switch v.(type) {
 		case []byte: // convert all bytes fields to string
 			msg.Message[k] = string(v.([]byte))
+		case string:
+			msg.Message[k] = v.(string)
+		}
+
+		switch v.(type) {
+		case string:
+			if len(msg.Message[k].(string)) > f.MaxLen {
+				msg.Message[k] = msg.Message[k].(string)[:f.MaxLen]
+			}
 		}
 	}
 
 	// DefaultSearchField must exists, let kibana can display this msg
-	switch msg.Message[DefaultSearchField].(type) {
+	switch msg.Message[libs.DefaultFieldForMessage].(type) {
 	case string:
 	case nil:
-		msg.Message[DefaultSearchField] = ""
+		// Kibana needs `DefaultFieldForMessage` to display and search
+		msg.Message[libs.DefaultFieldForMessage] = ""
 	default:
-		utils.Logger.Error("unknown message type", zap.String("message", fmt.Sprint(msg.Message[DefaultSearchField])))
+		utils.Logger.Error("unknown message type", zap.String("message", fmt.Sprint(msg.Message[libs.DefaultFieldForMessage])))
 	}
 
 	return msg

@@ -95,3 +95,17 @@ func BenchmarkRegexNamedSubMatch(b *testing.B) {
 		b.Fatalf("got: %+v", result)
 	}
 }
+
+func TestTemplateWithMap(t *testing.T) {
+	tpl := `123${k1} + ${k2}:${k-3} 22`
+	data := map[string]interface{}{
+		"k1":  41,
+		"k2":  "abc",
+		"k-3": 213.11,
+	}
+	want := `12341 + abc:213.11 22`
+	got := libs.TemplateWithMap(tpl, data)
+	if got != want {
+		t.Fatalf("want `%v`, got `%v`", want, got)
+	}
+}

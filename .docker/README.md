@@ -17,8 +17,8 @@ go mod download
 go mod vendor
 
 # build base image
-docker build . -f ./.docker/gobase.Dockerfile -t registry:5000/gobase:1.12.6-alpine3.9
-docker push registry:5000/gobase:1.12.6-alpine3.9
+docker build . -f ./.docker/gobase.Dockerfile -t registry:5000/gobase:1.12.7-alpine3.10
+docker push registry:5000/gobase:1.12.7-alpine3.10
 
 # build image
 docker build . -f ./.docker/Dockerfile -t registry:5000/go-fluentd:1.8.2

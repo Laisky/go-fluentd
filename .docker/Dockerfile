@@ -1,4 +1,8 @@
-FROM registry:5000/gobase:1.12.6-alpine3.9 AS gobuild
+FROM registry:5000/gobase:1.12.7-alpine3.10 AS gobuild
+
+# http proxy
+ENV HTTP_PROXY=http://172.16.4.26:17777
+ENV HTTPS_PROXY=http://172.16.4.26:17777
 
 ENV GO111MODULE=on
 WORKDIR /go-fluentd
@@ -12,7 +16,7 @@ RUN go build -a --ldflags '-extldflags "-static"' entrypoints/main.go
 
 
 # copy executable file and certs to a pure container
-FROM alpine:3.9
+FROM alpine:3.10
 COPY --from=gobuild /etc/ssl/certs /etc/ssl/certs
 COPY --from=gobuild /go-fluentd/main go-fluentd
 

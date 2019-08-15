@@ -14,7 +14,7 @@ type ForwardTagRewriterFilterCfg struct {
 
 // ForwardTagRewriterFilter rewrite tag for msgs received by forward-recv.
 type ForwardTagRewriterFilter struct {
-	*BaseFilter
+	BaseFilter
 	*ForwardTagRewriterFilterCfg
 }
 
@@ -23,7 +23,6 @@ func NewForwardTagRewriterFilter(cfg *ForwardTagRewriterFilterCfg) *ForwardTagRe
 		zap.String("tag", cfg.Tag))
 
 	return &ForwardTagRewriterFilter{
-		BaseFilter:                  &BaseFilter{},
 		ForwardTagRewriterFilterCfg: cfg,
 	}
 }

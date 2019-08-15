@@ -9,7 +9,12 @@ import (
 	"sync"
 
 	"github.com/Laisky/go-fluentd/libs"
-	"github.com/json-iterator/go"
+	jsoniter "github.com/json-iterator/go"
+)
+
+const (
+	// RandomValOperator set this val in meta will replaced by random string
+	RandomValOperator = "@RANDOM_STRING"
 )
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary

@@ -15,6 +15,7 @@ consts:
       - app.spring
       - gateway
       - connector
+      - qingai
       - cp
       - ptdeployer
       - httpguard
@@ -41,7 +42,7 @@ settings:
   acceptor:
     async_out_chan_size: 100000
     sync_out_chan_size: 10000
-    max_rotate_id: 4294967295  # must <= 4294967295
+    max_rotate_id: 4294967295  # do not change to smaller number
     recvs:
       plugins:
         # wechat_mini_program_forward:
@@ -178,6 +179,14 @@ settings:
     # senders
     # support types: fluentd/kafka/es
     plugins:
+      localtest:
+        active_env: *all-env
+        tags: *all-tags
+        type: "null"
+        forks: 5
+        log_level: info
+        is_commit: true
+        is_discard_when_blocked: false
       es_general:
         type: es
         active_env: *all-env
@@ -272,49 +281,49 @@ settings:
       #   max_wait_sec: 5
       #   retry_chan_len: 100000
       #   is_discard_when_blocked: false
-      kafka_cp:
-        type: kafka
-        active_env: *all-env
-        tag_key: tag
-        brokers:
-          sit: *1-1-1-1-9092
-          perf: *1-1-1-1-9092
-          uat: *1-1-1-1-9092
-          prod: *2-2-2-2-9092
-        topic: docker_message
-        tags:
-          - cp
-        forks: 3
-        msg_batch_size: 10000
-        max_wait_sec: 5
-        retry_chan_len: 100000
-        is_discard_when_blocked: false
-      fluentd_backup_geely:
-        type: fluentd
-        active_env:
-          - prod
-        tags:
-          - geely.prod
-        forks: 3
-        addr: fluentd-sit.ptcloud.t.home:24235
-        msg_batch_size: 10000
-        max_wait_sec: 5
-        retry_chan_len: 50000
-        is_discard_when_blocked: true
-      fluentd_backup_emqtt:
-        type: fluentd
-        active_env:
-          - prod
-        tags:
-          - emqtt.prod
-        forks: 3
-        addr: fluentd-sit.ptcloud.t.home:24236
-        msg_batch_size: 10000
-        max_wait_sec: 5
-        retry_chan_len: 50000
-        is_discard_when_blocked: true
+      # kafka_cp:
+      #   type: kafka
+      #   active_env: *all-env
+      #   tag_key: tag
+      #   brokers:
+      #   sit: *1-1-1-1-9092
+      #   perf: *1-1-1-1-9092
+      #   uat: *1-1-1-1-9092
+      #   prod: *2-2-2-2-9092
+      #   topic: docker_message
+      #   tags:
+      #     - cp
+      #   forks: 3
+      #   msg_batch_size: 10000
+      #   max_wait_sec: 5
+      #   retry_chan_len: 100000
+      #   is_discard_when_blocked: false
+      # fluentd_backup_geely:
+      #   type: fluentd
+      #   active_env:
+      #     - prod
+      #   tags:
+      #     - geely.prod
+      #   forks: 3
+      #   addr: fluentd-sit.ptcloud.t.home:24235
+      #   msg_batch_size: 10000
+      #   max_wait_sec: 5
+      #   retry_chan_len: 50000
+      #   is_discard_when_blocked: true
+      # fluentd_backup_emqtt:
+      #   type: fluentd
+      #   active_env:
+      #     - prod
+      #   tags:
+      #     - emqtt.prod
+      #   forks: 3
+      #   addr: fluentd-sit.ptcloud.t.home:24236
+      #   msg_batch_size: 10000
+      #   max_wait_sec: 5
+      #   retry_chan_len: 50000
+      #   is_discard_when_blocked: true
   journal:
-    buf_dir_path: /data/log/fluentd/go-concator
+    buf_dir_path: /Users/laisky/Downloads/buf
     buf_file_bytes: 209315200  # 200 MB
     journal_out_chan_len: 100000
     commit_id_chan_len: 500000
@@ -339,7 +348,7 @@ settings:
           - new_tag: cp.{env}
             regexp: ms:cp
           - new_tag: bot.{env}
-            regexp: ms_\w+\ {0,}\|
+            regexp: ms_\w+\ *\|
           - new_tag: app.spring.{env}
             regexp: .*
   post_filters:
@@ -364,6 +373,7 @@ settings:
           app.spring.{env}: es-general.{env}
           gateway.{env}: es-general.{env}
           connector.{env}: es-general.{env}
+          qingai.{env}: es-general.{env}
           cp.{env}: es-general.{env}
           ptdeployer.{env}: es-general.{env}
           tsp.{env}: es-general.{env}
@@ -403,6 +413,29 @@ settings:
             datasource: httpguard
           ramjet:
             datasource: ramjet
+      qingai:
+        type: parser
+        lb_key: container_id
+        nfork: 3
+        tags:
+          - qingai
+        msg_key: log
+        # 2019-07-06 13:34:48.313|http-nio-8010-exec-9|INFO|bot-parking|com.pateo.parking.service.impl.ParkingListServiceImpl|108:{"deviceId":"12345","input":"附近的停车场","intentName":"检索停车场","recordId":"bf728b47b8fe47c7a9f35b1eb1c347ae","shouldEndSession":"false","text":"找到这些你需要的停车场要去哪一个","userId":"12345","version":"1.0"}
+        pattern: (?ms)^(?P<time>.{23}) *\| *(?P<app>[^|]+) *\| *(?P<level>[^|]+) *\| *(?P<thread>[^|]+) *\| *(?P<class>[^|]+) *\| *(?P<line>\d+) *[|:] *(?P<args>\{.*\})
+        is_remove_orig_log: true
+        parse_json_key: args
+        must_include: app
+        # ⬇⬇ time
+        time_key: time
+        time_format: "2006-01-02 15:04:05.000 -0700"
+        new_time_format: "2006-01-02T15:04:05.000000Z"
+        reserved_time_key: false
+        new_time_key: "@timestamp"
+        append_time_zone:
+          sit: "+0800"
+          perf: "+0800"
+          uat: "+0800"
+          prod: "+0800"
       connector:
         type: parser
         lb_key: container_id
@@ -415,7 +448,7 @@ settings:
         # 2018-04-02 02:02:10.928 | sh-datamining | INFO | http-nio-8080-exec-80 | com.pateo.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74 | xxx
         # 2018-03-12 02:02:10.928 | gateway | INFO | http-nio-8080-exec-80 | com.pateo.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74: {"key": "value"}:xxx
         # 2019-02-18 15:42:06.635 | usertracking | DEBUG | kafka-producer-network-thread | producer-1 | com.pateo.qingcloud.base.usertracking.service.KafkaServiceBase$ProducerCallBack | 63: onCompletion when sendMessage to topic:UserTracking,partition:0  success!!
-        pattern: (?ms)^(?P<time>.{23}) {0,}\| {0,}(?P<app>[^\|]+) {0,}\| {0,}(?P<level>[^\|]+) {0,}\| {0,}(?P<thread>[^\|]+) {0,}\| {0,}((?P<producer>[\w\d\-]+) {0,}\| {0,}){0,1}(?P<class>[^\|]+) {0,}\| {0,}(?P<line>\d+) {0,}([\|:] {0,}(?P<args>\{.*\}))?([\|:] {0,}(?P<message>.*))?
+        pattern: (?ms)^(?P<time>.{23}) *\| *(?P<app>[^|]+) *\| *(?P<level>[^|]+) *\| *(?P<thread>[^|]+) *\| *(?:(?P<producer>[\w\-]+) *\| *)?(?P<class>[^|]+) *\| *(?P<line>\d+) *(?:[|:] *(?P<args>\{.*\}))? *(?:[|:] *(?P<message>.*))?
         is_remove_orig_log: true
         parse_json_key: args
         must_include: app
@@ -438,7 +471,7 @@ settings:
           - geely
         msg_key: log
         # 2018-02-05 10:33:13.408 | geely:nlcc | INFO | http-bio-8081-exec-3 | com.tservice.cc.web.interceptor.MyLoggingOutInterceptor.handleMessage:57 - Outbound Message:{ID:1, Address:http://10.133.200.77:8082/gisnavi/tservice/gisnavi/poi/poicategory, Http-Method:GET, Content-Type:application/json, Headers:{Content-Type=[application/json], Accept=[application/json]}}
-        pattern: (?ms)^(?P<time>.{23}) {0,}\| {0,}(?P<project>[^\|]+) {0,}\| {0,}(?P<level>[^\|]+) {0,}\| {0,}(?P<thread>[^\|]+) {0,}\| {0,}(?P<class>[^\:]+)\:(?P<line>\d+) {0,}- {0,}(?P<message>.+)
+        pattern: '(?ms)^(?P<time>.{23}) *\| *(?P<project>[^|]+) *\| *(?P<level>[^|]+) *\| *(?P<thread>[^|]+) *\| *(?P<class>[^:]+) *: *(?P<line>\d+) *- *(?P<message>.+)'
         is_remove_orig_log: true
         must_include: project
         # ⬇⬇ time
@@ -469,7 +502,7 @@ settings:
           - spark
         msg_key: log
         # 2018/03/06 15:19:23.619 INFO 6356e435e4894a22a41c80e6ade35526 com.pateo.qingcloud.ai.sparkstreaming.db.AiDbService: Enter getFuseDataType  function!
-        pattern: "(?ms)^(?P<time>.{23}) {0,}(?P<level>[^ ]+) +(?P<uuid>[^ ]+) +(?P<app_info>[^:]+) {0,}: {0,}(?P<message>.*)"
+        pattern: '(?ms)^(?P<time>.{23}) *(?P<level>[^ ]+) +(?P<uuid>[^ ]+) +(?P<app_info>[^:]+) *: *(?P<message>.*)'
         is_remove_orig_log: true
         must_include: app_info
         # ⬇⬇ time
@@ -512,7 +545,7 @@ settings:
           - ptdeployer
         msg_key: log
         # [2018-11-12 03:41:39,735 - ptdeployer - views.py - 1429 - INFO - app_log] - zihengni登录成功
-        pattern: (?ms)^\[(?P<time>.{23}) {0,}- {0,}(?P<app>[^\-]+) {0,}- {0,}(?P<class>[^\-]+) {0,}- {0,}(?P<line>\d+) {0,}- {0,}(?P<level>[^\-]+) {0,}- {0,}(?P<thread>[^\|]+)\] {0,}- {0,}(?P<message>.*)
+        pattern: (?ms)^\[(?P<time>.{23}) *- *(?P<app>[^\-]+) *- *(?P<class>[^\-]+) *- *(?P<line>\d+) *- *(?P<level>[^\-]+) *- *(?P<thread>[^|]+)\] *- *(?P<message>.*)
         is_remove_orig_log: true
         must_include: app
         add:  # optional
@@ -537,7 +570,7 @@ settings:
           - cp
         msg_key: log
         # 2018-02-01 16:15:43.518 - ms:cp|type:platform|uuid:4f99962d-c272-43bb-85d9-20ab030180b7|dateTime:2018-02-01 16:15:43.518|customerSid:27|customerCode:DT00000000|customerName:默认
-        pattern: (?ms)^(?P<time>.{23}) - (?P<message>ms:cp.*)
+        pattern: '(?ms)^(?P<time>.{23}) *- *(?P<message>ms:cp.*)'
         is_remove_orig_log: true
         must_include: message
         add:  # optional
@@ -567,7 +600,7 @@ settings:
         msg_key: log
         # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
         # 2019-04-23 17:02:09.733 | mswallet| DEBUG | http-nio-8080-exec-2 | org.apache.ibatis.logging.jdbc.BaseJdbcLogger | 145 | {c83dd4a0244146fe9ada4dfcc8a737b4}| ==> Parameters: 123(Long)
-        pattern: (?ms)^(?P<time>.{23}) {0,}\| {0,}(?P<app>[^\|]+) {0,}\| {0,}(?P<level>[^\|]+) {0,}\| {0,}(?P<thread>[^\|]+) {0,}\| {0,}(?P<class>[^ ]+) {0,}\| {0,}(?P<line>\d+) {0,}([\|:] {0,}(?P<args>\{[^\}]+\}))?( {0,}[\|:] {0,}(?P<message>.*))?
+        pattern: '(?ms)^(?P<time>.{23}) *\| *(?P<app>[^|]+) *\| *(?P<level>[^|]+) *\| *(?P<thread>[^|]+) *\| *(?P<class>[^|]+) *\| *(?P<line>[^ ]+) *(?:[|:] *(?P<args>\{[^\}]+\}))?(?: *[|:] *(?P<message>.*))?'
         is_remove_orig_log: true
         must_include: app
         # ⬇⬇ time
@@ -608,49 +641,54 @@ settings:
           spark:
             msg_key: log
             identifier: container_id
-            regex: ^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}.\d{3} \w+
+            # 1999/22/22 22:22:22.222 jiejwfijef
+            regex: ^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d{3} +[^ ]
           cp:
             msg_key: log
             identifier: container_id
             # 2018-02-01 16:15:43.518 - ms:cp|type:platform|uuid:4f99962d-c272-43bb-85d9-20ab030180b7|dateTime:2018-02-01 16:15:43.518|customerSid:27|customerCode:DT00000000|customerName:默认
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} - ms:cp\|
+            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} *- *ms:cp\|
           ramjet:
             msg_key: log
             identifier: container_id
             # [2018-08-03T05:42:42.714151Z - DEBUG - /go/src/github.com/Laisky/go-ramjet/tasks/logrotate/backup/main.go:129] IsFileReadyToUpload for 2018050700.log.gz
-            regex: ^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{6}Z - \w+ -
+            regex: ^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{6}Z *-
           app.spring:
             msg_key: log
             identifier: container_id
             # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} {0,}\|
+            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
           tsp:
             msg_key: log
             identifier: container_id
             # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} {0,}\|
+            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
           ai:
             msg_key: log
             identifier: container_id
             # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} {0,}\|
+            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
           base:
             msg_key: log
             identifier: container_id
             # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} {0,}\|
+            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
           bot:
             msg_key: log
             identifier: container_id
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} {0,}\|
+            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
           gateway:
             msg_key: log
             identifier: container_id
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} {0,}\|
+            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
           connector:
             msg_key: log
             identifier: container_id
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} {0,}\|
+            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+          qingai:
+            msg_key: log
+            identifier: container_id
+            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
           geely:
             msg_key: log
             # 2018-02-05 10:33:13.408 | geely:nlcc | INFO | http-bio-8081-exec-3 | com.tservice.cc.web.interceptor.MyLoggingOutInterceptor.handleMessage:57 - Outbound Message:{ID:1, Address:http://10.133.200.77:8082/gisnavi/tservice/gisnavi/poi/poicategory, Http-Method:GET, Content-Type:application/json, Headers:{Content-Type=[application/json], Accept=[application/json]}}

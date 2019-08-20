@@ -25,18 +25,14 @@ settings:
     discard_chan_size: 50000
     sender_inchan_size: 50000
     plugins:
-      fluentd:
-        type: fluentd
-        active_env:
-          - sit
-        tags:
-          - test.sit
-        forks: 3
-        addr: fluentd:24225
-        msg_batch_size: 10000
-        max_wait_sec: 5
-        retry_chan_len: 50000
-        is_discard_when_blocked: true
+      localtest:
+        active_env: *all-env
+        tags: *all-tags
+        type: "null"
+        forks: 5
+        log_level: info
+        is_commit: true
+        is_discard_when_blocked: false
   journal:
     buf_dir_path: /data/log/fluentd/go-concator
     buf_file_bytes: 209315200  # 200 MB

@@ -119,7 +119,7 @@ func (s *ElasticSearchSender) SendBulkMsgs(ctx *bulkOpCtx, msgs []*libs.FluentMs
 		return errors.Wrap(err, "try to compress messages got error")
 	}
 
-	ctx.gzWriter.Flush()
+	ctx.gzWriter.Close()
 	req, err := http.NewRequest("POST", s.Addr, ctx.buf)
 	if err != nil {
 		return errors.Wrap(err, "try to init es request got error")
@@ -141,8 +141,8 @@ func (s *ElasticSearchSender) SendBulkMsgs(ctx *bulkOpCtx, msgs []*libs.FluentMs
 }
 
 type ESResp struct {
-	Errors bool        `json:"errors"`
-	Items  []*ESOpResp `json:"items"`
+	Errors bool `json:"errors"`
+	// Items  []*ESOpResp `json:"items"`
 }
 
 type ESOpResp struct {
@@ -161,15 +161,18 @@ func isStatusCodeOk(s int) bool {
 
 func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
 	if !isStatusCodeOk(resp.StatusCode) {
-		return fmt.Errorf("server return error code %v", resp.StatusCode)
+		err = fmt.Errorf("server return error code %v", resp.StatusCode)
 	}
 
 	ret := &ESResp{}
-	bb, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		utils.Logger.Error("try to read es resp body got error", zap.Error(err))
-		return nil
+	bb, err2 := ioutil.ReadAll(resp.Body)
+	if err2 != nil {
+		utils.Logger.Error("try to read es resp body got error", zap.Error(err2))
 	}
+	if err != nil {
+		return errors.Wrap(err, string(bb))
+	}
+	utils.Logger.Debug("got es response", zap.ByteString("resp", bb))
 
 	if err = json.Unmarshal(bb, ret); err != nil {
 		utils.Logger.Error("try to unmarshal body got error, body",
@@ -178,15 +181,8 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
 		return nil
 	}
 
-	for _, v := range ret.Items {
-		if !isStatusCodeOk(resp.StatusCode) {
-			// do not retry if there is part of msgs got error
-			utils.Logger.Warn("bulk got error for idx",
-				zap.ByteString("body", bb),
-				zap.String("idx", v.Index.Index),
-				zap.Int("status", v.Index.Status))
-			return nil
-		}
+	if ret.Errors {
+		utils.Logger.Error("es return error", zap.ByteString("resp", bb))
 	}
 
 	return nil

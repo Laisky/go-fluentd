@@ -5,7 +5,7 @@ go 1.12
 require (
 	github.com/Depado/ginprom v1.1.2
 	github.com/Laisky/go-syslog v2.3.3+incompatible
-	github.com/Laisky/go-utils v1.5.4
+	github.com/Laisky/go-utils v1.6.1
 	github.com/Laisky/zap v1.9.2
 	github.com/OneOfOne/xxhash v1.2.5 // indirect
 	github.com/Shopify/sarama v1.22.1

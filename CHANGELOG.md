@@ -2,6 +2,18 @@
 *CURRENT*
 ---
 
+- 2019-08-20 (Laisky) ci: upgrade go-utils
+- 2019-08-20 (Laisky) ci: upgrade go-utils
+- 2019-08-19 (Laisky) docs: update quickstart
+- 2019-08-19 (Laisky) feat: enable gz in journal
+- 2019-08-19 (Laisky) style: more log
+
+*v1.9.3*
+---
+
+- 2019-08-15 (Laisky) build: upgrade go-utils to v1.5.4
+- 2019-08-15 (Laisky) fix: double default postfilter
+- 2019-08-14 (Laisky) docs: update changelog
 - 2019-08-14 (Laisky) feat: support `@RANDOM_STRING`
 - 2019-08-14 (Laisky) build: upgrade to go 1.12.7
 - 2019-08-14 (Laisky) feat(paas-390): add wuling mapping

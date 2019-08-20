@@ -21,7 +21,7 @@ services:
     command: python /app.py
 
   go-fluentd:
-    image: ppcelery/go-fluentd:1.7.2
+    image: ppcelery/go-fluentd:1.9.3
     restart: "on-failure"
     networks:
       - fluentd-test
@@ -39,18 +39,6 @@ services:
     volumes:
       - ./go-fluentd/settings.yml:/etc/go-fluentd/settings.yml:ro
     command: ./go-fluentd --config=/etc/go-fluentd --env=sit  --addr=0.0.0.0:8080 --log-level=info
-
-  fluentd:
-    image: fluent/fluentd:v1.1.0
-    restart: "on-failure"
-    networks:
-      - fluentd-test
-    logging:
-      driver: "json-file"
-      options:
-        max-size: 100m
-    volumes:
-      - ./fluentd/fluent.conf:/fluentd/etc/fluent.conf:ro
 
 
 networks:

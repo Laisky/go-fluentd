@@ -2,12 +2,10 @@
 
 Running a minimal example with app, go-fluentd and fluentd.
 
-App ---> Go-Fluentd ---> Fluentd
+App ---> Go-Fluentd(with stdout sender plugin)
 
 - App: generate and emit logs
 - Go-Fluentd: collect and parse log
-- Fluentd: just a example for backend, it also could be ElasticSearch or something else
-
 
 
 ## Prepare
@@ -37,7 +35,6 @@ $ sudo docker-compose ps
 
          Name                        Command               State                          Ports
 -----------------------------------------------------------------------------------------------------------------------
-example_fluentd_1         /bin/entrypoint.sh /bin/sh ...   Up      24224/tcp, 5140/tcp
 example_go-fluentd_1      ./go-fluentd --config=/etc ...   Up      127.0.0.1:24225->24225/tcp, 127.0.0.1:8080->8080/tcp
 example_log-generator_1   python /app.py                   Up
 ```
@@ -52,12 +49,6 @@ You can check the logs that parserd by go-fluentd:
 
 ```sh
 $ sudo docker logs example_fluentd_1
-
-2019-02-28 08:41:21.534852412 +0000 test.sit: {"tag":"test.sit","app":"app","thread":"thread","class":"class","message":"0.8336017742577866\n0.059360002847527626\n0.9471091772460405","msgid":1377,"container_name":"/example_log-generator_1","source":"stdout","level":"INFO","line":"64","datasource":"test","@timestamp":"2019-02-21T07:41:17.871000Z","container_id":"24d6069f241ad94719ac1eee15dce43e29a3a32af67c478ded9c474066389260"}
-2019-02-28 08:41:21.539087614 +0000 test.sit: {"container_name":"/example_log-generator_1","msgid":1026,"line":"64","message":"0.7159115118036709","datasource":"test","level":"INFO","thread":"thread","class":"class","@timestamp":"2019-02-03T17:41:13.813000Z","container_id":"24d6069f241ad94719ac1eee15dce43e29a3a32af67c478ded9c474066389260","source":"stdout","tag":"test.sit","app":"app"}
-```
-
-With format:
 
 ```js
 {
@@ -106,49 +97,52 @@ You can load monitor metrics by <http://localhost:8080/monitor>
 // http://localhost:8080/monitor
 
 {
-    "acceptorPipeline": {
-        "msgPerSec": 81.1
-    },
-    "controllor": {
-        "goroutine": 37,
-        "skipDumpChanCap": 150000,
-        "skipDumpChanLen": 0,
-        "waitAccepPipelineAsyncChanCap": 100000,
-        "waitAccepPipelineAsyncChanLen": 0,
-        "waitAccepPipelineSyncChanCap": 10000,
-        "waitAccepPipelineSyncChanLen": 0,
-        "waitCommitChanCap": 500000,
-        "waitCommitChanLen": 0,
-        "waitDispatchChanCap": 100000,
-        "waitDispatchChanLen": 0,
-        "waitDumpChanCap": 150000,
-        "waitDumpChanLen": 0,
-        "waitPostPipelineChanCap": 10000,
-        "waitPostPipelineChanLen": 0,
-        "waitProduceChanCap": 10000,
-        "waitProduceChanLen": 0
-    },
-    "dispatcher": {
-        "msgPerSec": 81.1,
-        "test.sit.ChanCap": 10000,
-        "test.sit.ChanLen": 0,
-        "test.sit.MsgPerSec": 81.1
-    },
-    "producer": {
-        "discardChanCap": 50000,
-        "discardChanLen": 0,
-        "msgPerSec": 36.7,
-        "test.sit.fluentd.ChanCap": 50000,
-        "test.sit.fluentd.ChanLen": 0,
-        "waitToDiscardMsgNum": 0
-    },
-    "tagpipeline": {
-        "test.sit.concator_tagfilter.ChanCap": 10000,
-        "test.sit.concator_tagfilter.ChanLen": 0,
-        "test.sit.spring.ChanCap": 10000,
-        "test.sit.spring.ChanLen": 0
-    },
-    "ts": "2019-02-28T08:32:21.560776792Z"
+  "acceptorPipeline": {
+    "msgPerSec": 252160.4
+  },
+  "controllor": {
+    "goroutine": 64,
+    "skipDumpChanCap": 150000,
+    "skipDumpChanLen": 5299,
+    "waitAccepPipelineAsyncChanCap": 100000,
+    "waitAccepPipelineAsyncChanLen": 17174,
+    "waitAccepPipelineSyncChanCap": 10000,
+    "waitAccepPipelineSyncChanLen": 0,
+    "waitCommitChanCap": 500000,
+    "waitCommitChanLen": 500000,
+    "waitDispatchChanCap": 100000,
+    "waitDispatchChanLen": 99,
+    "waitDumpChanCap": 150000,
+    "waitDumpChanLen": 150000,
+    "waitPostPipelineChanCap": 10000,
+    "waitPostPipelineChanLen": 9777,
+    "waitProduceChanCap": 50000,
+    "waitProduceChanLen": 49946
+  },
+  "dispatcher": {
+    "app.spring.perf.ChanCap": 10000,
+    "app.spring.perf.ChanLen": 0,
+    "app.spring.perf.MsgPerSec": 123304.8,
+    "msgPerSec": 123306.7
+  },
+  "journal": {
+    "idsSetLen": 644303
+  },
+  "producer": {
+    "app.spring.perf.localtest.ChanCap": 50000,
+    "app.spring.perf.localtest.ChanLen": 50000,
+    "discardChanCap": 50000,
+    "discardChanLen": 50000,
+    "msgPerSec": 19111.5,
+    "waitToDiscardMsgNum": 0
+  },
+  "tagpipeline": {
+    "app.spring.perf.concator.ChanCap": 10000,
+    "app.spring.perf.concator.ChanLen": 0,
+    "app.spring.perf.spring-parser.ChanCap": 10000,
+    "app.spring.perf.spring-parser.ChanLen": 4364
+  },
+  "ts": "2019-08-20T01:06:43.934658174Z"
 }
 ```
 </p>

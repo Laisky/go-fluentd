@@ -2,6 +2,8 @@
 *CURRENT*
 ---
 
+- 2019-08-28 (Laisky) fix: commit chan should not discard
+- 2019-08-28 (Laisky) docs: update changelog
 - 2019-08-28 (Laisky) perf: periodic gc
 
 *v1.10.4*

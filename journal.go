@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	defaultInnerJournalDataChanLen = 1000
-	defaultInnerJournalIDChanLen   = 1000
+	defaultInnerJournalDataChanLen = 10000
+	defaultInnerJournalIDChanLen   = 10000
 	minimalBufSizeByte             = 10485760 // 10 MB
 	intervalToStartingLegacy       = 3 * time.Second
 	intervalForceGC                = 1 * time.Minute
@@ -434,11 +434,11 @@ func (j *Journal) startCommitRunner() {
 			select {
 			case chani.(chan *libs.FluentMsg) <- msg:
 			default:
-				utils.Logger.Error("discard id without commit since of journal is busy",
+				j.commitChan <- msg
+				utils.Logger.Warn("reset committed msg",
 					zap.String("tag", msg.Tag),
 					zap.Int64("id", msg.Id),
 				)
-				j.MsgPool.Put(msg)
 			}
 		}
 	}()

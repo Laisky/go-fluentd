@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/Laisky/go-fluentd/libs"
-	"github.com/json-iterator/go"
+	jsoniter "github.com/json-iterator/go"
 )
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
@@ -17,7 +17,7 @@ type SenderItf interface {
 	GetName() string
 
 	SetMsgPool(*sync.Pool)
-	SetCommitChan(chan<- int64)
+	SetCommitChan(chan<- *libs.FluentMsg)
 	SetSupportedTags([]string)
 	SetDiscardChan(chan<- *libs.FluentMsg)
 	SetDiscardWithoutCommitChan(chan<- *libs.FluentMsg)
@@ -27,7 +27,7 @@ type SenderItf interface {
 // should not put msg into msgpool in sender
 type BaseSender struct {
 	msgPool                               *sync.Pool
-	commitChan                            chan<- int64
+	commitChan                            chan<- *libs.FluentMsg
 	discardChan, discardWithoutCommitChan chan<- *libs.FluentMsg
 	tags                                  []string
 	IsDiscardWhenBlocked                  bool
@@ -44,7 +44,7 @@ func (s *BaseSender) SetMsgPool(msgPool *sync.Pool) {
 	s.msgPool = msgPool
 }
 
-func (s *BaseSender) SetCommitChan(commitChan chan<- int64) {
+func (s *BaseSender) SetCommitChan(commitChan chan<- *libs.FluentMsg) {
 	s.commitChan = commitChan
 }
 

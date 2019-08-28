@@ -2,9 +2,6 @@
 # docker push registry:5000/mfs-stretch:20190116
 FROM debian:stretch
 
-ENV HTTP_PROXY=http://172.16.4.26:17777
-ENV HTTPS_PROXY=http://172.16.4.26:17777
-
 # mfs
 RUN apt-get update && \
     apt-get install -y --no-install-recommends wget lsb-release fuse libfuse2 net-tools gnupg2

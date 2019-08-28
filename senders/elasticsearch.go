@@ -167,7 +167,10 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
 	ret := &ESResp{}
 	bb, err2 := ioutil.ReadAll(resp.Body)
 	if err2 != nil {
-		utils.Logger.Error("try to read es resp body got error", zap.Error(err2))
+		utils.Logger.Error("try to read es resp body got error",
+			zap.Error(err2),
+			zap.Error(err))
+		return errors.Wrap(err2, "try to read es resp body got error")
 	}
 	if err != nil {
 		return errors.Wrap(err, string(bb))
@@ -181,8 +184,8 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
 		return nil
 	}
 
-	if ret.Errors {
-		utils.Logger.Error("es return error", zap.ByteString("resp", bb))
+	if ret.Errors { // ignore
+		utils.Logger.Warn("es return error", zap.ByteString("resp", bb))
 	}
 
 	return nil

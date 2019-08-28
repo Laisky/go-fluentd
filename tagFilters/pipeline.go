@@ -12,7 +12,7 @@ import (
 type TagPipelineCfg struct {
 	DefaultInternalChanSize int
 	MsgPool                 *sync.Pool
-	CommitedChan            chan<- int64
+	CommitedChan            chan<- *libs.FluentMsg
 }
 
 type TagPipeline struct {

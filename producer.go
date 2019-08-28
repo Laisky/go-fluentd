@@ -15,7 +15,7 @@ import (
 type ProducerCfg struct {
 	InChan                 chan *libs.FluentMsg
 	MsgPool                *sync.Pool
-	CommitChan             chan<- int64
+	CommitChan             chan<- *libs.FluentMsg
 	NFork, DiscardChanSize int
 }
 
@@ -113,20 +113,13 @@ func (p *Producer) registerMonitor() {
 }
 
 func (p *Producer) DiscardMsg(pmsg *ProducerPendingDiscardMsg) {
-	// utils.Logger.Debug("recycle pmsg", zap.Int64("id", pmsg.Msg.Id), zap.String("tag", pmsg.Msg.Tag))
-	var id int64
 	if pmsg.IsCommit {
-		p.CommitChan <- pmsg.Msg.Id
-		if pmsg.Msg.ExtIds != nil {
-			for _, id = range pmsg.Msg.ExtIds {
-				p.CommitChan <- id
-			}
-		}
+		p.CommitChan <- pmsg.Msg
+	} else {
+		// committed msg will recycled in journal
+		p.MsgPool.Put(pmsg.Msg)
 	}
 
-	pmsg.Msg.ExtIds = nil
-	// utils.Logger.Info(fmt.Sprintf("recycle: %p, %v\n", pmsg.Msg, pmsg.Count))
-	p.MsgPool.Put(pmsg.Msg)
 	p.pMsgPool.Put(pmsg)
 }
 

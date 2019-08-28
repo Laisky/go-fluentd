@@ -53,7 +53,7 @@ func (a *Acceptor) Run() {
 		utils.Logger.Panic("try to process legacy messages got error", zap.Error(err))
 	}
 
-	couter, err := utils.NewRotateCounterFromN((maxID+1)%a.MaxRotateID, a.MaxRotateID)
+	couter, err := utils.NewMonotonicCounterFromN((maxID+1)%a.MaxRotateID, a.MaxRotateID)
 	if err != nil {
 		panic(fmt.Errorf("try to create counter got error: %+v", err))
 	}

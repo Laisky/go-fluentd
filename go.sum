@@ -16,8 +16,8 @@ github.com/Laisky/go-chaining v0.0.0-20180507092046-43dcdc5a21be h1:7Rxhm6IjOtDA
 github.com/Laisky/go-chaining v0.0.0-20180507092046-43dcdc5a21be/go.mod h1:1mdzaETo0kjvCQICPSePsoaatJN4l7JvEA1200lyevo=
 github.com/Laisky/go-syslog v2.3.3+incompatible h1:TSHhP3iadAPDzC5efyYLPnGkv2pvUtuUInm7poVRkFA=
 github.com/Laisky/go-syslog v2.3.3+incompatible/go.mod h1:PPmESkLU3DEbJ3fRXam2hqJTNQVFMggsDXBnOtu2ITk=
-github.com/Laisky/go-utils v1.6.1 h1:wfzkGpiFqBDX4TNtPFerElxO9kamc7qk5r74bcz88zo=
-github.com/Laisky/go-utils v1.6.1/go.mod h1:MpydOPP7RWH/cINQIgI1exzT8/9wumQ49iw91Y/lDOk=
+github.com/Laisky/go-utils v1.6.4 h1:V4O7Hkp6VCEA0OaCyMFzvug+mHBDMvjH5XqZNL5dRp8=
+github.com/Laisky/go-utils v1.6.4/go.mod h1:YjXldX4UO0Mr0JdwMEAVgWT2M9bKwcki2LIF5GgF1T0=
 github.com/Laisky/zap v1.9.2 h1:7dTtABboHk8DnT0d6Dc8A9Opu2cyIEaMlL9JO11zvag=
 github.com/Laisky/zap v1.9.2/go.mod h1:CQdLb2wEfqBvoNLmfOp7wnKTOMvhc4DQRc3xfshL4EQ=
 github.com/OneOfOne/xxhash v1.2.2 h1:KMrpdQIwFcEqXDklaen+P1axHaj9BSKzvpUUfnHldSE=

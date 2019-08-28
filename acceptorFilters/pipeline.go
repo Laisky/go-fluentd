@@ -3,6 +3,7 @@ package acceptorFilters
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-fluentd/monitor"
@@ -23,6 +24,12 @@ type AcceptorPipeline struct {
 	reEnterChan chan *libs.FluentMsg
 	counter     *utils.Counter
 	throttle    *utils.Throttle
+}
+
+// PendingMsg is the message wait tobe concatenate
+type PendingMsg struct {
+	msg   *libs.FluentMsg
+	lastT time.Time
 }
 
 func NewAcceptorPipeline(cfg *AcceptorPipelineCfg, filters ...AcceptorFilterItf) *AcceptorPipeline {

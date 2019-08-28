@@ -120,8 +120,6 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			}
 		}
 
-		// fmt.Printf("%+v", string(msg.Message["log"].([]byte)))
-
 		timer.Reset(utils.Clock.GetUTCNow())
 
 		// unknown identifier
@@ -185,9 +183,11 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 		}
 
 		// need to concat
-		utils.Logger.Debug("concat lines", zap.ByteString("log", msg.Message[c.MsgKey].([]byte)))
-		c.slot[identifier].msg.Message[c.MsgKey] =
-			append(c.slot[identifier].msg.Message[c.MsgKey].([]byte), '\n')
+		utils.Logger.Debug("concat lines",
+			zap.String("tag", msg.Tag),
+			zap.ByteString("log", msg.Message[c.MsgKey].([]byte)))
+		// c.slot[identifier].msg.Message[c.MsgKey] =
+		// 	append(c.slot[identifier].msg.Message[c.MsgKey].([]byte), '\n')
 		c.slot[identifier].msg.Message[c.MsgKey] =
 			append(c.slot[identifier].msg.Message[c.MsgKey].([]byte), msg.Message[c.MsgKey].([]byte)...)
 		if c.slot[identifier].msg.ExtIds == nil {
@@ -204,6 +204,7 @@ func (c *Concator) Run(inChan <-chan *libs.FluentMsg) {
 			delete(c.slot, identifier)
 		}
 
+		// discard concated msg
 		c.Cf.DiscardMsg(msg)
 	}
 }

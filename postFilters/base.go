@@ -9,7 +9,7 @@ import (
 type PostFilterItf interface {
 	SetUpstream(chan *libs.FluentMsg)
 	SetMsgPool(*sync.Pool)
-	SetCommittedChan(chan<- int64)
+	SetCommittedChan(chan<- *libs.FluentMsg)
 
 	Filter(*libs.FluentMsg) *libs.FluentMsg
 	DiscardMsg(*libs.FluentMsg)
@@ -17,7 +17,7 @@ type PostFilterItf interface {
 
 type BaseFilter struct {
 	upstreamChan  chan *libs.FluentMsg
-	committedChan chan<- int64
+	committedChan chan<- *libs.FluentMsg
 	msgPool       *sync.Pool
 }
 
@@ -29,18 +29,10 @@ func (f *BaseFilter) SetMsgPool(msgPool *sync.Pool) {
 	f.msgPool = msgPool
 }
 
-func (f *BaseFilter) SetCommittedChan(committedChan chan<- int64) {
+func (f *BaseFilter) SetCommittedChan(committedChan chan<- *libs.FluentMsg) {
 	f.committedChan = committedChan
 }
 
 func (f *BaseFilter) DiscardMsg(msg *libs.FluentMsg) {
-	f.committedChan <- msg.Id
-	if msg.ExtIds != nil {
-		for _, id := range msg.ExtIds {
-			f.committedChan <- id
-		}
-	}
-
-	msg.ExtIds = nil
-	f.msgPool.Put(msg)
+	f.committedChan <- msg
 }

@@ -10,7 +10,7 @@ import (
 
 type PostPipelineCfg struct {
 	MsgPool                             *sync.Pool
-	CommittedChan                       chan<- int64
+	CommittedChan                       chan<- *libs.FluentMsg
 	ReEnterChanSize, OutChanSize, NFork int
 }
 

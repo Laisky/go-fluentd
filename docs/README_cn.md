@@ -230,7 +230,7 @@ type TagFilterFactoryItf interface {
     GetName() string
 
     SetMsgPool(*sync.Pool)
-    SetCommittedChan(chan<- int64)
+    SetCommittedChan(chan<- *libs.FluentMsg)
     SetDefaultIntervalChanSize(int)
     DiscardMsg(*libs.FluentMsg)
 }
@@ -272,7 +272,7 @@ Pipeline 是对每一个 msg，由外部去调用每一个 filters 的 Filter �
 type PostFilterItf interface {
     SetUpstream(chan *libs.FluentMsg)
     SetMsgPool(*sync.Pool)
-    SetCommittedChan(chan<- int64)
+    SetCommittedChan(chan<- *libs.FluentMsg)
 
     Filter(*libs.FluentMsg) *libs.FluentMsg
     DiscardMsg(*libs.FluentMsg)
@@ -301,7 +301,7 @@ type SenderItf interface {
     GetName() string
 
     SetMsgPool(*sync.Pool)
-    SetCommitChan(chan<- int64)
+    SetCommitChan(chan<- *libs.FluentMsg)
     SetSupportedTags([]string)
     SetDiscardChan(chan<- *libs.FluentMsg)
     SetDiscardWithoutCommitChan(chan<- *libs.FluentMsg)

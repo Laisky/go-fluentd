@@ -21,6 +21,13 @@ settings:
           tag_key: tag
           addr: 0.0.0.0:24225
           is_rewrite_tag_from_tag_key: false
+          concat_max_len: 100000
+          concat:
+            test:
+              msg_key: log
+              identifier: container_id
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} {0,}\|
   producer:
     discard_chan_size: 50000
     sender_inchan_size: 50000
@@ -38,6 +45,7 @@ settings:
     buf_file_bytes: 209315200  # 200 MB
     journal_out_chan_len: 100000
     commit_id_chan_len: 500000
+    is_compress: false
   acceptor_filters:
     out_buf_len: 150000
     reenter_chan_len: 5000
@@ -99,13 +107,13 @@ settings:
         add:  # optional
           test:
             datasource: test
-      concator:
-        type: concator
-        config:
-          max_length: 100000
-        plugins:
-          test:
-            msg_key: log
-            identifier: container_id
-            # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} {0,}\|
+      # concator:
+      #   type: concator
+      #   config:
+      #     max_length: 100000
+      #   plugins:
+      #     test:
+      #       msg_key: log
+      #       identifier: container_id
+      #       # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} {0,}\|

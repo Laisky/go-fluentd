@@ -46,6 +46,7 @@ func (c *Controllor) initJournal() *Journal {
 		BufSizeBytes:      utils.Settings.GetInt64("settings.journal.buf_file_bytes"),
 		JournalOutChanLen: utils.Settings.GetInt("settings.journal.journal_out_chan_len"),
 		CommitIdChanLen:   utils.Settings.GetInt("settings.journal.commit_id_chan_len"),
+		IsCompress:        utils.Settings.GetBool("settings.journal.is_compress"),
 	})
 }
 
@@ -75,6 +76,8 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 					Addr:                   utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".addr"),
 					TagKey:                 utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tag_key"),
 					IsRewriteTagFromTagKey: utils.Settings.GetBool("settings.acceptor.recvs.plugins." + name + ".is_rewrite_tag_from_tag_key"),
+					ConcatMaxLen:           utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".concat_max_len"),
+					ConcatCfg:              libs.LoadTagsMapAppendEnv(env, utils.Settings.GetStringMap("settings.acceptor.recvs.plugins."+name+".concat")),
 				}))
 			case "rsyslog":
 				receivers = append(receivers, recvs.NewRsyslogRecv(&recvs.RsyslogCfg{
@@ -220,8 +223,9 @@ func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorP
 	)
 }
 
-func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *tagFilters.TagPipeline {
+func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- *libs.FluentMsg) *tagFilters.TagPipeline {
 	fs := []tagFilters.TagFilterFactoryItf{}
+	isEnableConcator := false
 
 	switch utils.Settings.Get("settings.tag_filters.plugins").(type) {
 	case map[string]interface{}:
@@ -249,6 +253,7 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 					AppendTimeZone:  utils.Settings.GetString("settings.tag_filters.plugins." + name + ".append_time_zone." + env),
 				}))
 			case "concator":
+				isEnableConcator = true
 			default:
 				utils.Logger.Panic("unknown tagfilter type",
 					zap.String("recv_type", utils.Settings.GetString("settings.tag_filters.recvs.plugins."+name+".type")),
@@ -263,13 +268,16 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- int64) *t
 		utils.Logger.Panic("tagfilter configuration error")
 	}
 
+	// PAAS-397: put concat in fluentd-recvs
 	// concatorFilter must in the front
-	fs = append([]tagFilters.TagFilterFactoryItf{tagFilters.NewConcatorFact(&tagFilters.ConcatorFactCfg{
-		NFork:   utils.Settings.GetInt("settings.tag_filters.plugins.concator.config.nfork"),
-		LBKey:   utils.Settings.GetString("settings.tag_filters.plugins.concator.config.lb_key"),
-		MaxLen:  utils.Settings.GetInt("settings.tag_filters.plugins.concator.config.max_length"),
-		Plugins: tagFilters.LoadConcatorTagConfigs(env, utils.Settings.Get("settings.tag_filters.plugins.concator.plugins").(map[string]interface{})),
-	})}, fs...)
+	if isEnableConcator {
+		fs = append([]tagFilters.TagFilterFactoryItf{tagFilters.NewConcatorFact(&tagFilters.ConcatorFactCfg{
+			NFork:   utils.Settings.GetInt("settings.tag_filters.plugins.concator.config.nfork"),
+			LBKey:   utils.Settings.GetString("settings.tag_filters.plugins.concator.config.lb_key"),
+			MaxLen:  utils.Settings.GetInt("settings.tag_filters.plugins.concator.config.max_length"),
+			Plugins: tagFilters.LoadConcatorTagConfigs(env, utils.Settings.Get("settings.tag_filters.plugins.concator.plugins").(map[string]interface{})),
+		})}, fs...)
+	}
 
 	return tagFilters.NewTagPipeline(&tagFilters.TagPipelineCfg{
 		MsgPool:                 c.msgPool,
@@ -292,7 +300,7 @@ func (c *Controllor) initDispatcher(waitDispatchChan chan *libs.FluentMsg, tagPi
 	return dispatcher
 }
 
-func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- int64) *postFilters.PostPipeline {
+func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- *libs.FluentMsg) *postFilters.PostPipeline {
 	fs := []postFilters.PostFilterItf{
 		// set the DefaultFilter as first filter
 		postFilters.NewDefaultFilter(&postFilters.DefaultFilterCfg{
@@ -452,7 +460,7 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 	return ss
 }
 
-func (c *Controllor) initProducer(env string, waitProduceChan chan *libs.FluentMsg, commitChan chan<- int64, senders []senders.SenderItf) *Producer {
+func (c *Controllor) initProducer(env string, waitProduceChan chan *libs.FluentMsg, commitChan chan<- *libs.FluentMsg, senders []senders.SenderItf) *Producer {
 	return NewProducer(
 		&ProducerCfg{
 			InChan:          waitProduceChan,

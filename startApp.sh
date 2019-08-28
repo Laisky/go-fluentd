@@ -12,8 +12,8 @@ mkdir -p /data
 mfsmount  /data -H $MFS_MASTER
 mfssettrashtime 10  /data
 
-unset HTTP_PROXY
-unset HTTPS_PROXY
+unset http_proxy
+unset https_proxy
 
 mkdir -p /data/Sit/go-fluentd/buf/forward
 ./go-fluentd \

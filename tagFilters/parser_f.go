@@ -33,16 +33,21 @@ func ParseAddCfg(env string, cfg interface{}) map[string]map[string]string {
 }
 
 type ParserCfg struct {
-	Cf                                                             *ParserFact
-	Tag, MsgKey                                                    string
-	Regexp                                                         *regexp.Regexp
-	OutChan                                                        chan<- *libs.FluentMsg
-	MsgPool                                                        *sync.Pool
-	IsRemoveOrigLog                                                bool
-	Add                                                            map[string]map[string]string
-	ParseJsonKey, MustInclude                                      string
-	TimeKey, TimeFormat, NewTimeKey, AppendTimeZone, NewTimeFormat string
-	ReservedTimeKey                                                bool
+	Cf              *ParserFact
+	Tag, MsgKey     string
+	Regexp          *regexp.Regexp
+	OutChan         chan<- *libs.FluentMsg
+	MsgPool         *sync.Pool
+	IsRemoveOrigLog bool
+	Add             map[string]map[string]string
+	ParseJsonKey,
+	MustInclude,
+	TimeKey,
+	TimeFormat,
+	NewTimeKey,
+	AppendTimeZone,
+	NewTimeFormat string
+	ReservedTimeKey bool
 }
 
 // Parser is generanal parser
@@ -112,26 +117,40 @@ func (f *Parser) Run(inChan <-chan *libs.FluentMsg) {
 		}
 
 		// parse json
+		ok = false
 		if f.ParseJsonKey != "" {
 			switch log := msg.Message[f.ParseJsonKey].(type) {
 			case string:
 				if err = json.UnmarshalFromString(log, &msg.Message); err != nil {
-					utils.Logger.Warn("json unmarshal connector args got error",
+					utils.Logger.Warn("json unmarshal JSON args got error",
+						zap.String("tag", msg.Tag),
 						zap.Error(err),
+						zap.Int64s("ext-ids", msg.ExtIds),
+						zap.Int64("id", msg.Id),
 						zap.String("args", log))
+				} else {
+					ok = true
 				}
 			case []byte:
 				if err = json.Unmarshal(log, &msg.Message); err != nil {
-					utils.Logger.Warn("json unmarshal connector args got error",
+					utils.Logger.Warn("json unmarshal JSON args got error",
+						zap.String("tag", msg.Tag),
 						zap.Error(err),
+						zap.Int64s("ext-ids", msg.ExtIds),
+						zap.Int64("id", msg.Id),
 						zap.ByteString("args", log))
+				} else {
+					ok = true
 				}
 			case nil:
 				utils.Logger.Warn("json key does not exists", zap.String("tag", msg.Tag))
 			default:
 				utils.Logger.Warn("unknown args type", zap.String("tag", msg.Tag))
 			}
-			delete(msg.Message, f.ParseJsonKey)
+
+			if ok { // if failed to parse json, reserve origin args
+				delete(msg.Message, f.ParseJsonKey)
+			}
 		}
 
 		// flatten messages
@@ -170,7 +189,7 @@ func (f *Parser) Run(inChan <-chan *libs.FluentMsg) {
 					v = ts
 				}
 			default:
-				utils.Logger.Error("unknown time format",
+				utils.Logger.Warn("unknown time format",
 					zap.Error(err),
 					zap.String("ts", fmt.Sprint(msg.Message[f.TimeKey])),
 					zap.String("tag", msg.Tag),
@@ -183,7 +202,7 @@ func (f *Parser) Run(inChan <-chan *libs.FluentMsg) {
 
 			v = strings.Replace(v, ",", ".", -1)
 			if t, err = time.Parse(f.TimeFormat, v); err != nil {
-				utils.Logger.Error("parse time got error",
+				utils.Logger.Warn("parse time got error",
 					zap.Error(err),
 					zap.String("ts", v),
 					zap.String("tag", msg.Tag),

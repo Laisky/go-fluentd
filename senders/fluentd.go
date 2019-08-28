@@ -16,11 +16,13 @@ type FluentSenderCfg struct {
 	BatchSize, InChanSize, RetryChanSize, NFork int
 	MaxWait                                     time.Duration
 	IsDiscardWhenBlocked                        bool
+	ConcatCfg                                   map[string]interface{}
 }
 
 type FluentSender struct {
 	*BaseSender
 	*FluentSenderCfg
+
 	retryMsgChan chan *libs.FluentMsg
 }
 

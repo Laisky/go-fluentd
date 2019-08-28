@@ -1,8 +1,4 @@
-FROM registry:5000/gobase:1.12.7-alpine3.10 AS gobuild
-
-# http proxy
-ENV HTTP_PROXY=http://172.16.4.26:17777
-ENV HTTPS_PROXY=http://172.16.4.26:17777
+FROM registry:5000/gobase:1.12.9-alpine3.10 AS gobuild
 
 ENV GO111MODULE=on
 WORKDIR /go-fluentd

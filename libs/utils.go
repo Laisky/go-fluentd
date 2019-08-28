@@ -22,6 +22,15 @@ func LoadTagsAppendEnv(env string, tags []string) []string {
 	return ret
 }
 
+func LoadTagsMapAppendEnv(env string, tags map[string]interface{}) map[string]interface{} {
+	ret := map[string]interface{}{}
+	for t, v := range tags {
+		ret[t+"."+env] = v
+	}
+
+	return ret
+}
+
 func RegexNamedSubMatch(r *regexp.Regexp, log []byte, subMatchMap map[string]interface{}) error {
 	matches := r.FindSubmatch(log)
 	names := r.SubexpNames()

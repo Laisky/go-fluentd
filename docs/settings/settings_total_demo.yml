@@ -32,6 +32,7 @@ consts:
       - forward-wechat
       - fluentd-forward
       - usertracking
+      - bigdata-wuling
   envs:
     all-env: &all-env
       - sit
@@ -68,6 +69,74 @@ settings:
           tag_key: tag
           addr: 0.0.0.0:24225
           is_rewrite_tag_from_tag_key: false
+          concat_max_len: 100000
+          concat:
+            test:
+              msg_key: log
+              identifier: container_id
+              head_regexp: ^\d{4}-\d{2}-\d{2}
+
+            spark:
+              # 1999/22/22 22:22:22.222 jiejwfijef
+              msg_key: log
+              identifier: container_id
+              head_regexp: ^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d{3} +[^ ]
+            cp:
+              # 2018-02-01 16:15:43.518 - ms:cp|type:platform|uuid:4f99962d-c272-43bb-85d9-20ab030180b7|dateTime:2018-02-01 16:15:43.518|customerSid:27|customerCode:DT00000000|customerName:默认
+              msg_key: log
+              identifier: container_id
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} *- *ms:cp\|
+            ramjet:
+              # [2018-08-03T05:42:42.714151Z - DEBUG - /go/src/github.com/Laisky/go-ramjet/tasks/logrotate/backup/main.go:129] IsFileReadyToUpload for 2018050700.log.gz
+              msg_key: log
+              identifier: container_id
+              head_regexp: ^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{6}Z *-
+            app.spring:
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              msg_key: log
+              identifier: container_id
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+            tsp:
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              msg_key: log
+              identifier: container_id
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+            ai:
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              msg_key: log
+              identifier: container_id
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+            base:
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              msg_key: log
+              identifier: container_id
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+            bot:
+              msg_key: log
+              identifier: container_id
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+            gateway:
+              msg_key: log
+              identifier: container_id
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+            connector:
+              msg_key: log
+              identifier: container_id
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+            qingai:
+              msg_key: log
+              identifier: container_id
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+            geely:
+              # 2018-02-05 10:33:13.408 | geely:nlcc | INFO | http-bio-8081-exec-3 | com.tservice.cc.web.interceptor.MyLoggingOutInterceptor.handleMessage:57 - Outbound Message:{ID:1, Address:http://10.133.200.77:8082/gisnavi/tservice/gisnavi/poi/poicategory, Http-Method:GET, Content-Type:application/json, Headers:{Content-Type=[application/json], Accept=[application/json]}}
+              # 2018-04-15 10:59:31.096 | geely:vca | INFO  | I/O dispatcher 2 | MONITORLOG.writeMonitorLog:26 - 2018-04-15 10:59:31.096|VCA|XXX19YYYY10040463|vca00157f9c04ff887f2b3488ddc4f2b|VCA_TRIGGER_OUT'
+              msg_key: log
+              identifier: container_id
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} +\|
+            ptdeployer:
+              msg_key: log
+              identifier: container_id
+              head_regexp: ^\[\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} +-
         fluentd-forward:
           type: fluentd
           active_env: *all-env
@@ -187,68 +256,72 @@ settings:
         log_level: info
         is_commit: true
         is_discard_when_blocked: false
-      es_general:
-        type: es
-        active_env: *all-env
-        tags:
-          # - es-general
-          - test
-          - app.spring
-          - gateway
-          - connector
-          - cp
-          - ptdeployer
-          - fluentd-forward
-          - httpguard
-          - ramjet
-          - tsp
-          - ai
-          - base
-          - bot
-          - spark
-          - emqtt
-          - kafkabuf
-          - wechat
-          - usertracking
-        forks: 3
-        addr: http://es/_bulk
-        msg_batch_size: 1000
-        max_wait_sec: 3
-        tag_key: tag
-        retry_chan_len: 10000
-        indices:
-          ramjet.{env}: "{env}-spring-logs-write"
-          httpguard.{env}: "{env}-spring-logs-write"
-          fluentd-forward.{env}: "{env}-spring-logs-write"
-          app.spring.{env}: "{env}-spring-logs-write"
-          gateway.{env}: "{env}-gateway-logs-write"
-          connector.{env}: "{env}-connector-logs-write"
-          cp.{env}: "{env}-cp-logs-write"
-          ptdeployer.{env}: "{env}-spring-logs-write"
-          tsp.{env}: "{env}-spring-logs-write"
-          ai.{env}: "{env}-spring-logs-write"
-          base.{env}: "{env}-spring-logs-write"
-          bot.{env}: "{env}-spring-logs-write"
-          spark.{env}: "{env}-spark-logs-write"
-          emqtt.{env}: "{env}-emqtt-logs-write"
-          wechat.{env}: "{env}-wechat-logs-write"
-          usertracking.{env}: "{env}-usertracking-logs-write"
-        is_discard_when_blocked: false
-      es_geely_v2:
-        type: es
-        active_env: *all-env
-        tags:
-          # - es-geely
-          - geely
-        forks: 10
-        addr: http://es2/_bulk
-        msg_batch_size: 1000
-        max_wait_sec: 3
-        tag_key: tag
-        retry_chan_len: 10000
-        indices:
-          geely.{env}: "{env}-geely-logs-write"
-        is_discard_when_blocked: false
+      # es_general:
+      #   type: es
+      #   active_env: *all-env
+      #   tags:
+      #     # - es-general
+      #     # - test
+      #     - app.spring
+      #     - gateway
+      #     - connector
+      #     - qingai
+      #     - cp
+      #     - ptdeployer
+      #     - fluentd-forward
+      #     - httpguard
+      #     - ramjet
+      #     - tsp
+      #     - ai
+      #     - base
+      #     - bot
+      #     - spark
+      #     - emqtt
+      #     # - kafkabuf
+      #     - wechat
+      #     - usertracking
+      #     - bigdata-wuling
+      #   forks: 3
+      #   addr: http://es/_bulk
+      #   msg_batch_size: 1000
+      #   max_wait_sec: 3
+      #   tag_key: tag
+      #   retry_chan_len: 10000
+      #   indices:
+      #     ramjet.{env}: "{env}-spring-logs-write"
+      #     httpguard.{env}: "{env}-spring-logs-write"
+      #     fluentd-forward.{env}: "{env}-spring-logs-write"
+      #     app.spring.{env}: "{env}-spring-logs-write"
+      #     gateway.{env}: "{env}-gateway-logs-write"
+      #     connector.{env}: "{env}-connector-logs-write"
+      #     qingai.{env}: "{env}-qingai-logs-write"
+      #     cp.{env}: "{env}-cp-logs-write"
+      #     ptdeployer.{env}: "{env}-spring-logs-write"
+      #     tsp.{env}: "{env}-spring-logs-write"
+      #     ai.{env}: "{env}-spring-logs-write"
+      #     base.{env}: "{env}-spring-logs-write"
+      #     bot.{env}: "{env}-spring-logs-write"
+      #     spark.{env}: "{env}-spark-logs-write"
+      #     emqtt.{env}: "{env}-emqtt-logs-write"
+      #     wechat.{env}: "{env}-wechat-logs-write"
+      #     usertracking.{env}: "{env}-usertracking-logs-write"
+      #     bigdata-wuling.{env}: "{env}-bigdata_wuling-logs-write"
+      #   is_discard_when_blocked: false
+      # es_geely_v2:
+      #   type: es
+      #   active_env: *all-env
+      #   tags:
+      #     # - es-geely
+      #     - geely
+      #   forks: 10
+      #   addr: http://es/_bulk
+      #   msg_batch_size: 1000
+      #   max_wait_sec: 3
+      #   tag_key: tag
+      #   retry_chan_len: 10000
+      #   indices:
+      #     geely.{env}: "{env}-geely-logs-write"
+      #   is_discard_when_blocked: false
       # kafkabuf:
       #   type: es
       #   active_env: *all-env
@@ -327,6 +400,7 @@ settings:
     buf_file_bytes: 209315200  # 200 MB
     journal_out_chan_len: 100000
     commit_id_chan_len: 500000
+    is_compress: false
   acceptor_filters:
     out_buf_len: 150000
     reenter_chan_len: 5000
@@ -346,9 +420,9 @@ settings:
         tag_key: tag
         rules:
           - new_tag: cp.{env}
-            regexp: ms:cp
+            regexp: "- ms:cp"
           - new_tag: bot.{env}
-            regexp: ms_\w+\ *\|
+            regexp: ms_\w+
           - new_tag: app.spring.{env}
             regexp: .*
   post_filters:
@@ -363,6 +437,28 @@ settings:
         type: tag-rewriter
         tag_key: tag
         tag: forward-wechat
+      # 大数据的设备上报位置信息，需要时字段过滤和拼接
+      bigdata_fields:
+        type: fields
+        tags:
+          - bigdata-wuling
+        include_fields:
+          - vin
+          - ngtpCreateTime
+          - lon
+          - lat
+          - rowkey
+          - location
+          # - message
+        # exclude_fields:
+        #   - container_id
+        new_fields:
+          # rowkey: "${vin}_${ngtpCreateTime}"
+          location: "${lat},${lon}"
+      bigdata_custom:
+        type: custom-bigdata
+        tags:
+          - bigdata-wuling
       es_dispatcher:
         type: es-dispatcher
         tags:
@@ -382,6 +478,7 @@ settings:
           bot.{env}: es-general.{env}
           spark.{env}: es-general.{env}
           emqtt.{env}: es-general.{env}
+          bigdata-wuling.{env}: es-general.{env}
           # es-geely
           geely.{env}: es-geely.{env}
   dispatcher:
@@ -485,6 +582,23 @@ settings:
           perf: "+0800"
           uat: "+0800"
           prod: "+0800"
+      bigdata-wuling:
+        type: parser
+        lb_key: container_id
+        nfork: 3
+        tags:
+          - bigdata-wuling
+        # ⬇⬇ time
+        time_key: ngtpCreateTime
+        time_format: "2006-01-02 15:04:05 -0700"
+        new_time_format: "2006-01-02T15:04:05.000Z"
+        reserved_time_key: true
+        new_time_key: "@timestamp"
+        append_time_zone:
+          sit: "+0800"
+          perf: "+0800"
+          uat: "+0800"
+          prod: "+0800"
       emqtt:
         type: parser
         lb_key: container_id
@@ -544,8 +658,8 @@ settings:
         tags:
           - ptdeployer
         msg_key: log
-        # [2018-11-12 03:41:39,735 - ptdeployer - views.py - 1429 - INFO - app_log] - zihengni登录成功
-        pattern: (?ms)^\[(?P<time>.{23}) *- *(?P<app>[^\-]+) *- *(?P<class>[^\-]+) *- *(?P<line>\d+) *- *(?P<level>[^\-]+) *- *(?P<thread>[^|]+)\] *- *(?P<message>.*)
+        # [2019-08-01 08:20:46,082 - DEBUG - /Users/laisky/repo/pateo/ptdeployer/deployer/handlers.py:16 - app_log] - get_deployer with env sit
+        pattern: (?ms)^\[(?P<time>.{23}) *- *(?P<level>[^\-]+) *- *(?P<class>[^\-]+):(?P<line>\d+) *- *(?P<app>[^|]+)\] *- *(?P<message>.*)
         is_remove_orig_log: true
         must_include: app
         add:  # optional
@@ -600,7 +714,7 @@ settings:
         msg_key: log
         # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
         # 2019-04-23 17:02:09.733 | mswallet| DEBUG | http-nio-8080-exec-2 | org.apache.ibatis.logging.jdbc.BaseJdbcLogger | 145 | {c83dd4a0244146fe9ada4dfcc8a737b4}| ==> Parameters: 123(Long)
-        pattern: '(?ms)^(?P<time>.{23}) *\| *(?P<app>[^|]+) *\| *(?P<level>[^|]+) *\| *(?P<thread>[^|]+) *\| *(?P<class>[^|]+) *\| *(?P<line>[^ ]+) *(?:[|:] *(?P<args>\{[^\}]+\}))?(?: *[|:] *(?P<message>.*))?'
+        pattern: '(?ms)^(?P<time>.{23}) *\| *(?P<app>[^|]+) *\| *(?P<level>[^|]+) *\| *(?P<thread>[^|]+) *\| *(?P<class>[^|]+) *\| *(?P<line>\d+) *(?:[|:] *(?P<args>\{[^\}]+\}))?(?: *[|:] *(?P<message>.*))?'
         is_remove_orig_log: true
         must_include: app
         # ⬇⬇ time
@@ -626,76 +740,76 @@ settings:
             datasource: bot
           app.spring:
             datasource: spring
-      concator:
-        type: concator
-        config:
-          max_length: 100000
-          lb_key: container_id
-          nfork: 3
-        plugins:
-          test:
-            msg_key: log
-            identifier: container_id
-            regex: ^\d{4}-\d{2}-\d{2}
+      # concator:
+      #   type: concator
+      #   config:
+      #     max_length: 100000
+      #     lb_key: container_id
+      #     nfork: 3
+      #   plugins:
+      #     test:
+      #       msg_key: log
+      #       identifier: container_id
+      #       regex: ^\d{4}-\d{2}-\d{2}
 
-          spark:
-            msg_key: log
-            identifier: container_id
-            # 1999/22/22 22:22:22.222 jiejwfijef
-            regex: ^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d{3} +[^ ]
-          cp:
-            msg_key: log
-            identifier: container_id
-            # 2018-02-01 16:15:43.518 - ms:cp|type:platform|uuid:4f99962d-c272-43bb-85d9-20ab030180b7|dateTime:2018-02-01 16:15:43.518|customerSid:27|customerCode:DT00000000|customerName:默认
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} *- *ms:cp\|
-          ramjet:
-            msg_key: log
-            identifier: container_id
-            # [2018-08-03T05:42:42.714151Z - DEBUG - /go/src/github.com/Laisky/go-ramjet/tasks/logrotate/backup/main.go:129] IsFileReadyToUpload for 2018050700.log.gz
-            regex: ^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{6}Z *-
-          app.spring:
-            msg_key: log
-            identifier: container_id
-            # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
-          tsp:
-            msg_key: log
-            identifier: container_id
-            # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
-          ai:
-            msg_key: log
-            identifier: container_id
-            # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
-          base:
-            msg_key: log
-            identifier: container_id
-            # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
-          bot:
-            msg_key: log
-            identifier: container_id
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
-          gateway:
-            msg_key: log
-            identifier: container_id
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
-          connector:
-            msg_key: log
-            identifier: container_id
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
-          qingai:
-            msg_key: log
-            identifier: container_id
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
-          geely:
-            msg_key: log
-            # 2018-02-05 10:33:13.408 | geely:nlcc | INFO | http-bio-8081-exec-3 | com.tservice.cc.web.interceptor.MyLoggingOutInterceptor.handleMessage:57 - Outbound Message:{ID:1, Address:http://10.133.200.77:8082/gisnavi/tservice/gisnavi/poi/poicategory, Http-Method:GET, Content-Type:application/json, Headers:{Content-Type=[application/json], Accept=[application/json]}}
-            # 2018-04-15 10:59:31.096 | geely:vca | INFO  | I/O dispatcher 2 | MONITORLOG.writeMonitorLog:26 - 2018-04-15 10:59:31.096|VCA|XXX19YYYY10040463|vca00157f9c04ff887f2b3488ddc4f2b|VCA_TRIGGER_OUT'
-            identifier: container_id
-            regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} +\|
-          ptdeployer:
-            msg_key: log
-            identifier: container_id
-            regex: ^\[\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} +-
+      #     spark:
+      #       msg_key: log
+      #       identifier: container_id
+      #       # 1999/22/22 22:22:22.222 jiejwfijef
+      #       regex: ^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d{3} +[^ ]
+      #     cp:
+      #       msg_key: log
+      #       identifier: container_id
+      #       # 2018-02-01 16:15:43.518 - ms:cp|type:platform|uuid:4f99962d-c272-43bb-85d9-20ab030180b7|dateTime:2018-02-01 16:15:43.518|customerSid:27|customerCode:DT00000000|customerName:默认
+      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} *- *ms:cp\|
+      #     ramjet:
+      #       msg_key: log
+      #       identifier: container_id
+      #       # [2018-08-03T05:42:42.714151Z - DEBUG - /go/src/github.com/Laisky/go-ramjet/tasks/logrotate/backup/main.go:129] IsFileReadyToUpload for 2018050700.log.gz
+      #       regex: ^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{6}Z *-
+      #     app.spring:
+      #       msg_key: log
+      #       identifier: container_id
+      #       # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+      #     tsp:
+      #       msg_key: log
+      #       identifier: container_id
+      #       # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+      #     ai:
+      #       msg_key: log
+      #       identifier: container_id
+      #       # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+      #     base:
+      #       msg_key: log
+      #       identifier: container_id
+      #       # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+      #     bot:
+      #       msg_key: log
+      #       identifier: container_id
+      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+      #     gateway:
+      #       msg_key: log
+      #       identifier: container_id
+      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+      #     connector:
+      #       msg_key: log
+      #       identifier: container_id
+      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+      #     qingai:
+      #       msg_key: log
+      #       identifier: container_id
+      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+      #     geely:
+      #       msg_key: log
+      #       # 2018-02-05 10:33:13.408 | geely:nlcc | INFO | http-bio-8081-exec-3 | com.tservice.cc.web.interceptor.MyLoggingOutInterceptor.handleMessage:57 - Outbound Message:{ID:1, Address:http://10.133.200.77:8082/gisnavi/tservice/gisnavi/poi/poicategory, Http-Method:GET, Content-Type:application/json, Headers:{Content-Type=[application/json], Accept=[application/json]}}
+      #       # 2018-04-15 10:59:31.096 | geely:vca | INFO  | I/O dispatcher 2 | MONITORLOG.writeMonitorLog:26 - 2018-04-15 10:59:31.096|VCA|XXX19YYYY10040463|vca00157f9c04ff887f2b3488ddc4f2b|VCA_TRIGGER_OUT'
+      #       identifier: container_id
+      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} +\|
+      #     ptdeployer:
+      #       msg_key: log
+      #       identifier: container_id
+      #       regex: ^\[\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} +-

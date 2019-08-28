@@ -2,6 +2,42 @@
 *CURRENT*
 ---
 
+- 2019-08-28 (Laisky) perf: periodic gc
+
+*v1.10.4*
+---
+
+- 2019-08-28 (Laisky) perf: disable jj gc
+
+*v1.10.3*
+---
+
+- 2019-08-28 (Laisky) docs: update changelog
+- 2019-08-28 (Laisky) ci: upgrade go-utils
+- 2019-08-27 (Laisky) fix(paas-403): journal roll bug
+- 2019-08-27 (Laisky) build: upgrade go-utils
+- 2019-08-27 (Laisky) build: `http_proxy` should in lowercase
+- 2019-08-27 (Laisky) fix: upgrade to go v1.12.9
+- 2019-08-27 (Laisky) fix: upgrade to go v1.12.9
+- 2019-08-27 (Laisky) perf: use `NewMonotonicCounterFromN`
+- 2019-08-26 (Laisky) feat(paas-398): split journal into different directory by tag
+- 2019-08-23 (Laisky) fix(paas-397): msg disorder after acceptorPipeline, then cause concator error
+
+*v1.10.2*
+---
+
+- 2019-08-21 (Laisky) build: upgrade go-utils to v1.6.2
+- 2019-08-21 (Laisky) fix: format warn
+- 2019-08-21 (Laisky) fix(paas-397): missing content
+
+*v1.10.1*
+---
+
+- 2019-08-20 (Laisky) fix: ignore es conflict error
+
+*v1.10.0*
+---
+
 - 2019-08-20 (Laisky) ci: upgrade go-utils
 - 2019-08-20 (Laisky) ci: upgrade go-utils
 - 2019-08-19 (Laisky) docs: update quickstart

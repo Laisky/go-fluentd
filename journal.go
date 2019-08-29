@@ -434,11 +434,19 @@ func (j *Journal) startCommitRunner() {
 			select {
 			case chani.(chan *libs.FluentMsg) <- msg:
 			default:
-				j.commitChan <- msg
-				utils.Logger.Warn("reset committed msg",
-					zap.String("tag", msg.Tag),
-					zap.Int64("id", msg.Id),
-				)
+				select {
+				case j.commitChan <- msg:
+					utils.Logger.Warn("reset committed msg",
+						zap.String("tag", msg.Tag),
+						zap.Int64("id", msg.Id),
+					)
+				default:
+					utils.Logger.Warn("discard committed msg because commitChan is busy",
+						zap.String("tag", msg.Tag),
+						zap.Int64("id", msg.Id),
+					)
+					j.MsgPool.Put(msg)
+				}
 			}
 		}
 	}()

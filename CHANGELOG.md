@@ -2,6 +2,12 @@
 *CURRENT*
 ---
 
+- 2019-08-29 (Laisky) fix: blocking when commitChan is full
+
+*v1.10.5*
+---
+
+- 2019-08-28 (Laisky) docs: update changelog
 - 2019-08-28 (Laisky) fix: commit chan should not discard
 - 2019-08-28 (Laisky) docs: update changelog
 - 2019-08-28 (Laisky) perf: periodic gc

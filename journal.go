@@ -1,6 +1,7 @@
 package concator
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -31,6 +32,7 @@ type JournalCfg struct {
 	JournalOutChanLen, CommitIdChanLen int
 	IsCompress                         bool
 	MsgPool                            *sync.Pool
+	CommittedIDTTL                     time.Duration
 }
 
 // Journal dumps all messages to files,
@@ -48,10 +50,11 @@ type Journal struct {
 	tag2JMap            *sync.Map // map[string]*journal.Journal
 	tag2JJInchanMap     *sync.Map // map[string]chan *libs.FluentMsg
 	tag2JJCommitChanMap *sync.Map // map[string]chan *libs.FluentMsg
+	tag2CtxCancelMap    *sync.Map // map[string]context.CancelFunc
 }
 
 // NewJournal create new Journal with `bufDirPath` and `BufSizeBytes`
-func NewJournal(cfg *JournalCfg) *Journal {
+func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 	utils.Logger.Info("create new journal",
 		zap.String("filepath", cfg.BufDirPath),
 		zap.Int64("size", cfg.BufSizeBytes))
@@ -63,6 +66,7 @@ func NewJournal(cfg *JournalCfg) *Journal {
 	jcfg.BufDirPath = cfg.BufDirPath
 	jcfg.BufSizeBytes = cfg.BufSizeBytes
 	jcfg.IsCompress = cfg.IsCompress
+	jcfg.CommittedIDTTL = cfg.CommittedIDTTL
 	// jcfg.RotateDuration = 3 * time.Second // TODO
 
 	j := &Journal{
@@ -78,15 +82,26 @@ func NewJournal(cfg *JournalCfg) *Journal {
 		tag2JMap:            &sync.Map{},
 		tag2JJInchanMap:     &sync.Map{},
 		tag2JJCommitChanMap: &sync.Map{},
+		tag2CtxCancelMap:    &sync.Map{},
 	}
-	j.initLegacyJJ()
+	j.initLegacyJJ(ctx)
 	j.registerMonitor()
-	j.startCommitRunner()
+	j.startCommitRunner(ctx)
 	return j
 }
 
+func (j *Journal) CloseTag(tag string) error {
+	if fi, ok := j.tag2CtxCancelMap.Load(tag); !ok {
+		return fmt.Errorf("tag %v not exists in tag2CtxCancelMap", tag)
+	} else {
+		fi.(func())()
+	}
+
+	return nil
+}
+
 // initLegacyJJ process existed legacy data and ids
-func (j *Journal) initLegacyJJ() {
+func (j *Journal) initLegacyJJ(ctx context.Context) {
 	files, err := ioutil.ReadDir(j.baseJournalDir)
 	if err != nil {
 		utils.Logger.Warn("try to read dir of journal got error", zap.Error(err))
@@ -95,7 +110,7 @@ func (j *Journal) initLegacyJJ() {
 
 	for _, dir := range files {
 		if dir.IsDir() {
-			j.createJournalRunner(dir.Name())
+			j.createJournalRunner(ctx, dir.Name())
 		}
 	}
 }
@@ -215,7 +230,7 @@ func (j *Journal) ProcessLegacyMsg(dumpChan chan *libs.FluentMsg) (maxID int64, 
 
 // createJournalRunner create journal for a tag,
 // and return commit channel and dump channel
-func (j *Journal) createJournalRunner(tag string) {
+func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 	j.jjLock.Lock()
 	defer j.jjLock.Unlock()
 
@@ -223,11 +238,27 @@ func (j *Journal) createJournalRunner(tag string) {
 	if _, ok = j.tag2JMap.Load(tag); ok {
 		return // double check to prevent duplicate create jj runner
 	}
+	ctxForTag, cancel := context.WithCancel(ctx)
+	if _, ok = j.tag2CtxCancelMap.LoadOrStore(tag, cancel); ok {
+		utils.Logger.Panic("tag already exists in tag2CtxCancelMap", zap.String("tag", tag))
+	}
+	go func(ctx context.Context) {
+		<-ctx.Done()
+		j.jjLock.Lock()
+		defer j.jjLock.Unlock()
+
+		utils.Logger.Info("close journal for tag", zap.String("tag", tag))
+		j.tag2JMap.Delete(tag)
+		j.tag2JJInchanMap.Delete(tag)
+		j.tag2JJCommitChanMap.Delete(tag)
+		j.tag2CtxCancelMap.Delete(tag)
+	}(ctxForTag)
 
 	jcfg := journal.NewConfig()
 	jcfg.BufDirPath = j.baseJournalCfg.BufDirPath
 	jcfg.BufSizeBytes = j.baseJournalCfg.BufSizeBytes
 	jcfg.IsCompress = j.baseJournalCfg.IsCompress
+	jcfg.CommittedIDTTL = j.baseJournalCfg.CommittedIDTTL
 	jcfg.IsAggresiveGC = false
 	jcfg.BufDirPath = filepath.Join(j.baseJournalDir, tag)
 
@@ -236,7 +267,7 @@ func (j *Journal) createJournalRunner(tag string) {
 		utils.Logger.Panic("tag already exists in tag2JMap", zap.String("tag", tag))
 	}
 	utils.Logger.Info("create new journal.Journal", zap.String("tag", tag))
-	jj := journal.NewJournal(jcfg)
+	jj := journal.NewJournal(ctxForTag, jcfg)
 	j.tag2JMap.Store(tag, jj)
 
 	if _, ok = j.tag2JJInchanMap.Load(tag); ok {
@@ -250,13 +281,13 @@ func (j *Journal) createJournalRunner(tag string) {
 	j.tag2JJCommitChanMap.Store(tag, make(chan *libs.FluentMsg, defaultInnerJournalIDChanLen))
 
 	// create ids writer
-	go func() {
-		defer utils.Logger.Panic("journal ids writer quit")
+	go func(ctx context.Context) {
 		var (
 			mid      int64
 			err      error
 			nRetry   = 0
 			maxRetry = 2
+			msg      *libs.FluentMsg
 		)
 
 		chani, ok := j.tag2JJCommitChanMap.Load(tag)
@@ -264,7 +295,14 @@ func (j *Journal) createJournalRunner(tag string) {
 			utils.Logger.Panic("tag must in `j.tag2JJCommitChanMap`", zap.String("tag", tag))
 		}
 
-		for msg := range chani.(chan *libs.FluentMsg) {
+		for {
+			select {
+			case <-ctx.Done():
+				utils.Logger.Info("journal ids writer exit")
+				return
+			case msg = <-chani.(chan *libs.FluentMsg):
+			}
+
 			nRetry = 0
 			for nRetry < maxRetry {
 				if err = jj.WriteId(msg.Id); err != nil {
@@ -294,24 +332,30 @@ func (j *Journal) createJournalRunner(tag string) {
 
 			j.MsgPool.Put(msg)
 		}
-	}()
+	}(ctxForTag)
 
 	// create data writer
-	go func() {
-		defer utils.Logger.Panic("journal data writer quit")
-
+	go func(ctx context.Context) {
 		var (
 			data     = &journal.Data{Data: map[string]interface{}{}}
 			err      error
 			nRetry   = 0
 			maxRetry = 2
+			msg      *libs.FluentMsg
 		)
 		chani, ok := j.tag2JJInchanMap.Load(tag)
 		if !ok {
 			utils.Logger.Panic("tag should in `j.tag2JJInchanMap`", zap.String("tag", tag))
 		}
 
-		for msg := range chani.(chan *libs.FluentMsg) {
+		for {
+			select {
+			case <-ctx.Done():
+				utils.Logger.Info("journal data writer exit")
+				return
+			case msg = <-chani.(chan *libs.FluentMsg):
+			}
+
 			data.ID = msg.Id
 			data.Data["message"] = msg.Message
 			data.Data["tag"] = msg.Tag
@@ -337,7 +381,7 @@ func (j *Journal) createJournalRunner(tag string) {
 				j.MsgPool.Put(msg)
 			}
 		}
-	}()
+	}(ctxForTag)
 }
 
 func (j *Journal) GetOutChan() chan *libs.FluentMsg {
@@ -350,12 +394,18 @@ func (j *Journal) ConvertMsg2Buf(msg *libs.FluentMsg, data *map[string]interface
 	(*data)["message"] = msg.Message
 }
 
-func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, dumpChan, skipDumpChan chan *libs.FluentMsg) chan *libs.FluentMsg {
+func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan, skipDumpChan chan *libs.FluentMsg) chan *libs.FluentMsg {
 	// deal with legacy
 	go func() {
-		defer utils.Logger.Panic("legacy processor exit")
 		var err error
 		for { // try to starting legacy loading
+			select {
+			case <-ctx.Done():
+				utils.Logger.Info("legacy processor exit")
+				return
+			default:
+			}
+
 			if _, err = j.ProcessLegacyMsg(dumpChan); err != nil {
 				utils.Logger.Error("process legacy got error", zap.Error(err))
 			}
@@ -365,8 +415,14 @@ func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, dumpChan, skipDumpChan chan *l
 
 	// start periodic gc
 	go func() {
-		defer utils.Logger.Panic("gc runner exit")
 		for {
+			select {
+			case <-ctx.Done():
+				utils.Logger.Info("gc runner exit")
+				return
+			default:
+			}
+
 			utils.ForceGC()
 			time.Sleep(intervalForceGC)
 		}
@@ -374,23 +430,36 @@ func (j *Journal) DumpMsgFlow(msgPool *sync.Pool, dumpChan, skipDumpChan chan *l
 
 	// deal with msgs that skip dump
 	go func() {
-		defer utils.Logger.Panic("skipDumpChan goroutine exit")
-		for msg := range skipDumpChan {
+		var msg *libs.FluentMsg
+		for {
+			select {
+			case <-ctx.Done():
+				utils.Logger.Info("skipDumpChan goroutine exit")
+				return
+			case msg = <-skipDumpChan:
+			}
+
 			j.outChan <- msg
 		}
 	}()
 
 	go func() {
-		defer utils.Logger.Panic("legacy dumper exit")
-
 		var (
 			ok  bool
 			jji interface{}
+			msg *libs.FluentMsg
 		)
-		for msg := range dumpChan {
+		for {
+			select {
+			case <-ctx.Done():
+				utils.Logger.Info("legacy dumper exit")
+				return
+			case msg = <-dumpChan:
+			}
+
 			utils.Logger.Debug("try to dump msg", zap.String("tag", msg.Tag))
 			if jji, ok = j.tag2JJInchanMap.Load(msg.Tag); !ok {
-				j.createJournalRunner(msg.Tag)
+				j.createJournalRunner(ctx, msg.Tag)
 				jji, _ = j.tag2JJInchanMap.Load(msg.Tag)
 			}
 
@@ -414,20 +483,26 @@ func (j *Journal) GetCommitChan() chan<- *libs.FluentMsg {
 	return j.commitChan
 }
 
-func (j *Journal) startCommitRunner() {
+func (j *Journal) startCommitRunner(ctx context.Context) {
 	go func() {
-		defer utils.Logger.Panic("id commitor exit")
-
 		var (
 			ok    bool
 			chani interface{}
+			msg   *libs.FluentMsg
 		)
-		for msg := range j.commitChan {
+		for {
+			select {
+			case <-ctx.Done():
+				utils.Logger.Info("id commitor exit")
+				return
+			case msg = <-j.commitChan:
+			}
+
 			utils.Logger.Debug("try to commit msg",
 				zap.String("tag", msg.Tag),
 				zap.Int64("id", msg.Id))
 			if chani, ok = j.tag2JJCommitChanMap.Load(msg.Tag); !ok {
-				j.createJournalRunner(msg.Tag)
+				j.createJournalRunner(ctx, msg.Tag)
 				chani, _ = j.tag2JJCommitChanMap.Load(msg.Tag)
 			}
 
@@ -441,7 +516,7 @@ func (j *Journal) startCommitRunner() {
 						zap.Int64("id", msg.Id),
 					)
 				default:
-					utils.Logger.Warn("discard committed msg because commitChan is busy",
+					utils.Logger.Error("discard committed msg because commitChan is busy",
 						zap.String("tag", msg.Tag),
 						zap.Int64("id", msg.Id),
 					)

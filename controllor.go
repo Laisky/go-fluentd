@@ -1,6 +1,7 @@
 package concator
 
 import (
+	"context"
 	"regexp"
 	"runtime"
 	"sync"
@@ -18,16 +19,23 @@ import (
 	"github.com/Laisky/zap"
 )
 
+const (
+	ctxKey utils.CtxKeyT = "key"
+)
+
 // Controllor is an IoC that manage all roles
 type Controllor struct {
+	ctx    context.Context
+	cancel func()
+
 	msgPool *sync.Pool
 }
 
 // NewControllor create new Controllor
-func NewControllor() *Controllor {
+func NewControllor() (c *Controllor) {
 	utils.Logger.Info("create Controllor")
 
-	return &Controllor{
+	c = &Controllor{
 		msgPool: &sync.Pool{
 			New: func() interface{} {
 				return &libs.FluentMsg{
@@ -37,15 +45,18 @@ func NewControllor() *Controllor {
 			},
 		},
 	}
+	c.ctx, c.cancel = context.WithCancel(context.Background())
+	return c
 }
 
-func (c *Controllor) initJournal() *Journal {
-	return NewJournal(&JournalCfg{
+func (c *Controllor) initJournal(ctx context.Context) *Journal {
+	return NewJournal(ctx, &JournalCfg{
 		MsgPool:           c.msgPool,
 		BufDirPath:        utils.Settings.GetString("settings.journal.buf_dir_path"),
 		BufSizeBytes:      utils.Settings.GetInt64("settings.journal.buf_file_bytes"),
 		JournalOutChanLen: utils.Settings.GetInt("settings.journal.journal_out_chan_len"),
 		CommitIdChanLen:   utils.Settings.GetInt("settings.journal.commit_id_chan_len"),
+		CommittedIDTTL:    utils.Settings.GetDuration("settings.journal.committed_id_sec") * time.Second,
 		IsCompress:        utils.Settings.GetBool("settings.journal.is_compress"),
 	})
 }
@@ -489,7 +500,7 @@ func (c *Controllor) Run() {
 	utils.Logger.Info("running...")
 	env := utils.Settings.GetString("env")
 
-	journal := c.initJournal()
+	journal := c.initJournal(c.ctx)
 
 	receivers := c.initRecvs(env)
 	acceptor := c.initAcceptor(journal, receivers)
@@ -501,7 +512,7 @@ func (c *Controllor) Run() {
 	waitDumpChan, skipDumpChan := acceptorPipeline.Wrap(waitAccepPipelineAsyncChan, waitAccepPipelineSyncChan)
 
 	// after `journal.DumpMsgFlow`, every discarded msg should commit to waitCommitChan
-	waitDispatchChan := journal.DumpMsgFlow(c.msgPool, waitDumpChan, skipDumpChan)
+	waitDispatchChan := journal.DumpMsgFlow(c.ctx, c.msgPool, waitDumpChan, skipDumpChan)
 
 	tagPipeline := c.initTagPipeline(env, waitCommitChan)
 	dispatcher := c.initDispatcher(waitDispatchChan, tagPipeline)

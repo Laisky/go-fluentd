@@ -14,10 +14,13 @@ github.com/Joker/jade v1.0.0/go.mod h1:efZIdO0py/LtcJRSa/j2WEklMSAw84WV0zZVMxNTo
 github.com/Knetic/govaluate v3.0.0+incompatible/go.mod h1:r7JcOSlj0wfOMncg0iLm8Leh48TZaKVeNIfJntJ2wa0=
 github.com/Laisky/go-chaining v0.0.0-20180507092046-43dcdc5a21be h1:7Rxhm6IjOtDAyj8eScOFntevwzkWhx94zi48lxo4m4w=
 github.com/Laisky/go-chaining v0.0.0-20180507092046-43dcdc5a21be/go.mod h1:1mdzaETo0kjvCQICPSePsoaatJN4l7JvEA1200lyevo=
+github.com/Laisky/go-fluentd v1.10.6 h1:5H38VpCOd0ydQmtQdmptuZGLp3IJevK2XQDKhQEGPLM=
+github.com/Laisky/go-fluentd v1.10.6/go.mod h1:rQO40AxzljNgzGdD9PW6KuG5VqOCNQMZ6x4qNTaS3z0=
 github.com/Laisky/go-syslog v2.3.3+incompatible h1:TSHhP3iadAPDzC5efyYLPnGkv2pvUtuUInm7poVRkFA=
 github.com/Laisky/go-syslog v2.3.3+incompatible/go.mod h1:PPmESkLU3DEbJ3fRXam2hqJTNQVFMggsDXBnOtu2ITk=
-github.com/Laisky/go-utils v1.6.4 h1:V4O7Hkp6VCEA0OaCyMFzvug+mHBDMvjH5XqZNL5dRp8=
 github.com/Laisky/go-utils v1.6.4/go.mod h1:YjXldX4UO0Mr0JdwMEAVgWT2M9bKwcki2LIF5GgF1T0=
+github.com/Laisky/go-utils v1.7.2 h1:fdGlB+7ioKh4LKYpR7e1fzCVI9LKdIIk+ytPlws5nrE=
+github.com/Laisky/go-utils v1.7.2/go.mod h1:YjXldX4UO0Mr0JdwMEAVgWT2M9bKwcki2LIF5GgF1T0=
 github.com/Laisky/zap v1.9.2 h1:7dTtABboHk8DnT0d6Dc8A9Opu2cyIEaMlL9JO11zvag=
 github.com/Laisky/zap v1.9.2/go.mod h1:CQdLb2wEfqBvoNLmfOp7wnKTOMvhc4DQRc3xfshL4EQ=
 github.com/OneOfOne/xxhash v1.2.2 h1:KMrpdQIwFcEqXDklaen+P1axHaj9BSKzvpUUfnHldSE=

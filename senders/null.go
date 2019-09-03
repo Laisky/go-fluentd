@@ -32,7 +32,8 @@ func NewNullSender(cfg *NullSenderCfg) *NullSender {
 	case "info":
 	case "debug":
 	default:
-		utils.Logger.Panic("null sender's LogLevel should be info/debug", zap.String("level", cfg.LogLevel))
+		utils.Logger.Info("null sender will discard msg without any log",
+			zap.String("level", cfg.LogLevel))
 	}
 	if cfg.InChanSize < 1000 {
 		utils.Logger.Warn("small inchan size could reduce performance")
@@ -68,11 +69,12 @@ func (s *NullSender) Spawn(tag string) chan<- *libs.FluentMsg {
 
 			for {
 				for msg := range inChan {
-					if s.LogLevel == "info" {
+					switch s.LogLevel {
+					case "info":
 						utils.Logger.Info("consume msg",
 							zap.String("tag", msg.Tag),
 							zap.String("msg", fmt.Sprint(msg.Message)))
-					} else {
+					case "debug":
 						utils.Logger.Debug("consume msg",
 							zap.String("tag", msg.Tag),
 							zap.String("msg", fmt.Sprint(msg.Message)))

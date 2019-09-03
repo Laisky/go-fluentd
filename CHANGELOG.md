@@ -2,6 +2,19 @@
 *CURRENT*
 ---
 
+- 2019-09-03 (Laisky) fix: ctx.Done return
+
+*v1.10.7*
+---
+
+- 2019-09-02 (Laisky) ci: upgrade go-utils v1.7.0
+- 2019-09-02 (Laisky) feat: add context to control journal
+- 2019-09-02 (Laisky) feat(paas-405): upgrade go-utils, use new ids set
+- 2019-08-29 (Laisky) docs: update example settings
+
+*v1.10.6*
+---
+
 - 2019-08-29 (Laisky) fix: blocking when commitChan is full
 
 *v1.10.5*

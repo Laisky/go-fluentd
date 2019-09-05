@@ -1,6 +1,7 @@
 package senders
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/Laisky/go-fluentd/libs"
@@ -55,36 +56,36 @@ func (s *NullSender) GetName() string {
 }
 
 // Spawn fork
-func (s *NullSender) Spawn(tag string) chan<- *libs.FluentMsg {
+func (s *NullSender) Spawn(ctx context.Context, tag string) chan<- *libs.FluentMsg {
 	utils.Logger.Info("spawn for tag", zap.String("tag", tag))
 	inChan := make(chan *libs.FluentMsg, s.InChanSize) // for each tag
 
 	for i := 0; i < s.NFork; i++ {
 		go func() {
-			defer func() {
-				if err := recover(); err != nil {
-					utils.Logger.Panic("null sender exit", zap.Error(err.(error)))
-				}
-			}()
-
+			defer utils.Logger.Info("null sender exit")
+			var msg *libs.FluentMsg
 			for {
-				for msg := range inChan {
-					switch s.LogLevel {
-					case "info":
-						utils.Logger.Info("consume msg",
-							zap.String("tag", msg.Tag),
-							zap.String("msg", fmt.Sprint(msg.Message)))
-					case "debug":
-						utils.Logger.Debug("consume msg",
-							zap.String("tag", msg.Tag),
-							zap.String("msg", fmt.Sprint(msg.Message)))
-					}
+				select {
+				case <-ctx.Done():
+					return
+				case msg = <-inChan:
+				}
 
-					if s.IsCommit {
-						s.discardChan <- msg
-					} else {
-						s.discardWithoutCommitChan <- msg
-					}
+				switch s.LogLevel {
+				case "info":
+					utils.Logger.Info("consume msg",
+						zap.String("tag", msg.Tag),
+						zap.String("msg", fmt.Sprint(msg.Message)))
+				case "debug":
+					utils.Logger.Debug("consume msg",
+						zap.String("tag", msg.Tag),
+						zap.String("msg", fmt.Sprint(msg.Message)))
+				}
+
+				if s.IsCommit {
+					s.discardChan <- msg
+				} else {
+					s.discardWithoutCommitChan <- msg
 				}
 			}
 		}()

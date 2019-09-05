@@ -6,6 +6,7 @@
 package recvs
 
 import (
+	"context"
 	"sync"
 
 	"github.com/Laisky/go-fluentd/libs"
@@ -24,7 +25,7 @@ type AcceptorRecvItf interface {
 	SetAsyncOutChan(chan<- *libs.FluentMsg)
 	SetMsgPool(*sync.Pool)
 	SetCounter(libs.CounterIft)
-	Run()
+	Run(context.Context)
 	GetName() string
 }
 

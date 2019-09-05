@@ -1,8 +1,8 @@
 package concator
 
 import (
+	"context"
 	"fmt"
-	"regexp"
 	"sync"
 	"time"
 
@@ -15,24 +15,18 @@ import (
 
 type DispatcherCfg struct {
 	InChan             chan *libs.FluentMsg
-	TagPipeline        *tagFilters.TagPipeline
+	TagPipeline        tagFilters.TagPipelineItf
 	NFork, OutChanSize int
 }
 
 // Dispatcher dispatch messages by tag to different concator
 type Dispatcher struct {
 	*DispatcherCfg
-	concatorMap *sync.Map            // tag:msgchan
-	tagsCounter *sync.Map            // tag:counter
-	outChan     chan *libs.FluentMsg // skip concator, direct to producer
-	counter     *utils.Counter
-}
-
-// ConcatorFactoryItf interface of ConcatorFactory,
-// decoupling with specific ConcatorFactory
-type ConcatorFactoryItf interface {
-	Spawn(string, string, *regexp.Regexp) chan<- *libs.FluentMsg
-	MessageChan() chan *libs.FluentMsg
+	tag2Concator *sync.Map            // tag:msgchan
+	tag2Counter  *sync.Map            // tag:counter
+	tag2Cancel   *sync.Map            // tag:cancel
+	outChan      chan *libs.FluentMsg // skip concator, direct to producer
+	counter      *utils.Counter
 }
 
 // NewDispatcher create new Dispatcher
@@ -46,14 +40,15 @@ func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 	return &Dispatcher{
 		DispatcherCfg: cfg,
 		outChan:       make(chan *libs.FluentMsg, cfg.OutChanSize),
-		concatorMap:   &sync.Map{},
-		tagsCounter:   &sync.Map{},
+		tag2Concator:  &sync.Map{},
+		tag2Counter:   &sync.Map{},
+		tag2Cancel:    &sync.Map{},
 		counter:       utils.NewCounter(),
 	}
 }
 
 // Run dispacher to dispatch messages to different concators
-func (d *Dispatcher) Run() {
+func (d *Dispatcher) Run(ctx context.Context) {
 	utils.Logger.Info("run dispacher...")
 	d.registerMonitor()
 	lock := &sync.Mutex{}
@@ -68,24 +63,43 @@ func (d *Dispatcher) Run() {
 				counterI          interface{}
 				msg               *libs.FluentMsg
 			)
-			defer utils.Logger.Panic("dispatcher exit with msg", zap.String("msg", fmt.Sprint(msg)))
+
 			// send each message to appropriate tagfilter by `tag`
-			for msg = range d.InChan {
+			for {
+				select {
+				case <-ctx.Done():
+					utils.Logger.Info("dispatcher exit with msg", zap.String("msg", fmt.Sprint(msg)))
+					return
+				case msg = <-d.InChan:
+				}
+
 				d.counter.Count()
-				if inChanForEachTagi, ok = d.concatorMap.Load(msg.Tag); !ok {
+				if inChanForEachTagi, ok = d.tag2Concator.Load(msg.Tag); !ok {
 					// create new inChanForEachTag
 					lock.Lock()
-					if inChanForEachTagi, ok = d.concatorMap.Load(msg.Tag); !ok { // double check
+					if inChanForEachTagi, ok = d.tag2Concator.Load(msg.Tag); !ok { // double check
 						// new tag, create new tagfilter and its inchan
 						utils.Logger.Info("got new tag", zap.String("tag", msg.Tag))
-						if inChanForEachTag, err = d.TagPipeline.Spawn(msg.Tag, d.outChan); err != nil {
+						ctx2Tag, cancel := context.WithCancel(ctx)
+						if inChanForEachTag, err = d.TagPipeline.Spawn(ctx2Tag, msg.Tag, d.outChan); err != nil {
 							utils.Logger.Error("try to spawn new tagpipeline got error",
 								zap.Error(err),
 								zap.String("tag", msg.Tag))
+							cancel()
 							continue
 						} else {
-							d.concatorMap.Store(msg.Tag, inChanForEachTag)
-							d.tagsCounter.Store(msg.Tag, utils.NewCounter())
+							d.tag2Concator.Store(msg.Tag, inChanForEachTag)
+							d.tag2Counter.Store(msg.Tag, utils.NewCounter())
+							d.tag2Cancel.Store(msg.Tag, cancel)
+							go func(tag string) {
+								<-ctx2Tag.Done()
+								utils.Logger.Info("remove tag in dispatcher", zap.String("tag", tag))
+								lock.Lock()
+								d.tag2Concator.Delete(tag)
+								d.tag2Counter.Delete(tag)
+								d.tag2Cancel.Delete(tag)
+								lock.Unlock()
+							}(msg.Tag)
 						}
 					} else {
 						inChanForEachTag = inChanForEachTagi.(chan<- *libs.FluentMsg)
@@ -97,7 +111,7 @@ func (d *Dispatcher) Run() {
 				}
 
 				// count
-				if counterI, ok = d.tagsCounter.Load(msg.Tag); !ok {
+				if counterI, ok = d.tag2Counter.Load(msg.Tag); !ok {
 					utils.Logger.Panic("counter must exists", zap.String("tag", msg.Tag))
 				}
 				counterI.(*utils.Counter).Count()
@@ -120,14 +134,14 @@ func (d *Dispatcher) registerMonitor() {
 			"msgPerSec": utils.Round(float64(d.counter.Get())/(time.Now().Sub(lastT).Seconds()), .5, 1),
 		}
 		d.counter.Set(0)
-		d.tagsCounter.Range(func(tagi interface{}, ci interface{}) bool {
+		d.tag2Counter.Range(func(tagi interface{}, ci interface{}) bool {
 			metrics[tagi.(string)+".MsgPerSec"] = utils.Round(float64(ci.(*utils.Counter).Get())/(time.Now().Sub(lastT).Seconds()), .5, 1)
 			ci.(*utils.Counter).Set(0)
 			return true
 		})
 		lastT = time.Now()
 
-		d.concatorMap.Range(func(tagi interface{}, ci interface{}) bool {
+		d.tag2Concator.Range(func(tagi interface{}, ci interface{}) bool {
 			metrics[tagi.(string)+".ChanLen"] = len(ci.(chan<- *libs.FluentMsg))
 			metrics[tagi.(string)+".ChanCap"] = cap(ci.(chan<- *libs.FluentMsg))
 			return true

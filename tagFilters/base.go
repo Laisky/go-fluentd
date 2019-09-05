@@ -1,6 +1,7 @@
 package tagFilters
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -15,7 +16,7 @@ var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 type TagFilterFactoryItf interface {
 	IsTagSupported(string) bool
-	Spawn(string, chan<- *libs.FluentMsg) chan<- *libs.FluentMsg // Spawn(tag, outChan) inChan
+	Spawn(context.Context, string, chan<- *libs.FluentMsg) chan<- *libs.FluentMsg // Spawn(tag, outChan) inChan
 	GetName() string
 
 	SetMsgPool(*sync.Pool)
@@ -46,20 +47,27 @@ func (f *BaseTagFilterFactory) DiscardMsg(msg *libs.FluentMsg) {
 	f.committedChan <- msg
 }
 
-func (f *BaseTagFilterFactory) runLB(lbkey string, inChan chan *libs.FluentMsg, inchans []chan *libs.FluentMsg) {
+func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan chan *libs.FluentMsg, inchans []chan *libs.FluentMsg) {
+	defer utils.Logger.Info("concator lb exit")
 	if len(inchans) < 1 {
 		utils.Logger.Panic("nfork or inchans's length error",
 			zap.Int("inchans_len", len(inchans)))
 	}
-	defer utils.Logger.Panic("concator lb exit")
 
 	var (
 		nfork        = len(inchans)
 		hashkey      uint64
 		emptyHashkey = xxhash.Sum64String("")
 		downChan     = inchans[0]
+		msg          *libs.FluentMsg
 	)
-	for msg := range inChan {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg = <-inChan:
+		}
+
 		if nfork != 1 {
 			switch msg.Message[lbkey].(type) {
 			case []byte:

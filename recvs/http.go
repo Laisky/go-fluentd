@@ -1,6 +1,7 @@
 package recvs
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
@@ -78,7 +79,7 @@ func (r *HTTPRecv) GetName() string {
 }
 
 // Run useless, just capatable for RecvItf
-func (r *HTTPRecv) Run() {
+func (r *HTTPRecv) Run(ctx context.Context) {
 	utils.Logger.Info("run HTTPRecv")
 }
 

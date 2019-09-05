@@ -3,7 +3,7 @@ package concator
 import (
 	"net/http"
 
-	"github.com/Depado/ginprom"
+	middlewares "github.com/Laisky/go-utils/gin-middlewares"
 
 	"github.com/gin-contrib/pprof"
 
@@ -30,12 +30,7 @@ func RunServer(addr string) {
 	// supported action:
 	// cmdline, profile, symbol, goroutine, heap, threadcreate, block
 	pprof.Register(server, "pprof")
-	p := ginprom.New(
-		ginprom.Engine(server),
-		ginprom.Subsystem("gin"),
-		ginprom.Path("/metrics"),
-	)
-	server.Use(p.Instrument())
+	middlewares.BindPrometheus(server)
 
 	utils.Logger.Info("listening on http", zap.String("addr", addr))
 	utils.Logger.Panic("server exit", zap.Error(server.Run(addr)))

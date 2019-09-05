@@ -2,6 +2,7 @@ package recvs
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -84,7 +85,7 @@ func (r *FluentdRecv) GetName() string {
 }
 
 // Run starting this recv
-func (r *FluentdRecv) Run() {
+func (r *FluentdRecv) Run(ctx context.Context) {
 	utils.Logger.Info("run FluentdRecv")
 	var (
 		conn net.Conn
@@ -96,7 +97,14 @@ func (r *FluentdRecv) Run() {
 		utils.Logger.Error("try to bind addr got error", zap.Error(err))
 	}
 
+	defer utils.Logger.Info("fluentd recv exit")
 	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		conn, err = ln.Accept()
 		if err != nil {
 			utils.Logger.Error("try to accept connection got error", zap.Error(err))
@@ -281,6 +289,7 @@ func (r *FluentdRecv) closeConcatCtx(ctx *concatCtx) {
 
 	for _, ctx.pmsg = range ctx.identifier2LastMsg {
 		r.SendMsg(ctx.pmsg.msg)
+		r.pendingMsgPool.Put(ctx.pmsg)
 	}
 }
 

@@ -1,6 +1,7 @@
 package tagFilters
 
 import (
+	"context"
 	"sync"
 
 	"github.com/Laisky/go-fluentd/libs"
@@ -8,6 +9,10 @@ import (
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 )
+
+type TagPipelineItf interface {
+	Spawn(context.Context, string, chan<- *libs.FluentMsg) (chan<- *libs.FluentMsg, error)
+}
 
 type TagPipelineCfg struct {
 	DefaultInternalChanSize int
@@ -22,7 +27,7 @@ type TagPipeline struct {
 }
 
 // NewTagPipeline create new TagPipeline
-func NewTagPipeline(cfg *TagPipelineCfg, itfs ...TagFilterFactoryItf) *TagPipeline {
+func NewTagPipeline(ctx context.Context, cfg *TagPipelineCfg, itfs ...TagFilterFactoryItf) *TagPipeline {
 	utils.Logger.Info("create tag pipeline")
 	if cfg.DefaultInternalChanSize <= 0 {
 		cfg.DefaultInternalChanSize = 1000
@@ -44,7 +49,7 @@ func NewTagPipeline(cfg *TagPipelineCfg, itfs ...TagFilterFactoryItf) *TagPipeli
 }
 
 // Spawn create and run new Concator for new tag, return inchan
-func (p *TagPipeline) Spawn(tag string, outChan chan<- *libs.FluentMsg) (chan<- *libs.FluentMsg, error) {
+func (p *TagPipeline) Spawn(ctx context.Context, tag string, outChan chan<- *libs.FluentMsg) (chan<- *libs.FluentMsg, error) {
 	utils.Logger.Info("spawn tagpipeline", zap.String("tag", tag))
 	var (
 		f              TagFilterFactoryItf
@@ -59,7 +64,7 @@ func (p *TagPipeline) Spawn(tag string, outChan chan<- *libs.FluentMsg) (chan<- 
 				zap.String("name", f.GetName()),
 				zap.String("tag", tag))
 			isTagSupported = true
-			downstreamChan = f.Spawn(tag, downstreamChan)        // downstream's inChan is upstream's outChan
+			downstreamChan = f.Spawn(ctx, tag, downstreamChan)   // downstream's inChan is upstream's outChan
 			p.monitorChans[tag+"."+f.GetName()] = downstreamChan // instream
 		}
 	}

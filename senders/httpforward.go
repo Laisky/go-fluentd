@@ -1,6 +1,7 @@
 package senders
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -56,14 +57,17 @@ func (s *HTTPSender) GetName() string {
 	return s.Name
 }
 
-func (s *HTTPSender) Spawn(tag string) chan<- *libs.FluentMsg {
+func (s *HTTPSender) Spawn(ctx context.Context, tag string) chan<- *libs.FluentMsg {
 	utils.Logger.Info("SpawnForTag", zap.String("tag", tag))
 	inChan := make(chan *libs.FluentMsg, s.InChanSize) // for each tag
-	go s.runFlusher(inChan)
+	go s.runFlusher(ctx, inChan)
 
 	for i := 0; i < s.NFork; i++ { // parallel to each tag
-		go func() {
-			defer utils.Logger.Panic("producer exits", zap.String("tag", tag), zap.String("name", s.GetName()))
+		go func(i int) {
+			defer utils.Logger.Info("producer exits",
+				zap.String("tag", tag),
+				zap.Int("i", i),
+				zap.String("name", s.GetName()))
 
 			var (
 				nRetry           int
@@ -130,7 +134,7 @@ func (s *HTTPSender) Spawn(tag string) chan<- *libs.FluentMsg {
 					s.discardChan <- msg
 				}
 			}
-		}()
+		}(i)
 	}
 
 	return inChan

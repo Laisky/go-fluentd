@@ -1,6 +1,7 @@
 package recvs_test
 
 import (
+	"context"
 	"net"
 	"testing"
 	"time"
@@ -32,7 +33,7 @@ func TestFluentdRecv(t *testing.T) {
 	recv.SetSyncOutChan(syncOutChan)
 
 	go func() {
-		recv.Run()
+		recv.Run(context.Background())
 	}()
 	time.Sleep(100 * time.Millisecond)
 	cnt := 0

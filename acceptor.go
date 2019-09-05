@@ -1,6 +1,7 @@
 package concator
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -45,7 +46,7 @@ func NewAcceptor(cfg *AcceptorCfg, recvs ...recvs.AcceptorRecvItf) *Acceptor {
 
 // Run starting acceptor to listening and receive messages,
 // you can use `acceptor.MessageChan()` to load messages`
-func (a *Acceptor) Run() {
+func (a *Acceptor) Run(ctx context.Context) {
 	// got exists max id from legacy
 	utils.Logger.Info("process legacy data...")
 	maxID, err := a.Journal.LoadMaxID()
@@ -64,7 +65,7 @@ func (a *Acceptor) Run() {
 		recv.SetSyncOutChan(a.syncOutChan)
 		recv.SetMsgPool(a.MsgPool)
 		recv.SetCounter(couter)
-		go recv.Run()
+		go recv.Run(ctx)
 	}
 }
 

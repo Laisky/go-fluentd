@@ -3,6 +3,7 @@ package senders
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -92,35 +93,35 @@ func (s *ElasticSearchSender) getMsgStarting(msg *libs.FluentMsg) ([]byte, error
 	return []byte("{\"index\": {\"_index\": \"" + index + "\", \"_type\": \"logs\"}}\n"), nil
 }
 
-func (s *ElasticSearchSender) SendBulkMsgs(ctx *bulkOpCtx, msgs []*libs.FluentMsg) (err error) {
-	ctx.cnt = ctx.cnt[:0]
-	for _, ctx.msg = range msgs {
-		if ctx.starting, err = s.getMsgStarting(ctx.msg); err != nil {
+func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*libs.FluentMsg) (err error) {
+	bulkCtx.cnt = bulkCtx.cnt[:0]
+	for _, bulkCtx.msg = range msgs {
+		if bulkCtx.starting, err = s.getMsgStarting(bulkCtx.msg); err != nil {
 			utils.Logger.Warn("try to generate bulk index got error", zap.Error(err))
 			continue
 		}
 
-		b, err := json.Marshal(ctx.msg.Message)
+		b, err := json.Marshal(bulkCtx.msg.Message)
 		if err != nil {
 			return errors.Wrap(err, "try to marshal messages got error")
 		}
 
 		utils.Logger.Debug("prepare bulk content send to es",
-			zap.ByteString("starting", ctx.starting),
+			zap.ByteString("starting", bulkCtx.starting),
 			zap.ByteString("body", b))
-		ctx.cnt = append(ctx.cnt, ctx.starting...)
-		ctx.cnt = append(ctx.cnt, b...)
-		ctx.cnt = append(ctx.cnt, '\n')
+		bulkCtx.cnt = append(bulkCtx.cnt, bulkCtx.starting...)
+		bulkCtx.cnt = append(bulkCtx.cnt, b...)
+		bulkCtx.cnt = append(bulkCtx.cnt, '\n')
 	}
 
-	ctx.buf.Reset()
-	ctx.gzWriter.Reset(ctx.buf)
-	if _, err = ctx.gzWriter.Write(ctx.cnt); err != nil {
+	bulkCtx.buf.Reset()
+	bulkCtx.gzWriter.Reset(bulkCtx.buf)
+	if _, err = bulkCtx.gzWriter.Write(bulkCtx.cnt); err != nil {
 		return errors.Wrap(err, "try to compress messages got error")
 	}
 
-	ctx.gzWriter.Close()
-	req, err := http.NewRequest("POST", s.Addr, ctx.buf)
+	bulkCtx.gzWriter.Close()
+	req, err := http.NewRequest("POST", s.Addr, bulkCtx.buf)
 	if err != nil {
 		return errors.Wrap(err, "try to init es request got error")
 	}
@@ -191,14 +192,17 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
 	return nil
 }
 
-func (s *ElasticSearchSender) Spawn(tag string) chan<- *libs.FluentMsg {
+func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *libs.FluentMsg {
 	utils.Logger.Info("SpawnForTag", zap.String("tag", tag))
 	inChan := make(chan *libs.FluentMsg, s.InChanSize) // for each tag
-	go s.runFlusher(inChan)
+	go s.runFlusher(ctx, inChan)
 
 	for i := 0; i < s.NFork; i++ { // parallel to each tag
-		go func() {
-			defer utils.Logger.Error("producer exits", zap.String("tag", tag), zap.String("name", s.GetName()))
+		go func(i int) {
+			defer utils.Logger.Info("producer exits",
+				zap.String("tag", tag),
+				zap.Int("i", i),
+				zap.String("name", s.GetName()))
 
 			var (
 				maxRetry         = 3
@@ -208,16 +212,22 @@ func (s *ElasticSearchSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				iBatch           = 0
 				lastT            = time.Unix(0, 0)
 				err              error
-				ctx              = &bulkOpCtx{
+				bulkCtx          = &bulkOpCtx{
 					cnt: []byte{},
 				}
 				nRetry, j int
 			)
 
-			ctx.buf = &bytes.Buffer{}
-			ctx.gzWriter = gzip.NewWriter(ctx.buf)
+			bulkCtx.buf = &bytes.Buffer{}
+			bulkCtx.gzWriter = gzip.NewWriter(bulkCtx.buf)
 
-			for msg = range inChan {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case msg = <-inChan:
+				}
+
 				if msg != nil {
 					msgBatch[iBatch] = msg
 					iBatch++
@@ -246,7 +256,7 @@ func (s *ElasticSearchSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				}
 
 			SEND_MSG:
-				if err = s.SendBulkMsgs(ctx, msgBatchDelivery); err != nil {
+				if err = s.SendBulkMsgs(bulkCtx, msgBatchDelivery); err != nil {
 					nRetry++
 					if nRetry > maxRetry {
 						utils.Logger.Error("try send message got error",
@@ -269,7 +279,7 @@ func (s *ElasticSearchSender) Spawn(tag string) chan<- *libs.FluentMsg {
 					s.discardChan <- msg
 				}
 			}
-		}()
+		}(i)
 	}
 
 	return inChan

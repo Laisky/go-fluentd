@@ -1,6 +1,7 @@
 package senders
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -58,14 +59,17 @@ func (s *KafkaSender) GetName() string {
 	return s.Name
 }
 
-func (s *KafkaSender) Spawn(tag string) chan<- *libs.FluentMsg {
+func (s *KafkaSender) Spawn(ctx context.Context, tag string) chan<- *libs.FluentMsg {
 	utils.Logger.Info("SpawnForTag", zap.String("tag", tag))
 	inChan := make(chan *libs.FluentMsg, s.InChanSize)
-	go s.runFlusher(inChan)
+	go s.runFlusher(ctx, inChan)
 
 	for i := 0; i < s.NFork; i++ {
-		go func() {
-			defer utils.Logger.Panic("kafka sender exit", zap.String("tag", tag), zap.String("name", s.GetName()))
+		go func(i int) {
+			defer utils.Logger.Info("kafka sender exit",
+				zap.String("tag", tag),
+				zap.String("name", s.GetName()),
+				zap.Int("i", i))
 			var (
 				jb                []byte
 				nRetry            int
@@ -77,6 +81,7 @@ func (s *KafkaSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				lastT             = time.Unix(0, 0)
 				err               error
 				j                 int
+				msg               *libs.FluentMsg
 			)
 
 			for j = 0; j < s.BatchSize; j++ {
@@ -93,7 +98,13 @@ func (s *KafkaSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				zap.Strings("brokers", s.Brokers),
 				zap.String("tag", tag))
 
-			for msg := range inChan {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case msg = <-inChan:
+				}
+
 				if msg != nil {
 					// msg.Message[s.TagKey] = msg.Tag // change msg tag
 					msgBatch[iBatch] = msg
@@ -168,7 +179,7 @@ func (s *KafkaSender) Spawn(tag string) chan<- *libs.FluentMsg {
 					s.discardChan <- msg
 				}
 			}
-		}()
+		}(i)
 	}
 
 	return inChan

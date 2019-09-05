@@ -2,6 +2,22 @@
 *CURRENT*
 ---
 
+- 2019-09-05 (Laisky) ci: upgrade go-utils v1.7.5
+- 2019-09-05 (Laisky) fix: shrink deps
+- 2019-09-05 (Laisky) ci: upgrade go-utils v1.7.4
+- 2019-09-04 (Laisky) fix: upgrade go-utils
+- 2019-09-04 (Laisky) fix: add context in postpipeline
+- 2019-09-04 (Laisky) build: upgrade go v1.13.0
+- 2019-09-04 (Laisky) fix: add context in accptor
+- 2019-09-04 (Laisky) fix: add context in acceptorPipeline
+- 2019-09-04 (Laisky) fix: add context in producer
+- 2019-09-04 (Laisky) fix: refactor tagPipeline
+- 2019-09-03 (Laisky) ci: upgrade go-utils v1.7.3
+- 2019-09-03 (Laisky) docs: update changelog
+
+*v1.10.8*
+---
+
 - 2019-09-03 (Laisky) fix: ctx.Done return
 
 *v1.10.7*

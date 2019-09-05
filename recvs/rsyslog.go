@@ -1,7 +1,10 @@
 package recvs
 
 import (
+	"context"
 	"time"
+
+	"github.com/Laisky/go-syslog/format"
 
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-syslog"
@@ -43,17 +46,27 @@ func (r *RsyslogRecv) GetName() string {
 	return r.Name
 }
 
-func (r *RsyslogRecv) Run() {
+func (r *RsyslogRecv) Run(ctx context.Context) {
 	utils.Logger.Info("Run RsyslogRecv")
 
 	go func() {
-		defer utils.Logger.Panic("rsyslog reciver exit", zap.String("name", r.GetName()))
+		defer utils.Logger.Info("rsyslog reciver exit", zap.String("name", r.GetName()))
 		var (
-			err error
-			msg *libs.FluentMsg
-			tag = "emqtt." + r.Env
+			err     error
+			msg     *libs.FluentMsg
+			tag     = "emqtt." + r.Env
+			logPart format.LogParts
+			ctx2Srv context.Context
+			cancel  func()
 		)
 		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			ctx2Srv, cancel = context.WithCancel(ctx)
 			srv, inchan := NewRsyslogSrv(r.Addr)
 			utils.Logger.Info("listening rsyslog", zap.String("addr", r.Addr))
 			if err = srv.Boot(&syslog.BLBCfg{
@@ -61,10 +74,27 @@ func (r *RsyslogRecv) Run() {
 				SYN: "hello",
 			}); err != nil {
 				utils.Logger.Error("try to start rsyslog server got error", zap.Error(err))
+				cancel()
 				continue
 			}
+			go func(srv *syslog.Server, cancel func()) {
+				srv.Wait()
+				cancel()
+			}(srv, cancel)
 
-			for logPart := range inchan {
+		LOG_LOOP:
+			for {
+				select {
+				case <-ctx2Srv.Done():
+					utils.Logger.Info("rsyslog server exit")
+					break LOG_LOOP
+				case logPart = <-inchan:
+					if logPart == nil {
+						utils.Logger.Info("rsyslog channel closed")
+						break LOG_LOOP
+					}
+				}
+
 				switch logPart[r.TimeKey].(type) {
 				case time.Time:
 					logPart[r.NewTimeKey] = logPart[r.TimeKey].(time.Time).UTC().Format(r.NewTimeFormat)

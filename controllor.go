@@ -19,8 +19,8 @@ import (
 	"github.com/Laisky/zap"
 )
 
-const (
-	ctxKey utils.CtxKeyT = "key"
+var (
+	ctxKey = utils.CtxKeyT{}
 )
 
 // Controllor is an IoC that manage all roles
@@ -121,28 +121,29 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 					MaxAllowedAheadSec: utils.Settings.GetDuration("settings.acceptor.recvs.plugins."+name+".max_allowed_ahead_sec") * time.Second,
 				}))
 			case "kafka":
-				receivers = append(receivers, recvs.NewKafkaRecv(&recvs.KafkaCfg{
-					KMsgPool: sharingKMsgPool,
-					Meta: utils.FallBack(
-						func() interface{} {
-							return utils.Settings.Get("settings.acceptor.recvs.plugins." + name + ".meta").(map[string]interface{})
-						}, map[string]interface{}{}).(map[string]interface{}),
-					Name:         name,
-					MsgKey:       utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".msg_key"),
-					Brokers:      utils.Settings.GetStringSlice("settings.acceptor.recvs.plugins." + name + ".brokers." + env),
-					Topics:       []string{utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".topics." + env)},
-					Group:        utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".groups." + env),
-					Tag:          utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tags." + env),
-					IsJSONFormat: utils.Settings.GetBool("settings.acceptor.recvs.plugins." + name + ".is_json_format"),
-					TagKey:       utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tag_key"),
-					JSONTagKey:   utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".json_tag_key"),
-					RewriteTag:   recvs.GetKafkaRewriteTag(utils.Settings.GetString("settings.acceptor.recvs.plugins."+name+".rewrite_tag"), env),
-					NConsumer:    utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".nconsumer"),
-					KafkaCommitCfg: &recvs.KafkaCommitCfg{
-						IntervalNum:      utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".interval_num"),
-						IntervalDuration: utils.Settings.GetDuration("settings.acceptor.recvs.plugins."+name+".interval_sec") * time.Second,
-					},
-				}))
+				kafkaCfg := recvs.NewKafkaCfg()
+				kafkaCfg.KMsgPool = sharingKMsgPool
+				kafkaCfg.Meta = utils.FallBack(
+					func() interface{} {
+						return utils.Settings.Get("settings.acceptor.recvs.plugins." + name + ".meta").(map[string]interface{})
+					}, map[string]interface{}{}).(map[string]interface{})
+				kafkaCfg.Name = name
+				kafkaCfg.MsgKey = utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".msg_key")
+				kafkaCfg.Brokers = utils.Settings.GetStringSlice("settings.acceptor.recvs.plugins." + name + ".brokers." + env)
+				kafkaCfg.Topics = []string{utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".topics." + env)}
+				kafkaCfg.Group = utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".groups." + env)
+				kafkaCfg.Tag = utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tags." + env)
+				kafkaCfg.IsJSONFormat = utils.Settings.GetBool("settings.acceptor.recvs.plugins." + name + ".is_json_format")
+				kafkaCfg.TagKey = utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tag_key")
+				kafkaCfg.JSONTagKey = utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".json_tag_key")
+				kafkaCfg.RewriteTag = recvs.GetKafkaRewriteTag(utils.Settings.GetString("settings.acceptor.recvs.plugins."+name+".rewrite_tag"), env)
+				kafkaCfg.NConsumer = utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".nconsumer")
+				kafkaCfg.KafkaCommitCfg = &recvs.KafkaCommitCfg{
+					IntervalNum:      utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".interval_num"),
+					IntervalDuration: utils.Settings.GetDuration("settings.acceptor.recvs.plugins."+name+".interval_sec") * time.Second,
+				}
+
+				receivers = append(receivers, recvs.NewKafkaRecv(kafkaCfg))
 			default:
 				utils.Logger.Panic("unknown recv type",
 					zap.String("recv_type", utils.Settings.GetString("settings.acceptor.recvs.plugins."+name+".type")),
@@ -171,7 +172,7 @@ func (c *Controllor) initAcceptor(journal *Journal, receivers []recvs.AcceptorRe
 		receivers...,
 	)
 
-	acceptor.Run()
+	acceptor.Run(c.ctx)
 	return acceptor
 }
 
@@ -290,7 +291,7 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- *libs.Flu
 		})}, fs...)
 	}
 
-	return tagFilters.NewTagPipeline(&tagFilters.TagPipelineCfg{
+	return tagFilters.NewTagPipeline(c.ctx, &tagFilters.TagPipelineCfg{
 		MsgPool:                 c.msgPool,
 		CommitedChan:            waitCommitChan,
 		DefaultInternalChanSize: utils.Settings.GetInt("settings.tag_filters.internal_chan_size"),
@@ -306,7 +307,7 @@ func (c *Controllor) initDispatcher(waitDispatchChan chan *libs.FluentMsg, tagPi
 		NFork:       utils.Settings.GetInt("settings.dispatcher.nfork"),
 		OutChanSize: utils.Settings.GetInt("settings.dispatcher.out_chan_size"),
 	})
-	dispatcher.Run()
+	dispatcher.Run(c.ctx)
 
 	return dispatcher
 }
@@ -485,8 +486,15 @@ func (c *Controllor) initProducer(env string, waitProduceChan chan *libs.FluentM
 	)
 }
 
-func (c *Controllor) runHeartBeat() {
+func (c *Controllor) runHeartBeat(ctx context.Context) {
+	defer utils.Logger.Info("heartbeat exit")
 	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		utils.Logger.Info("heartbeat",
 			zap.Int("goroutine", runtime.NumGoroutine()),
 		)
@@ -509,7 +517,7 @@ func (c *Controllor) Run() {
 	waitCommitChan := journal.GetCommitChan()
 	waitAccepPipelineSyncChan := acceptor.GetSyncOutChan()
 	waitAccepPipelineAsyncChan := acceptor.GetAsyncOutChan()
-	waitDumpChan, skipDumpChan := acceptorPipeline.Wrap(waitAccepPipelineAsyncChan, waitAccepPipelineSyncChan)
+	waitDumpChan, skipDumpChan := acceptorPipeline.Wrap(c.ctx, waitAccepPipelineAsyncChan, waitAccepPipelineSyncChan)
 
 	// after `journal.DumpMsgFlow`, every discarded msg should commit to waitCommitChan
 	waitDispatchChan := journal.DumpMsgFlow(c.ctx, c.msgPool, waitDumpChan, skipDumpChan)
@@ -518,12 +526,12 @@ func (c *Controllor) Run() {
 	dispatcher := c.initDispatcher(waitDispatchChan, tagPipeline)
 	waitPostPipelineChan := dispatcher.GetOutChan()
 	postPipeline := c.initPostPipeline(env, waitCommitChan)
-	waitProduceChan := postPipeline.Wrap(waitPostPipelineChan)
+	waitProduceChan := postPipeline.Wrap(c.ctx, waitPostPipelineChan)
 	producerSenders := c.initSenders(env)
 	producer := c.initProducer(env, waitProduceChan, waitCommitChan, producerSenders)
 
 	// heartbeat
-	go c.runHeartBeat()
+	go c.runHeartBeat(c.ctx)
 
 	// monitor
 	monitor.AddMetric("controllor", func() map[string]interface{} {
@@ -549,6 +557,6 @@ func (c *Controllor) Run() {
 	})
 	monitor.BindHTTP(server)
 
-	go producer.Run()
+	go producer.Run(c.ctx)
 	RunServer(utils.Settings.GetString("addr"))
 }

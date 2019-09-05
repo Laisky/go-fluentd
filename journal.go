@@ -94,7 +94,13 @@ func (j *Journal) CloseTag(tag string) error {
 	if fi, ok := j.tag2CtxCancelMap.Load(tag); !ok {
 		return fmt.Errorf("tag %v not exists in tag2CtxCancelMap", tag)
 	} else {
+		j.jjLock.Lock()
 		fi.(func())()
+		j.tag2JMap.Delete(tag)
+		j.tag2JJInchanMap.Delete(tag)
+		j.tag2JJCommitChanMap.Delete(tag)
+		j.tag2CtxCancelMap.Delete(tag)
+		j.jjLock.Unlock()
 	}
 
 	return nil
@@ -144,7 +150,7 @@ func (j *Journal) ProcessLegacyMsg(dumpChan chan *libs.FluentMsg) (maxID int64, 
 	if !j.legacyLock.TryLock() {
 		return 0, fmt.Errorf("another legacy is running")
 	}
-	defer j.legacyLock.ForceRealse()
+	defer j.legacyLock.ForceRelease()
 
 	utils.Logger.Debug("starting to process legacy data...")
 	var (
@@ -242,17 +248,6 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 	if _, ok = j.tag2CtxCancelMap.LoadOrStore(tag, cancel); ok {
 		utils.Logger.Panic("tag already exists in tag2CtxCancelMap", zap.String("tag", tag))
 	}
-	go func(ctx context.Context) {
-		<-ctx.Done()
-		j.jjLock.Lock()
-		defer j.jjLock.Unlock()
-
-		utils.Logger.Info("close journal for tag", zap.String("tag", tag))
-		j.tag2JMap.Delete(tag)
-		j.tag2JJInchanMap.Delete(tag)
-		j.tag2JJCommitChanMap.Delete(tag)
-		j.tag2CtxCancelMap.Delete(tag)
-	}(ctxForTag)
 
 	jcfg := journal.NewConfig()
 	jcfg.BufDirPath = j.baseJournalCfg.BufDirPath
@@ -397,11 +392,11 @@ func (j *Journal) ConvertMsg2Buf(msg *libs.FluentMsg, data *map[string]interface
 func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan, skipDumpChan chan *libs.FluentMsg) chan *libs.FluentMsg {
 	// deal with legacy
 	go func() {
+		defer utils.Logger.Info("legacy processor exit")
 		var err error
 		for { // try to starting legacy loading
 			select {
 			case <-ctx.Done():
-				utils.Logger.Info("legacy processor exit")
 				return
 			default:
 			}
@@ -415,10 +410,10 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 
 	// start periodic gc
 	go func() {
+		defer utils.Logger.Info("gc runner exit")
 		for {
 			select {
 			case <-ctx.Done():
-				utils.Logger.Info("gc runner exit")
 				return
 			default:
 			}
@@ -430,11 +425,11 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 
 	// deal with msgs that skip dump
 	go func() {
+		defer utils.Logger.Info("skipDumpChan goroutine exit")
 		var msg *libs.FluentMsg
 		for {
 			select {
 			case <-ctx.Done():
-				utils.Logger.Info("skipDumpChan goroutine exit")
 				return
 			case msg = <-skipDumpChan:
 			}
@@ -444,6 +439,7 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 	}()
 
 	go func() {
+		defer utils.Logger.Info("legacy dumper exit")
 		var (
 			ok  bool
 			jji interface{}
@@ -452,7 +448,6 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 		for {
 			select {
 			case <-ctx.Done():
-				utils.Logger.Info("legacy dumper exit")
 				return
 			case msg = <-dumpChan:
 			}
@@ -485,6 +480,7 @@ func (j *Journal) GetCommitChan() chan<- *libs.FluentMsg {
 
 func (j *Journal) startCommitRunner(ctx context.Context) {
 	go func() {
+		defer utils.Logger.Info("id commitor exit")
 		var (
 			ok    bool
 			chani interface{}
@@ -493,7 +489,6 @@ func (j *Journal) startCommitRunner(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
-				utils.Logger.Info("id commitor exit")
 				return
 			case msg = <-j.commitChan:
 			}

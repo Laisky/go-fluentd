@@ -1,6 +1,7 @@
 package senders
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"time"
@@ -50,14 +51,17 @@ func (s *FluentSender) GetName() string {
 	return s.Name
 }
 
-func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {
+func (s *FluentSender) Spawn(ctx context.Context, tag string) chan<- *libs.FluentMsg {
 	utils.Logger.Info("spawn for tag", zap.String("tag", tag))
 	inChan := make(chan *libs.FluentMsg, s.InChanSize) // for each tag
-	go s.runFlusher(inChan)
+	go s.runFlusher(ctx, inChan)
 
 	for i := 0; i < s.NFork; i++ { // parallel to each tag
-		go func() {
-			defer utils.Logger.Panic("producer exits", zap.String("tag", tag), zap.String("name", s.GetName()))
+		go func(i int) {
+			defer utils.Logger.Info("producer exits",
+				zap.String("tag", tag),
+				zap.String("name", s.GetName()),
+				zap.Int("i", i))
 
 			var (
 				nRetry           int
@@ -83,7 +87,13 @@ func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {
 				zap.String("tag", tag))
 
 			encoder = libs.NewFluentEncoder(conn) // one encoder for each connection
-			for msg = range inChan {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case msg = <-inChan:
+				}
+
 				if msg != nil {
 					msgBatch[iBatch] = msg
 					iBatch++
@@ -145,7 +155,7 @@ func (s *FluentSender) Spawn(tag string) chan<- *libs.FluentMsg {
 					s.discardChan <- msg
 				}
 			}
-		}()
+		}(i)
 	}
 
 	return inChan

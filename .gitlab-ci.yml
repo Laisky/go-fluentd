@@ -47,7 +47,7 @@ build:app:
 #     - public
 #   image: registry:5000/docker:latest
 #   script:
-#     - docker pull registry:5000/gobase:1.12.9-alpine3.10  # pull latest image
+#     - docker pull registry:5000/gobase:1.13.0-alpine3.10  # pull latest image
 #     - docker build . -f ./.docker/test.Dockerfile -t go-fluentd-test:$DOCKER_TAG
 #   retry: 1
 

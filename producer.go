@@ -1,6 +1,7 @@
 package concator
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -22,7 +23,8 @@ type ProducerCfg struct {
 // Producer send messages to downstream
 type Producer struct {
 	*ProducerCfg
-	producerTagChanMap                    *sync.Map
+	sync.Mutex
+	tag2SenderChan                        *sync.Map
 	senders                               []senders.SenderItf
 	discardChan, discardWithoutCommitChan chan *libs.FluentMsg
 	// discardMsgCountMap = map[&msg]discardedCount
@@ -35,6 +37,10 @@ type Producer struct {
 	discardMsgCountMap *sync.Map
 	counter            *utils.Counter
 	pMsgPool           *sync.Pool // pending msg pool
+
+	unSupportedTags *sync.Map
+	tag2NSender     *sync.Map // map[tag]nSender
+	tag2Cancel      *sync.Map // map[tag]nSender
 }
 
 type ProducerPendingDiscardMsg struct {
@@ -54,7 +60,7 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) *Producer {
 	p := &Producer{
 		ProducerCfg:              cfg,
 		senders:                  senders,
-		producerTagChanMap:       &sync.Map{},
+		tag2SenderChan:           &sync.Map{},
 		discardChan:              make(chan *libs.FluentMsg, cfg.DiscardChanSize),
 		discardWithoutCommitChan: make(chan *libs.FluentMsg, cfg.DiscardChanSize),
 		discardMsgCountMap:       &sync.Map{},
@@ -66,6 +72,10 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) *Producer {
 				}
 			},
 		},
+
+		unSupportedTags: &sync.Map{},
+		tag2NSender:     &sync.Map{}, // map[tag]nSender
+		tag2Cancel:      &sync.Map{}, // map[tag]nSender
 	}
 	p.registerMonitor()
 
@@ -90,7 +100,7 @@ func (p *Producer) registerMonitor() {
 		p.counter.Set(0)
 		lastT = time.Now()
 
-		p.producerTagChanMap.Range(func(tagi, smi interface{}) bool {
+		p.tag2SenderChan.Range(func(tagi, smi interface{}) bool {
 			smi.(*sync.Map).Range(func(si, ci interface{}) bool {
 				metrics[tagi.(string)+"."+si.(senders.SenderItf).GetName()+".ChanLen"] = len(ci.(chan<- *libs.FluentMsg))
 				metrics[tagi.(string)+"."+si.(senders.SenderItf).GetName()+".ChanCap"] = cap(ci.(chan<- *libs.FluentMsg))
@@ -123,7 +133,8 @@ func (p *Producer) DiscardMsg(pmsg *ProducerPendingDiscardMsg) {
 	p.pMsgPool.Put(pmsg)
 }
 
-func (p *Producer) RunMsgCollector(nSenderForTagMap *sync.Map, discardChan chan *libs.FluentMsg) {
+func (p *Producer) RunMsgCollector(ctx context.Context, tag2NSender *sync.Map, discardChan chan *libs.FluentMsg) {
+	defer utils.Logger.Info("msg collector exit")
 	var (
 		cntToDiscard int
 		ok, isCommit bool
@@ -134,6 +145,8 @@ func (p *Producer) RunMsgCollector(nSenderForTagMap *sync.Map, discardChan chan 
 
 	for {
 		select {
+		case <-ctx.Done():
+			return
 		case msg = <-p.discardChan:
 			isCommit = true
 		case msg = <-p.discardWithoutCommitChan:
@@ -141,8 +154,8 @@ func (p *Producer) RunMsgCollector(nSenderForTagMap *sync.Map, discardChan chan 
 		}
 
 		// ⚠️Notify: Do not change tag in any sender
-		if itf, ok = nSenderForTagMap.Load(msg.Tag); !ok {
-			utils.Logger.Error("[panic] nSenderForTagMap should contains tag",
+		if itf, ok = tag2NSender.Load(msg.Tag); !ok {
+			utils.Logger.Panic("[panic] tag2NSender should contains tag",
 				zap.String("tag", msg.Tag),
 				zap.String("msg", fmt.Sprint(msg)))
 			cntToDiscard = 1
@@ -174,68 +187,79 @@ func (p *Producer) RunMsgCollector(nSenderForTagMap *sync.Map, discardChan chan 
 }
 
 // Run starting <n> Producer to send messages
-func (p *Producer) Run() {
+func (p *Producer) Run(ctx context.Context) {
 	utils.Logger.Info("start producer")
 
-	var (
-		unSupportedTags  = &sync.Map{}
-		nSenderForTagMap = &sync.Map{} // map[tag]nSender
-	)
-
-	go p.RunMsgCollector(nSenderForTagMap, p.discardChan)
+	go p.RunMsgCollector(ctx, p.tag2NSender, p.discardChan)
 	for i := 0; i < p.NFork; i++ {
-		go func() {
+		go func(i int) {
+			defer utils.Logger.Info("producer exit", zap.Int("i", i))
 			var (
 				ok, isSkip    bool
 				s             senders.SenderItf
 				itf           interface{}
-				senderChanMap *sync.Map // sender: chan
+				sender2Inchan *sync.Map // sender: chan
 				nSender       int
+				msg           *libs.FluentMsg
 			)
-			for msg := range p.InChan {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case msg = <-p.InChan:
+				}
+
 				// utils.Logger.Info(fmt.Sprintf("send msg %p", msg))
 				p.counter.Count()
-				if _, ok = unSupportedTags.Load(msg.Tag); ok {
+				if _, ok = p.unSupportedTags.Load(msg.Tag); ok {
 					utils.Logger.Warn("do not produce since of unsupported tag", zap.String("tag", msg.Tag))
 					p.discardChan <- msg
 					continue
 				}
 
 				msg.Message["msgid"] = msg.Id // set id
-				if _, ok = p.producerTagChanMap.Load(msg.Tag); !ok {
-					// create sender chans for new tag
-					isSkip = true
-					nSender = 0
-					senderChanMap = &sync.Map{}
-					for _, s = range p.senders {
-						if s.IsTagSupported(msg.Tag) {
-							isSkip = false
-							nSender++
-							utils.Logger.Info("spawn new producer sender",
-								zap.String("name", s.GetName()),
-								zap.String("tag", msg.Tag))
-							senderChanMap.Store(s, s.Spawn(msg.Tag))
+				if _, ok = p.tag2SenderChan.Load(msg.Tag); !ok {
+					p.Lock()
+					if _, ok = p.tag2SenderChan.Load(msg.Tag); !ok { // double check
+						// create sender chans for new tag
+						isSkip = true
+						nSender = 0
+						sender2Inchan = &sync.Map{}
+						ctx2Tag, cancel := context.WithCancel(ctx)
+						for _, s = range p.senders {
+							if s.IsTagSupported(msg.Tag) {
+								isSkip = false
+								nSender++
+								utils.Logger.Info("spawn new producer sender",
+									zap.String("name", s.GetName()),
+									zap.String("tag", msg.Tag))
+								sender2Inchan.Store(s, s.Spawn(ctx2Tag, msg.Tag))
+							}
 						}
-					}
 
-					if isSkip {
-						// no sender support this tag
-						utils.Logger.Warn("do not produce since of unsupported tag", zap.String("tag", msg.Tag))
-						nSenderForTagMap.Store(msg.Tag, 1)
-						unSupportedTags.Store(msg.Tag, struct{}{}) // mark as unsupported
-						p.discardChan <- msg
-						continue
-					}
+						if isSkip {
+							// no sender support this tag
+							utils.Logger.Warn("do not produce since of unsupported tag", zap.String("tag", msg.Tag))
+							p.tag2NSender.Store(msg.Tag, 1)
+							p.unSupportedTags.Store(msg.Tag, struct{}{}) // mark as unsupported
+							p.discardChan <- msg
+							cancel()
+							p.Unlock()
+							continue
+						}
 
-					utils.Logger.Info("register the number of senders for tag",
-						zap.String("tag", msg.Tag),
-						zap.Int("n", nSender))
-					nSenderForTagMap.Store(msg.Tag, nSender)
-					p.producerTagChanMap.Store(msg.Tag, senderChanMap)
+						utils.Logger.Info("register the number of senders for tag",
+							zap.String("tag", msg.Tag),
+							zap.Int("n", nSender))
+						p.tag2Cancel.Store(msg.Tag, cancel)
+						p.tag2NSender.Store(msg.Tag, nSender)
+						p.tag2SenderChan.Store(msg.Tag, sender2Inchan)
+					}
+					p.Unlock()
 				}
 
-				if itf, ok = p.producerTagChanMap.Load(msg.Tag); !ok {
-					utils.Logger.Error("[panic] producerTagChanMap should contains tag", zap.String("tag", msg.Tag))
+				if itf, ok = p.tag2SenderChan.Load(msg.Tag); !ok {
+					utils.Logger.Panic("[panic] tag2SenderChan should contains tag", zap.String("tag", msg.Tag))
 					continue
 				}
 
@@ -260,6 +284,6 @@ func (p *Producer) Run() {
 					return true
 				})
 			}
-		}()
+		}(i)
 	}
 }

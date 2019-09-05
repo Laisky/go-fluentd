@@ -1,6 +1,7 @@
 package acceptorFilters
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -78,7 +79,7 @@ func (f *AcceptorPipeline) DiscardMsg(msg *libs.FluentMsg) {
 	f.MsgPool.Put(msg)
 }
 
-func (f *AcceptorPipeline) Wrap(asyncInChan, syncInChan chan *libs.FluentMsg) (outChan, skipDumpChan chan *libs.FluentMsg) {
+func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan chan *libs.FluentMsg) (outChan, skipDumpChan chan *libs.FluentMsg) {
 	outChan = make(chan *libs.FluentMsg, f.OutChanSize)
 	skipDumpChan = make(chan *libs.FluentMsg, f.OutChanSize)
 
@@ -92,11 +93,13 @@ func (f *AcceptorPipeline) Wrap(asyncInChan, syncInChan chan *libs.FluentMsg) (o
 				filter AcceptorFilterItf
 				msg    *libs.FluentMsg
 			)
-			defer utils.Logger.Panic("quit acceptorPipeline asyncChan", zap.String("msg", fmt.Sprint(msg)))
+			defer utils.Logger.Info("quit acceptorPipeline asyncChan", zap.String("last_msg", fmt.Sprint(msg)))
 
+		NEXT_ASYNC_MSG:
 			for {
-			NEXT_ASYNC_MSG:
 				select {
+				case <-ctx.Done():
+					return
 				case msg = <-f.reEnterChan: // CAUTION: do not put msg into reEnterChan forever
 				case msg = <-asyncInChan:
 				}
@@ -112,7 +115,7 @@ func (f *AcceptorPipeline) Wrap(asyncInChan, syncInChan chan *libs.FluentMsg) (o
 
 				for _, filter = range f.filters {
 					if msg = filter.Filter(msg); msg == nil { // quit filters for this msg
-						goto NEXT_ASYNC_MSG
+						continue NEXT_ASYNC_MSG
 					}
 				}
 
@@ -132,9 +135,15 @@ func (f *AcceptorPipeline) Wrap(asyncInChan, syncInChan chan *libs.FluentMsg) (o
 				filter AcceptorFilterItf
 				msg    *libs.FluentMsg
 			)
-			defer utils.Logger.Panic("quit acceptorPipeline syncChan", zap.String("msg", fmt.Sprint(msg)))
+			defer utils.Logger.Info("quit acceptorPipeline syncChan", zap.String("last_msg", fmt.Sprint(msg)))
 
-			for msg = range syncInChan {
+		NEXT_SYNC_MSG:
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case msg = <-syncInChan:
+				}
 				// utils.Logger.Debug("AcceptorPipeline got blockable msg")
 				f.counter.Count()
 
@@ -148,12 +157,11 @@ func (f *AcceptorPipeline) Wrap(asyncInChan, syncInChan chan *libs.FluentMsg) (o
 					if msg = filter.Filter(msg); msg == nil { // quit filters for this msg
 						// do not discard in pipeline
 						// filter can make decision to bypass or discard msg
-						goto NEXT_SYNC_MSG
+						continue NEXT_SYNC_MSG
 					}
 				}
 
 				outChan <- msg
-			NEXT_SYNC_MSG:
 			}
 
 		}()

@@ -1,11 +1,8 @@
 package tagFilters_test
 
 import (
-	"math/rand"
 	"regexp"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-fluentd/tagFilters"
@@ -31,81 +28,81 @@ func (f *Factory) Spawn(tag string, outChan chan<- *libs.FluentMsg) chan<- *libs
 	return make(chan *libs.FluentMsg, 1000)
 }
 
-func BenchmarkConcator(b *testing.B) {
-	// utils.SetupLogger("debug")
-	cf := &Factory{
-		BaseTagFilterFactory: &tagFilters.BaseTagFilterFactory{},
-	}
-	pMsgPool := &sync.Pool{
-		New: func() interface{} {
-			return &tagFilters.PendingMsg{}
-		},
-	}
-	msgPool := &sync.Pool{
-		New: func() interface{} {
-			return &libs.FluentMsg{}
-		},
-	}
-	inChan := make(chan *libs.FluentMsg, 2000)
-	outChan := make(chan *libs.FluentMsg, 10000)
+// func BenchmarkConcator(b *testing.B) {
+// 	// utils.SetupLogger("debug")
+// 	cf := &Factory{
+// 		BaseTagFilterFactory: &tagFilters.BaseTagFilterFactory{},
+// 	}
+// 	pMsgPool := &sync.Pool{
+// 		New: func() interface{} {
+// 			return &tagFilters.PendingMsg{}
+// 		},
+// 	}
+// 	msgPool := &sync.Pool{
+// 		New: func() interface{} {
+// 			return &libs.FluentMsg{}
+// 		},
+// 	}
+// 	inChan := make(chan *libs.FluentMsg, 2000)
+// 	outChan := make(chan *libs.FluentMsg, 10000)
 
-	go func() {
-		i := 0.0
-		now := time.Now()
-		for msg := range outChan {
-			i++
-			if time.Now().Sub(now) > 1*time.Second {
-				now = time.Now()
-				b.Logf(">> msg: %v\n", string(msg.Message["log"].([]byte)))
-				b.Logf("%v/s\n", i/time.Now().Sub(now).Seconds())
-				i = 0
-			}
-		}
-	}()
+// 	go func() {
+// 		i := 0.0
+// 		now := time.Now()
+// 		for msg := range outChan {
+// 			i++
+// 			if time.Now().Sub(now) > 1*time.Second {
+// 				now = time.Now()
+// 				b.Logf(">> msg: %v\n", string(msg.Message["log"].([]byte)))
+// 				b.Logf("%v/s\n", i/time.Now().Sub(now).Seconds())
+// 				i = 0
+// 			}
+// 		}
+// 	}()
 
-	c := tagFilters.NewConcator(&tagFilters.ConcatorCfg{
-		Cf:         cf,
-		MaxLen:     100000,
-		Tag:        "spring.sit",
-		MsgKey:     "log",
-		Identifier: "container_id",
-		MsgPool:    msgPool,
-		PMsgPool:   pMsgPool,
-		OutChan:    outChan,
-		Regexp:     regexp.MustCompile(`^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} {0,}\|`),
-	})
-	go c.Run(inChan)
+// 	c := tagFilters.NewConcator(&tagFilters.ConcatorCfg{
+// 		Cf:         cf,
+// 		MaxLen:     100000,
+// 		Tag:        "spring.sit",
+// 		MsgKey:     "log",
+// 		Identifier: "container_id",
+// 		MsgPool:    msgPool,
+// 		PMsgPool:   pMsgPool,
+// 		OutChan:    outChan,
+// 		Regexp:     regexp.MustCompile(`^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} {0,}\|`),
+// 	})
+// 	go c.Run(inChan)
 
-	var (
-		msg1, msg2 *libs.FluentMsg
-	)
+// 	var (
+// 		msg1, msg2 *libs.FluentMsg
+// 	)
 
-	b.Run("concator", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			if rand.Float64() <= 0.5 {
-				msg1 = msgPool.Get().(*libs.FluentMsg)
-				msg1.Tag = "app.spring.sit"
-				msg1.Id = 1
-				msg1.Message = map[string]interface{}{
-					"log":          "2018-11-21 17:05:22.514 | test | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: 123454321",
-					"container_id": "docker",
-				}
-				inChan <- msg1
-			} else {
-				msg2 = msgPool.Get().(*libs.FluentMsg)
-				msg2.Tag = "app.spring.sit"
-				msg2.Id = 2
-				msg2.Message = map[string]interface{}{
-					"log":          "12345",
-					"container_id": "docker",
-				}
-				inChan <- msg2
-			}
-		}
-	})
+// 	b.Run("concator", func(b *testing.B) {
+// 		for i := 0; i < b.N; i++ {
+// 			if rand.Float64() <= 0.5 {
+// 				msg1 = msgPool.Get().(*libs.FluentMsg)
+// 				msg1.Tag = "app.spring.sit"
+// 				msg1.Id = 1
+// 				msg1.Message = map[string]interface{}{
+// 					"log":          "2018-11-21 17:05:22.514 | test | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: 123454321",
+// 					"container_id": "docker",
+// 				}
+// 				inChan <- msg1
+// 			} else {
+// 				msg2 = msgPool.Get().(*libs.FluentMsg)
+// 				msg2.Tag = "app.spring.sit"
+// 				msg2.Id = 2
+// 				msg2.Message = map[string]interface{}{
+// 					"log":          "12345",
+// 					"container_id": "docker",
+// 				}
+// 				inChan <- msg2
+// 			}
+// 		}
+// 	})
 
-	b.Error("done")
-}
+// 	b.Error("done")
+// }
 
 func BenchmarkRegexp(b *testing.B) {
 	log := "2018-11-21 17:05:22.514 | test | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: 123454321"

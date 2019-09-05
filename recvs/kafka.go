@@ -1,6 +1,7 @@
 package recvs
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -9,6 +10,10 @@ import (
 	"github.com/Laisky/go-utils/kafka"
 	"github.com/Laisky/zap"
 	"github.com/pkg/errors"
+)
+
+const (
+	defaultKafkaReconnectInterval = 1 * time.Hour
 )
 
 func GetKafkaRewriteTag(rewriteTag, env string) string {
@@ -24,6 +29,12 @@ type KafkaCommitCfg struct {
 	IntervalDuration time.Duration
 }
 
+func NewKafkaCfg() *KafkaCfg {
+	return &KafkaCfg{
+		ReconnectInterval: defaultKafkaReconnectInterval,
+	}
+}
+
 /*KafkaCfg kafka client configuration
 
 Args:
@@ -33,9 +44,9 @@ Args:
 	Name: name of this recv plugin
 	KMsgPool: sync.Pool for `*utils.kafka.KafkaMsg`
 	Meta: add new field and value into `msg.Message`
-	IsJSONFormat: is unmarshal kafka msg
 	JSONTagKey: load tag from kafka message(only work when IsJSONFormat is true)
 	RewriteTag: rewrite `msg.Tag`, `msg.Message["tag"]` will keep origin value
+	ReconnectInterval: restart consumer periodically
 */
 type KafkaCfg struct {
 	*KafkaCommitCfg
@@ -47,6 +58,7 @@ type KafkaCfg struct {
 	IsJSONFormat                     bool
 	JSONTagKey                       string
 	RewriteTag                       string
+	ReconnectInterval                time.Duration
 }
 
 type KafkaRecv struct {
@@ -57,6 +69,9 @@ type KafkaRecv struct {
 func NewKafkaRecv(cfg *KafkaCfg) *KafkaRecv {
 	if cfg.MsgKey == "" && !cfg.IsJSONFormat {
 		utils.Logger.Panic("at least set one of MsgKey and IsJSONFormat")
+	}
+	if cfg.ReconnectInterval < defaultKafkaReconnectInterval {
+		utils.Logger.Warn("ReconnectInterval too small", zap.Duration("ReconnectInterval", cfg.ReconnectInterval))
 	}
 
 	utils.Logger.Info("create KafkaRecv",
@@ -76,13 +91,19 @@ func (r *KafkaRecv) GetName() string {
 	return r.Name
 }
 
-func (r *KafkaRecv) Run() {
+func (r *KafkaRecv) Run(ctx context.Context) {
 	utils.Logger.Info("run KafkaRecv")
 	for i := 0; i < r.NConsumer; i++ {
 		go func(i int) {
-			defer utils.Logger.Panic("kafka reciver exit", zap.Int("n", i))
+			defer utils.Logger.Info("kafka reciver exit", zap.Int("n", i))
 			for {
-				cli, err := kafka.NewKafkaCliWithGroupId(&kafka.KafkaCliCfg{
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
+				cli, err := kafka.NewKafkaCliWithGroupId(ctx, &kafka.KafkaCliCfg{
 					Brokers:          r.Brokers,
 					Topics:           r.Topics,
 					Groupid:          r.Group,
@@ -103,10 +124,25 @@ func (r *KafkaRecv) Run() {
 					zap.String("group", r.Group))
 
 				var (
-					kmsg *kafka.KafkaMsg
-					msg  *libs.FluentMsg
+					ok                   bool
+					kmsg                 *kafka.KafkaMsg
+					msg                  *libs.FluentMsg
+					ctx2Consumer, cancal = context.WithTimeout(ctx, r.ReconnectInterval)
 				)
-				for kmsg = range cli.Messages() { // receive new kmsg, and convert to fluent msg
+
+			CONSUMER_LOOP:
+				for { // receive new kmsg, and convert to fluent msg
+					select {
+					case <-ctx2Consumer.Done():
+						break CONSUMER_LOOP
+					case kmsg, ok = <-cli.Messages(ctx):
+						if !ok {
+							utils.Logger.Info("consumer break")
+							cancal()
+							break CONSUMER_LOOP
+						}
+					}
+
 					utils.Logger.Debug("got new message from kafka",
 						zap.Int("n", i),
 						zap.ByteString("msg", kmsg.Message),
@@ -123,7 +159,6 @@ func (r *KafkaRecv) Run() {
 					r.syncOutChan <- msg // blockable
 					cli.CommitWithMsg(kmsg)
 				}
-
 				cli.Close()
 			}
 		}(i)

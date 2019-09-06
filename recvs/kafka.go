@@ -96,14 +96,26 @@ func (r *KafkaRecv) Run(ctx context.Context) {
 	for i := 0; i < r.NConsumer; i++ {
 		go func(i int) {
 			defer utils.Logger.Info("kafka reciver exit", zap.Int("n", i))
+			var (
+				ok           bool
+				kmsg         *kafka.KafkaMsg
+				msg          *libs.FluentMsg
+				ctx2Consumer context.Context
+				cancel       func()
+			)
+
 			for {
 				select {
 				case <-ctx.Done():
+					if cancel != nil {
+						cancel()
+					}
 					return
 				default:
 				}
 
-				cli, err := kafka.NewKafkaCliWithGroupId(ctx, &kafka.KafkaCliCfg{
+				ctx2Consumer, cancel = context.WithTimeout(ctx, r.ReconnectInterval)
+				cli, err := kafka.NewKafkaCliWithGroupId(ctx2Consumer, &kafka.KafkaCliCfg{
 					Brokers:          r.Brokers,
 					Topics:           r.Topics,
 					Groupid:          r.Group,
@@ -113,6 +125,7 @@ func (r *KafkaRecv) Run(ctx context.Context) {
 				})
 				if err != nil {
 					utils.Logger.Error("try to connect to kafka got error", zap.Error(err))
+					cancel()
 					continue
 				}
 				utils.Logger.Info("connect to kafka brokers",
@@ -123,13 +136,6 @@ func (r *KafkaRecv) Run(ctx context.Context) {
 					zap.Duration("intervalduration", r.IntervalDuration),
 					zap.String("group", r.Group))
 
-				var (
-					ok                   bool
-					kmsg                 *kafka.KafkaMsg
-					msg                  *libs.FluentMsg
-					ctx2Consumer, cancal = context.WithTimeout(ctx, r.ReconnectInterval)
-				)
-
 			CONSUMER_LOOP:
 				for { // receive new kmsg, and convert to fluent msg
 					select {
@@ -138,7 +144,7 @@ func (r *KafkaRecv) Run(ctx context.Context) {
 					case kmsg, ok = <-cli.Messages(ctx):
 						if !ok {
 							utils.Logger.Info("consumer break")
-							cancal()
+							cancel()
 							break CONSUMER_LOOP
 						}
 					}

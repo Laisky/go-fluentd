@@ -52,6 +52,7 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 	go func() {
 		defer utils.Logger.Info("rsyslog reciver exit", zap.String("name", r.GetName()))
 		var (
+			ok      bool
 			err     error
 			msg     *libs.FluentMsg
 			tag     = "emqtt." + r.Env
@@ -86,11 +87,12 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 			for {
 				select {
 				case <-ctx2Srv.Done():
-					utils.Logger.Info("rsyslog server exit")
+					utils.Logger.Info("try to reconnect rsyslog server")
 					break LOG_LOOP
-				case logPart = <-inchan:
-					if logPart == nil {
+				case logPart, ok = <-inchan:
+					if !ok {
 						utils.Logger.Info("rsyslog channel closed")
+						cancel()
 						break LOG_LOOP
 					}
 				}

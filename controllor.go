@@ -25,9 +25,6 @@ var (
 
 // Controllor is an IoC that manage all roles
 type Controllor struct {
-	ctx    context.Context
-	cancel func()
-
 	msgPool *sync.Pool
 }
 
@@ -45,7 +42,6 @@ func NewControllor() (c *Controllor) {
 			},
 		},
 	}
-	c.ctx, c.cancel = context.WithCancel(context.Background())
 	return c
 }
 
@@ -142,6 +138,7 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 					IntervalNum:      utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".interval_num"),
 					IntervalDuration: utils.Settings.GetDuration("settings.acceptor.recvs.plugins."+name+".interval_sec") * time.Second,
 				}
+				// kafkaCfg.ReconnectInterval = 10 * time.Second  // TEST
 
 				receivers = append(receivers, recvs.NewKafkaRecv(kafkaCfg))
 			default:
@@ -161,7 +158,7 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 	return receivers
 }
 
-func (c *Controllor) initAcceptor(journal *Journal, receivers []recvs.AcceptorRecvItf) *Acceptor {
+func (c *Controllor) initAcceptor(ctx context.Context, journal *Journal, receivers []recvs.AcceptorRecvItf) *Acceptor {
 	acceptor := NewAcceptor(&AcceptorCfg{
 		MsgPool:          c.msgPool,
 		Journal:          journal,
@@ -172,7 +169,7 @@ func (c *Controllor) initAcceptor(journal *Journal, receivers []recvs.AcceptorRe
 		receivers...,
 	)
 
-	acceptor.Run(c.ctx)
+	acceptor.Run(ctx)
 	return acceptor
 }
 
@@ -235,7 +232,7 @@ func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorP
 	)
 }
 
-func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- *libs.FluentMsg) *tagFilters.TagPipeline {
+func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommitChan chan<- *libs.FluentMsg) *tagFilters.TagPipeline {
 	fs := []tagFilters.TagFilterFactoryItf{}
 	isEnableConcator := false
 
@@ -291,7 +288,7 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- *libs.Flu
 		})}, fs...)
 	}
 
-	return tagFilters.NewTagPipeline(c.ctx, &tagFilters.TagPipelineCfg{
+	return tagFilters.NewTagPipeline(ctx, &tagFilters.TagPipelineCfg{
 		MsgPool:                 c.msgPool,
 		CommitedChan:            waitCommitChan,
 		DefaultInternalChanSize: utils.Settings.GetInt("settings.tag_filters.internal_chan_size"),
@@ -300,14 +297,14 @@ func (c *Controllor) initTagPipeline(env string, waitCommitChan chan<- *libs.Flu
 	)
 }
 
-func (c *Controllor) initDispatcher(waitDispatchChan chan *libs.FluentMsg, tagPipeline *tagFilters.TagPipeline) *Dispatcher {
+func (c *Controllor) initDispatcher(ctx context.Context, waitDispatchChan chan *libs.FluentMsg, tagPipeline *tagFilters.TagPipeline) *Dispatcher {
 	dispatcher := NewDispatcher(&DispatcherCfg{
 		InChan:      waitDispatchChan,
 		TagPipeline: tagPipeline,
 		NFork:       utils.Settings.GetInt("settings.dispatcher.nfork"),
 		OutChanSize: utils.Settings.GetInt("settings.dispatcher.out_chan_size"),
 	})
-	dispatcher.Run(c.ctx)
+	dispatcher.Run(ctx)
 
 	return dispatcher
 }
@@ -504,34 +501,34 @@ func (c *Controllor) runHeartBeat(ctx context.Context) {
 }
 
 // Run starting all pipeline
-func (c *Controllor) Run() {
+func (c *Controllor) Run(ctx context.Context) {
 	utils.Logger.Info("running...")
 	env := utils.Settings.GetString("env")
 
-	journal := c.initJournal(c.ctx)
+	journal := c.initJournal(ctx)
 
 	receivers := c.initRecvs(env)
-	acceptor := c.initAcceptor(journal, receivers)
+	acceptor := c.initAcceptor(ctx, journal, receivers)
 	acceptorPipeline := c.initAcceptorPipeline(env)
 
 	waitCommitChan := journal.GetCommitChan()
 	waitAccepPipelineSyncChan := acceptor.GetSyncOutChan()
 	waitAccepPipelineAsyncChan := acceptor.GetAsyncOutChan()
-	waitDumpChan, skipDumpChan := acceptorPipeline.Wrap(c.ctx, waitAccepPipelineAsyncChan, waitAccepPipelineSyncChan)
+	waitDumpChan, skipDumpChan := acceptorPipeline.Wrap(ctx, waitAccepPipelineAsyncChan, waitAccepPipelineSyncChan)
 
 	// after `journal.DumpMsgFlow`, every discarded msg should commit to waitCommitChan
-	waitDispatchChan := journal.DumpMsgFlow(c.ctx, c.msgPool, waitDumpChan, skipDumpChan)
+	waitDispatchChan := journal.DumpMsgFlow(ctx, c.msgPool, waitDumpChan, skipDumpChan)
 
-	tagPipeline := c.initTagPipeline(env, waitCommitChan)
-	dispatcher := c.initDispatcher(waitDispatchChan, tagPipeline)
+	tagPipeline := c.initTagPipeline(ctx, env, waitCommitChan)
+	dispatcher := c.initDispatcher(ctx, waitDispatchChan, tagPipeline)
 	waitPostPipelineChan := dispatcher.GetOutChan()
 	postPipeline := c.initPostPipeline(env, waitCommitChan)
-	waitProduceChan := postPipeline.Wrap(c.ctx, waitPostPipelineChan)
+	waitProduceChan := postPipeline.Wrap(ctx, waitPostPipelineChan)
 	producerSenders := c.initSenders(env)
 	producer := c.initProducer(env, waitProduceChan, waitCommitChan, producerSenders)
 
 	// heartbeat
-	go c.runHeartBeat(c.ctx)
+	go c.runHeartBeat(ctx)
 
 	// monitor
 	monitor.AddMetric("controllor", func() map[string]interface{} {
@@ -557,6 +554,6 @@ func (c *Controllor) Run() {
 	})
 	monitor.BindHTTP(server)
 
-	go producer.Run(c.ctx)
+	go producer.Run(ctx)
 	RunServer(utils.Settings.GetString("addr"))
 }

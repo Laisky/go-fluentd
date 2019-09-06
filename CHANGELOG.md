@@ -2,6 +2,16 @@
 *CURRENT*
 ---
 
+- 2019-09-06 (Laisky) ci: upgrade go-utils v1.7.6
+- 2019-09-05 (Laisky) fix: refact contronllor's ctx
+- 2019-09-05 (Laisky) fix: use stopChan replace cancel
+- 2019-09-05 (Laisky) fix: kafka recv after closed
+
+*v1.11.0*
+---
+
+- 2019-09-05 (Laisky) perf: reduce goroutines
+- 2019-09-05 (Laisky) docs: update changelog
 - 2019-09-05 (Laisky) ci: upgrade go-utils v1.7.5
 - 2019-09-05 (Laisky) fix: shrink deps
 - 2019-09-05 (Laisky) ci: upgrade go-utils v1.7.4

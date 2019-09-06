@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	concator "github.com/Laisky/go-fluentd"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	concator "pateo.com/go-fluentd"
 )
 
 // SetupSettings setup arguments restored in viper

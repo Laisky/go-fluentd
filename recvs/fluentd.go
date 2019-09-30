@@ -22,8 +22,9 @@ type FluentdRecvCfg struct {
 	// TagKey: set `msg.Message[TagKey] = tag`
 	Name, Addr, TagKey string
 
-	// if IsRewriteTagFromTagKey, set `msg.Tag = msg.Message[TagKey]`
+	// if IsRewriteTagFromTagKey, set `msg.Tag = msg.Message[OriginRewriteTagKey]`
 	IsRewriteTagFromTagKey bool
+	OriginRewriteTagKey    string
 
 	ConcatMaxLen int
 	ConcatCfg    map[string]interface{}
@@ -52,7 +53,16 @@ type PendingMsg struct {
 
 // NewFluentdRecv create new FluentdRecv
 func NewFluentdRecv(cfg *FluentdRecvCfg) *FluentdRecv {
-	utils.Logger.Info("create FluentdRecv")
+	utils.Logger.Info("create FluentdRecv",
+		zap.String("name", cfg.Name),
+		zap.Bool("is_rewrite_tag_from_tag_key", cfg.IsRewriteTagFromTagKey),
+		zap.String("origin_rewrite_tag_key", cfg.OriginRewriteTagKey))
+	if cfg.IsRewriteTagFromTagKey {
+		if cfg.OriginRewriteTagKey == "" {
+			utils.Logger.Panic("if IsRewriteTagFromTagKey is setted, OriginRewriteTagKey should not empty")
+		}
+	}
+
 	r := &FluentdRecv{
 		BaseRecv:       &BaseRecv{},
 		FluentdRecvCfg: cfg,
@@ -216,7 +226,6 @@ func (r *FluentdRecv) decodeMsg(conn net.Conn) {
 			}
 
 			utils.Logger.Debug("got message in format: default")
-
 			switch msgBody := v[2].(type) {
 			case map[string]interface{}:
 				msg = r.msgPool.Get().(*libs.FluentMsg)
@@ -248,25 +257,24 @@ func (r *FluentdRecv) decodeMsg(conn net.Conn) {
 
 // SendMsg put msg into downstream
 func (r *FluentdRecv) SendMsg(msg *libs.FluentMsg) {
-	if r.IsRewriteTagFromTagKey {
-		switch msg.Message[r.TagKey].(type) {
+	if r.IsRewriteTagFromTagKey { // rewrite msg.Tag by msg.Message[OriginRewriteTagKey]
+		switch msg.Message[r.OriginRewriteTagKey].(type) {
 		case string:
-			msg.Tag = msg.Message[r.TagKey].(string)
+			msg.Tag = msg.Message[r.OriginRewriteTagKey].(string)
 		case []byte:
-			msg.Tag = string(msg.Message[r.TagKey].([]byte))
+			msg.Tag = string(msg.Message[r.OriginRewriteTagKey].([]byte))
 		default:
 			utils.Logger.Warn("unknown type of msg tag key",
-				zap.String("tag", fmt.Sprint(msg.Message[r.TagKey])),
-				zap.String("tag_key", r.TagKey))
+				zap.String("tag", fmt.Sprint(msg.Message[r.OriginRewriteTagKey])),
+				zap.String("tag_key", r.OriginRewriteTagKey))
 			r.msgPool.Put(msg)
 			return
 		}
 
 		utils.Logger.Debug("rewrite msg tag", zap.String("new_tag", msg.Tag))
-	} else {
-		msg.Message[r.TagKey] = msg.Tag
 	}
 
+	msg.Message[r.TagKey] = msg.Tag
 	msg.Id = r.counter.Count()
 	utils.Logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id))
 	r.asyncOutChan <- msg

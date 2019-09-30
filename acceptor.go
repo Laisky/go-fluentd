@@ -54,7 +54,7 @@ func (a *Acceptor) Run(ctx context.Context) {
 		utils.Logger.Panic("try to process legacy messages got error", zap.Error(err))
 	}
 
-	couter, err := utils.NewMonotonicCounterFromN((maxID+1)%a.MaxRotateID, a.MaxRotateID)
+	couter, err := utils.NewParallelCounterFromN((maxID+1)%a.MaxRotateID, 10000, a.MaxRotateID)
 	if err != nil {
 		panic(fmt.Errorf("try to create counter got error: %+v", err))
 	}
@@ -64,7 +64,7 @@ func (a *Acceptor) Run(ctx context.Context) {
 		recv.SetAsyncOutChan(a.asyncOutChan)
 		recv.SetSyncOutChan(a.syncOutChan)
 		recv.SetMsgPool(a.MsgPool)
-		recv.SetCounter(couter)
+		recv.SetCounter(couter.GetChild())
 		go recv.Run(ctx)
 	}
 }

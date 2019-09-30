@@ -3,8 +3,6 @@
 FROM registry:5000/gobase:1.13.0-alpine3.10
 ENV GO111MODULE=on
 
-
-
 WORKDIR /go-fluentd
 COPY go.mod .
 COPY go.sum .

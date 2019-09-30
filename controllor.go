@@ -83,6 +83,7 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 					Addr:                   utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".addr"),
 					TagKey:                 utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tag_key"),
 					IsRewriteTagFromTagKey: utils.Settings.GetBool("settings.acceptor.recvs.plugins." + name + ".is_rewrite_tag_from_tag_key"),
+					OriginRewriteTagKey:    utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".origin_rewrite_tag_key"),
 					ConcatMaxLen:           utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".concat_max_len"),
 					ConcatCfg:              libs.LoadTagsMapAppendEnv(env, utils.Settings.GetStringMap("settings.acceptor.recvs.plugins."+name+".concat")),
 				}))

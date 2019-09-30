@@ -2,6 +2,21 @@
 *CURRENT*
 ---
 
+- 2019-09-30 (Laisky) fix: upgrade go-utils v1.7.8
+- 2019-09-30 (Laisky) fix: rotate counter start at 1
+- 2019-09-30 (Laisky) fix: fix duplicate in counter
+- 2019-09-29 (Laisky) fix(paas-408): keep one legacy buf file to descend duplicate'
+- 2019-09-29 (Laisky) fix: use normal counter to fix duplicate
+- 2019-09-23 (Laisky) build: upgrade go-utils v1.7.7
+- 2019-09-18 (Laisky) build: upgrade go-utils
+- 2019-09-16 (Laisky) build: go mod
+- 2019-09-16 (Laisky) feat(paas-412): support k8s log
+- 2019-09-12 (Laisky) feat: preallocate file size in journal
+
+*v1.11.1*
+---
+
+- 2019-09-06 (Laisky) docs: update changelog
 - 2019-09-06 (Laisky) ci: upgrade go-utils v1.7.6
 - 2019-09-05 (Laisky) fix: refact contronllor's ctx
 - 2019-09-05 (Laisky) fix: use stopChan replace cancel

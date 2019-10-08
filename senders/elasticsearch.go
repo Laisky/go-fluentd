@@ -199,11 +199,6 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *lib
 
 	for i := 0; i < s.NFork; i++ { // parallel to each tag
 		go func(i int) {
-			defer utils.Logger.Info("producer exits",
-				zap.String("tag", tag),
-				zap.Int("i", i),
-				zap.String("name", s.GetName()))
-
 			var (
 				maxRetry         = 3
 				msg              *libs.FluentMsg
@@ -216,7 +211,12 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *lib
 					cnt: []byte{},
 				}
 				nRetry, j int
+				ok        bool
 			)
+			defer utils.Logger.Info("producer exits",
+				zap.String("tag", tag),
+				zap.Int("i", i),
+				zap.String("name", s.GetName()))
 
 			bulkCtx.buf = &bytes.Buffer{}
 			bulkCtx.gzWriter = gzip.NewWriter(bulkCtx.buf)
@@ -225,7 +225,11 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *lib
 				select {
 				case <-ctx.Done():
 					return
-				case msg = <-inChan:
+				case msg, ok = <-inChan:
+					if !ok {
+						utils.Logger.Info("inChan closed")
+						return
+					}
 				}
 
 				if msg != nil {

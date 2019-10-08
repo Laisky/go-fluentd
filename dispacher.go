@@ -63,14 +63,18 @@ func (d *Dispatcher) Run(ctx context.Context) {
 				counterI          interface{}
 				msg               *libs.FluentMsg
 			)
+			defer utils.Logger.Info("dispatcher exist with msg", zap.String("msg", fmt.Sprint(msg)))
 
 			// send each message to appropriate tagfilter by `tag`
 			for {
 				select {
 				case <-ctx.Done():
-					utils.Logger.Info("dispatcher exit with msg", zap.String("msg", fmt.Sprint(msg)))
 					return
-				case msg = <-d.InChan:
+				case msg, ok = <-d.InChan:
+					if !ok {
+						utils.Logger.Info("inchan closed")
+						return
+					}
 				}
 
 				d.counter.Count()

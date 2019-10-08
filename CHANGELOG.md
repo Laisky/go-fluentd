@@ -2,6 +2,12 @@
 *CURRENT*
 ---
 
+
+
+*v1.11.4*
+---
+
+- 2019-10-08 (Laisky) fix(paas-420): - journal og ttl - duplicate id - kafka
 - 2019-09-30 (Laisky) fix: upgrade go-utils v1.7.8
 - 2019-09-30 (Laisky) fix: rotate counter start at 1
 - 2019-09-30 (Laisky) fix: fix duplicate in counter

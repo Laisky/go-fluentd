@@ -48,7 +48,6 @@ func (f *BaseTagFilterFactory) DiscardMsg(msg *libs.FluentMsg) {
 }
 
 func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan chan *libs.FluentMsg, inchans []chan *libs.FluentMsg) {
-	defer utils.Logger.Info("concator lb exit")
 	if len(inchans) < 1 {
 		utils.Logger.Panic("nfork or inchans's length error",
 			zap.Int("inchans_len", len(inchans)))
@@ -60,12 +59,18 @@ func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan c
 		emptyHashkey = xxhash.Sum64String("")
 		downChan     = inchans[0]
 		msg          *libs.FluentMsg
+		ok           bool
 	)
+	defer utils.Logger.Info("concator lb exit", zap.String("msg", fmt.Sprint(msg)))
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case msg = <-inChan:
+		case msg, ok = <-inChan:
+			if !ok {
+				utils.Logger.Info("inChan closed")
+				return
+			}
 		}
 
 		if nfork != 1 {

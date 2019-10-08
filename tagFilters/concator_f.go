@@ -69,13 +69,21 @@ func (c *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCfg
 			select {
 			case <-ctx.Done():
 				return
-			case msg = <-inChan:
+			case msg, ok = <-inChan:
+				if !ok {
+					utils.Logger.Info("inChan closed")
+					return
+				}
 			}
 		} else {
 			select {
 			case <-ctx.Done():
 				return
-			case msg = <-inChan:
+			case msg, ok = <-inChan:
+				if !ok {
+					utils.Logger.Info("inChan closed")
+					return
+				}
 			default: // no new msg
 				for identifier, pmsg = range c.slot {
 					if utils.Clock.GetUTCNow().Sub(pmsg.lastT) > concatTimeoutTs { // timeout to flush

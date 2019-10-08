@@ -92,6 +92,7 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 			var (
 				filter AcceptorFilterItf
 				msg    *libs.FluentMsg
+				ok     bool
 			)
 			defer utils.Logger.Info("quit acceptorPipeline asyncChan", zap.String("last_msg", fmt.Sprint(msg)))
 
@@ -100,8 +101,16 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 				select {
 				case <-ctx.Done():
 					return
-				case msg = <-f.reEnterChan: // CAUTION: do not put msg into reEnterChan forever
-				case msg = <-asyncInChan:
+				case msg, ok = <-f.reEnterChan: // CAUTION: do not put msg into reEnterChan forever
+					if !ok {
+						utils.Logger.Info("reEnterChan closed")
+						return
+					}
+				case msg, ok = <-asyncInChan:
+					if !ok {
+						utils.Logger.Info("asyncInChan closed")
+						return
+					}
 				}
 				f.counter.Count()
 

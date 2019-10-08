@@ -74,6 +74,7 @@ func (s *FluentSender) Spawn(ctx context.Context, tag string) chan<- *libs.Fluen
 				encoder          *libs.FluentEncoder
 				conn             net.Conn
 				err              error
+				ok               bool
 			)
 
 		RECONNECT: // reconnect to downstream
@@ -91,7 +92,11 @@ func (s *FluentSender) Spawn(ctx context.Context, tag string) chan<- *libs.Fluen
 				select {
 				case <-ctx.Done():
 					return
-				case msg = <-inChan:
+				case msg, ok = <-inChan:
+					if !ok {
+						utils.Logger.Info("inChan closed")
+						return
+					}
 				}
 
 				if msg != nil {

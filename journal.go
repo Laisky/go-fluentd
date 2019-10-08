@@ -283,6 +283,7 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 			nRetry   = 0
 			maxRetry = 2
 			msg      *libs.FluentMsg
+			ok       bool
 		)
 
 		chani, ok := j.tag2JJCommitChanMap.Load(tag)
@@ -290,12 +291,16 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 			utils.Logger.Panic("tag must in `j.tag2JJCommitChanMap`", zap.String("tag", tag))
 		}
 
+		defer utils.Logger.Info("journal ids writer exit")
 		for {
 			select {
 			case <-ctx.Done():
-				utils.Logger.Info("journal ids writer exit")
 				return
-			case msg = <-chani.(chan *libs.FluentMsg):
+			case msg, ok = <-chani.(chan *libs.FluentMsg):
+				if !ok {
+					utils.Logger.Info("tag2JJCommitChan closed", zap.String("tag", tag))
+					return
+				}
 			}
 
 			nRetry = 0
@@ -336,6 +341,7 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 			err      error
 			nRetry   = 0
 			maxRetry = 2
+			ok       bool
 			msg      *libs.FluentMsg
 		)
 		chani, ok := j.tag2JJInchanMap.Load(tag)
@@ -343,12 +349,16 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 			utils.Logger.Panic("tag should in `j.tag2JJInchanMap`", zap.String("tag", tag))
 		}
 
+		defer utils.Logger.Info("journal data writer exit", zap.String("msg", fmt.Sprint(msg)))
 		for {
 			select {
 			case <-ctx.Done():
-				utils.Logger.Info("journal data writer exit")
 				return
-			case msg = <-chani.(chan *libs.FluentMsg):
+			case msg, ok = <-chani.(chan *libs.FluentMsg):
+				if !ok {
+					utils.Logger.Info("tag2JJInchan closed", zap.String("tag", tag))
+					return
+				}
 			}
 
 			data.ID = msg.Id
@@ -425,13 +435,20 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 
 	// deal with msgs that skip dump
 	go func() {
-		defer utils.Logger.Info("skipDumpChan goroutine exit")
-		var msg *libs.FluentMsg
+		var (
+			msg *libs.FluentMsg
+			ok  bool
+		)
+		defer utils.Logger.Info("skipDumpChan goroutine exit", zap.String("msg", fmt.Sprint(msg)))
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case msg = <-skipDumpChan:
+			case msg, ok = <-skipDumpChan:
+				if !ok {
+					utils.Logger.Info("skipDumpChan closed")
+					return
+				}
 			}
 
 			j.outChan <- msg
@@ -439,17 +456,21 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 	}()
 
 	go func() {
-		defer utils.Logger.Info("legacy dumper exit")
 		var (
 			ok  bool
 			jji interface{}
 			msg *libs.FluentMsg
 		)
+		defer utils.Logger.Info("legacy dumper exit", zap.String("msg", fmt.Sprint(msg)))
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case msg = <-dumpChan:
+			case msg, ok = <-dumpChan:
+				if !ok {
+					utils.Logger.Info("dumpChan closed")
+					return
+				}
 			}
 
 			utils.Logger.Debug("try to dump msg", zap.String("tag", msg.Tag))
@@ -480,17 +501,21 @@ func (j *Journal) GetCommitChan() chan<- *libs.FluentMsg {
 
 func (j *Journal) startCommitRunner(ctx context.Context) {
 	go func() {
-		defer utils.Logger.Info("id commitor exit")
 		var (
 			ok    bool
 			chani interface{}
 			msg   *libs.FluentMsg
 		)
+		defer utils.Logger.Info("id commitor exit", zap.String("msg", fmt.Sprint(msg)))
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case msg = <-j.commitChan:
+			case msg, ok = <-j.commitChan:
+				if !ok {
+					utils.Logger.Info("commitChan closed")
+					return
+				}
 			}
 
 			utils.Logger.Debug("try to commit msg",

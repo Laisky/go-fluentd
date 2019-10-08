@@ -134,7 +134,6 @@ func (p *Producer) DiscardMsg(pmsg *ProducerPendingDiscardMsg) {
 }
 
 func (p *Producer) RunMsgCollector(ctx context.Context, tag2NSender *sync.Map, discardChan chan *libs.FluentMsg) {
-	defer utils.Logger.Info("msg collector exit")
 	var (
 		cntToDiscard int
 		ok, isCommit bool
@@ -142,14 +141,23 @@ func (p *Producer) RunMsgCollector(ctx context.Context, tag2NSender *sync.Map, d
 		msg          *libs.FluentMsg
 		pmsg         *ProducerPendingDiscardMsg
 	)
+	defer utils.Logger.Info("msg collector exit", zap.String("msg", fmt.Sprint(msg)))
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case msg = <-p.discardChan:
+		case msg, ok = <-p.discardChan:
+			if !ok {
+				utils.Logger.Info("discardChan closed")
+				return
+			}
 			isCommit = true
-		case msg = <-p.discardWithoutCommitChan:
+		case msg, ok = <-p.discardWithoutCommitChan:
+			if !ok {
+				utils.Logger.Info("discardWithoutCommitChan closed")
+				return
+			}
 			isCommit = false
 		}
 
@@ -193,7 +201,6 @@ func (p *Producer) Run(ctx context.Context) {
 	go p.RunMsgCollector(ctx, p.tag2NSender, p.discardChan)
 	for i := 0; i < p.NFork; i++ {
 		go func(i int) {
-			defer utils.Logger.Info("producer exit", zap.Int("i", i))
 			var (
 				ok, isSkip    bool
 				s             senders.SenderItf
@@ -202,11 +209,16 @@ func (p *Producer) Run(ctx context.Context) {
 				nSender       int
 				msg           *libs.FluentMsg
 			)
+			defer utils.Logger.Info("producer exit", zap.Int("i", i), zap.String("msg", fmt.Sprint(msg)))
 			for {
 				select {
 				case <-ctx.Done():
 					return
-				case msg = <-p.InChan:
+				case msg, ok = <-p.InChan:
+					if !ok {
+						utils.Logger.Info("InChan closed")
+						return
+					}
 				}
 
 				// utils.Logger.Info(fmt.Sprintf("send msg %p", msg))

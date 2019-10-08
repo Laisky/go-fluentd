@@ -136,12 +136,13 @@ func (r *KafkaRecv) Run(ctx context.Context) {
 					zap.Duration("intervalduration", r.IntervalDuration),
 					zap.String("group", r.Group))
 
+				msgChan := cli.Messages(ctx)
 			CONSUMER_LOOP:
 				for { // receive new kmsg, and convert to fluent msg
 					select {
 					case <-ctx2Consumer.Done():
 						break CONSUMER_LOOP
-					case kmsg, ok = <-cli.Messages(ctx):
+					case kmsg, ok = <-msgChan:
 						if !ok {
 							utils.Logger.Info("consumer break")
 							cancel()
@@ -151,6 +152,7 @@ func (r *KafkaRecv) Run(ctx context.Context) {
 
 					utils.Logger.Debug("got new message from kafka",
 						zap.Int("n", i),
+						zap.Int32("partition", kmsg.Partition),
 						zap.ByteString("msg", kmsg.Message),
 						zap.String("name", r.GetName()))
 					if msg, err = r.parse2Msg(kmsg); err != nil {

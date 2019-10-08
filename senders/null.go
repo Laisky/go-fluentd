@@ -62,13 +62,20 @@ func (s *NullSender) Spawn(ctx context.Context, tag string) chan<- *libs.FluentM
 
 	for i := 0; i < s.NFork; i++ {
 		go func() {
-			defer utils.Logger.Info("null sender exit")
-			var msg *libs.FluentMsg
+			var (
+				msg *libs.FluentMsg
+				ok  bool
+			)
+			defer utils.Logger.Info("null sender exit", zap.String("msg", fmt.Sprint("msg", msg)))
 			for {
 				select {
 				case <-ctx.Done():
 					return
-				case msg = <-inChan:
+				case msg, ok = <-inChan:
+					if !ok {
+						utils.Logger.Info("inChan closed")
+						return
+					}
 				}
 
 				switch s.LogLevel {

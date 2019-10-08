@@ -82,6 +82,7 @@ func (s *KafkaSender) Spawn(ctx context.Context, tag string) chan<- *libs.Fluent
 				err               error
 				j                 int
 				msg               *libs.FluentMsg
+				ok                bool
 			)
 
 			for j = 0; j < s.BatchSize; j++ {
@@ -102,7 +103,11 @@ func (s *KafkaSender) Spawn(ctx context.Context, tag string) chan<- *libs.Fluent
 				select {
 				case <-ctx.Done():
 					return
-				case msg = <-inChan:
+				case msg, ok = <-inChan:
+					if !ok {
+						utils.Logger.Info("inChan closed")
+						return
+					}
 				}
 
 				if msg != nil {

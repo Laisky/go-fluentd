@@ -50,19 +50,28 @@ func (f *PostPipeline) Wrap(ctx context.Context, inChan chan *libs.FluentMsg) (o
 
 	for i := 0; i < f.NFork; i++ {
 		go func(i int) {
-			defer utils.Logger.Info("quit postPipeline", zap.Int("i", i))
-
 			var (
 				filter PostFilterItf
 				msg    *libs.FluentMsg
+				ok     bool
 			)
+			defer utils.Logger.Info("quit postPipeline", zap.Int("i", i), zap.String("msg", fmt.Sprint(msg)))
+
 		NEW_MSG:
 			for {
 				select {
 				case <-ctx.Done():
 					return
-				case msg = <-f.reEnterChan:
-				case msg = <-inChan:
+				case msg, ok = <-f.reEnterChan:
+					if !ok {
+						utils.Logger.Info("reEnterChan closed")
+						return
+					}
+				case msg, ok = <-inChan:
+					if !ok {
+						utils.Logger.Info("inChan closed")
+						return
+					}
 				}
 
 				for _, filter = range f.filters {

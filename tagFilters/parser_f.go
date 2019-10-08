@@ -47,7 +47,11 @@ func (f *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.Fl
 		select {
 		case <-ctx.Done():
 			return
-		case msg = <-inChan:
+		case msg, ok = <-inChan:
+			if !ok {
+				utils.Logger.Info("inChan closed")
+				return
+			}
 		}
 
 		if !f.IsTagSupported(msg.Tag) {

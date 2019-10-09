@@ -2,6 +2,14 @@
 
 Rewrite fluentd-server by Golang, Higher performance with less resource requirement.
 
+* At-Least-Once guarantee(disk WAL)
+* log concatenation by head regexp expression
+* log parsing by regexp expression(support embedded json)
+* log filter by custom plugins(acceptorFilters & tagFilters)
+* multiple receivers(support multiple protocols: msgpack, http, syslog, kafka, ...)
+* multiple senders(support multiple backend: elasticsearch, fluentd, ...)
+* multiple environments deployment(`--env`: sit, perf, uat, prod)
+
 ![GitHub release](https://img.shields.io/github/release/Laisky/go-fluentd.svg)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://travis-ci.org/Laisky/go-fluentd.svg?branch=master)](https://travis-ci.org/Laisky/go-fluentd)
@@ -10,7 +18,7 @@ Rewrite fluentd-server by Golang, Higher performance with less resource requirem
 [![Go Report Card](https://goreportcard.com/badge/github.com/Laisky/go-fluentd)](https://goreportcard.com/report/github.com/Laisky/go-fluentd)
 [![GoDoc](https://godoc.org/github.com/Laisky/go-fluentd?status.svg)](https://godoc.org/github.com/Laisky/go-fluentd)
 
-Ready for production.
+Already running on our PRODUCION since 2018/9.
 
 
 Documents:

@@ -122,9 +122,7 @@ func (r *FluentdRecv) Run(ctx context.Context) {
 		}
 
 		utils.Logger.Info("accept new connection", zap.String("remote", conn.RemoteAddr().String()))
-		go func(conn net.Conn) {
-			r.decodeMsg(conn)
-		}(conn)
+		go r.decodeMsg(conn)
 	}
 }
 

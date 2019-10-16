@@ -280,7 +280,7 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 		var (
 			mid      int64
 			err      error
-			nRetry   = 0
+			nRetry   int
 			maxRetry = 2
 			msg      *libs.FluentMsg
 			ok       bool
@@ -339,7 +339,7 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 		var (
 			data     = &journal.Data{Data: map[string]interface{}{}}
 			err      error
-			nRetry   = 0
+			nRetry   int
 			maxRetry = 2
 			ok       bool
 			msg      *libs.FluentMsg

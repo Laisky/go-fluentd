@@ -95,7 +95,7 @@ func (p *Producer) registerMonitor() {
 	lastT := time.Now()
 	monitor.AddMetric("producer", func() map[string]interface{} {
 		metrics := map[string]interface{}{
-			"msgPerSec": utils.Round(float64(p.counter.Get())/(time.Now().Sub(lastT).Seconds()), .5, 1),
+			"msgPerSec": utils.Round(float64(p.counter.Get())/(time.Since(lastT).Seconds()), .5, 1),
 		}
 		p.counter.Set(0)
 		lastT = time.Now()

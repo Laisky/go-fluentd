@@ -12,7 +12,7 @@ const BufByte = 1024 * 1024 * 4
 
 var fluentdWrapMsgPool = &sync.Pool{
 	New: func() interface{} {
-		return []interface{}{0, nil}
+		return &[]interface{}{0, nil}
 	},
 }
 
@@ -51,7 +51,7 @@ func (e *FluentEncoder) EncodeBatch(tag string, msgBatch []*FluentMsg) (err erro
 	e.batchWrap[1] = e.batchWrap[1].([]interface{})[:0]
 	var tmpWrap []interface{}
 	for _, tmpMsg := range msgBatch {
-		tmpWrap = fluentdWrapMsgPool.Get().([]interface{})
+		tmpWrap = *fluentdWrapMsgPool.Get().(*[]interface{})
 		tmpWrap[1] = tmpMsg.Message
 		e.batchWrap[1] = append(e.batchWrap[1].([]interface{}), tmpWrap)
 	}
@@ -61,7 +61,7 @@ func (e *FluentEncoder) EncodeBatch(tag string, msgBatch []*FluentMsg) (err erro
 	// recycle
 	for _, tmpWrapI := range e.batchWrap[1].([]interface{}) {
 		tmpWrap = tmpWrapI.([]interface{})
-		fluentdWrapMsgPool.Put(tmpWrap)
+		fluentdWrapMsgPool.Put(&tmpWrap)
 	}
 
 	return err

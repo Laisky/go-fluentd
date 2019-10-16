@@ -20,10 +20,12 @@ Rewrite fluentd-server by Golang, Higher performance with less resource requirem
 
 Already running on our PRODUCION since 2018/9.
 
+When processing 400mbps logs flood: ![cpu](https://s3.laisky.com/uploads/2019/10/fluentd-cpu.jpg)
+
 
 Documents:
 
-- [中文文档](docs/README_cn.md)
+- [中文文档](https://blog.laisky.com/p/go-fluentd/)
 - [Quick Start](docs/quickstart.md)
 - [Build with Docker](.docker)
 

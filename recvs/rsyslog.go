@@ -12,16 +12,29 @@ import (
 	"github.com/Laisky/zap"
 )
 
-func NewRsyslogSrv(addr string) (*syslog.Server, syslog.LogPartsChannel) {
-	inchan := make(syslog.LogPartsChannel, 1000)
-	handler := syslog.NewChannelHandler(inchan)
+var (
+	defaultRetryWait = 3 * time.Second
+)
 
-	server := syslog.NewServer()
+func NewRsyslogSrv(addr string) (*syslog.Server, syslog.LogPartsChannel, error) {
+	var (
+		inchan  = make(syslog.LogPartsChannel, 1000)
+		handler = syslog.NewChannelHandler(inchan)
+		server  = syslog.NewServer()
+		err     error
+	)
+
 	server.SetFormat(syslog.Automatic)
 	server.SetHandler(handler)
-	server.ListenUDP(addr)
-	server.ListenTCP(addr)
-	return server, inchan
+	if err = server.ListenUDP(addr); err != nil {
+		utils.Logger.Error("listen udp", zap.Error(err), zap.String("addr", addr))
+		return nil, nil, err
+	}
+	if err = server.ListenTCP(addr); err != nil {
+		utils.Logger.Error("listen tcp", zap.Error(err), zap.String("addr", addr))
+		return nil, nil, err
+	}
+	return server, inchan, nil
 }
 
 type RsyslogCfg struct {
@@ -53,22 +66,26 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 		defer utils.Logger.Info("rsyslog reciver exit", zap.String("name", r.GetName()))
 		var (
 			ok      bool
-			err     error
 			msg     *libs.FluentMsg
 			tag     = "emqtt." + r.Env
 			logPart format.LogParts
 			ctx2Srv context.Context
 			cancel  func()
 		)
+	SERVER_LOOP:
 		for {
 			select {
 			case <-ctx.Done():
-				return
+				break SERVER_LOOP
 			default:
 			}
 
-			ctx2Srv, cancel = context.WithCancel(ctx)
-			srv, inchan := NewRsyslogSrv(r.Addr)
+			srv, inchan, err := NewRsyslogSrv(r.Addr)
+			if err != nil {
+				utils.Logger.Error("new rsyslog server", zap.String("addr", r.Addr), zap.Error(err))
+				time.Sleep(defaultRetryWait)
+				continue SERVER_LOOP
+			}
 			utils.Logger.Info("listening rsyslog", zap.String("addr", r.Addr))
 			if err = srv.Boot(&syslog.BLBCfg{
 				ACK: []byte{},
@@ -78,6 +95,8 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 				cancel()
 				continue
 			}
+
+			ctx2Srv, cancel = context.WithCancel(ctx)
 			go func(srv *syslog.Server, cancel func()) {
 				srv.Wait()
 				cancel()

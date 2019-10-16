@@ -97,36 +97,48 @@ func (r *FluentdRecv) GetName() string {
 // Run starting this recv
 func (r *FluentdRecv) Run(ctx context.Context) {
 	utils.Logger.Info("run FluentdRecv")
-	var (
-		conn net.Conn
-	)
+	defer utils.Logger.Info("fluentd recv exist", zap.String("name", r.GetName()))
+	var conn net.Conn
 
-	utils.Logger.Info("listening on tcp...", zap.String("addr", r.Addr))
-	ln, err := net.Listen("tcp", r.Addr)
-	if err != nil {
-		utils.Logger.Error("try to bind addr got error", zap.Error(err))
-	}
-
-	defer utils.Logger.Info("fluentd recv exit")
+LISTENER_LOOP:
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			break LISTENER_LOOP
 		default:
 		}
 
-		conn, err = ln.Accept()
+		utils.Logger.Info("listening on tcp...", zap.String("addr", r.Addr))
+		ln, err := net.Listen("tcp", r.Addr)
 		if err != nil {
-			utils.Logger.Error("try to accept connection got error", zap.Error(err))
-			continue
+			utils.Logger.Error("try to bind addr got error", zap.Error(err))
 		}
 
-		utils.Logger.Info("accept new connection", zap.String("remote", conn.RemoteAddr().String()))
-		go r.decodeMsg(conn)
+	ACCEPT_LOOP:
+		for {
+			select {
+			case <-ctx.Done():
+				break ACCEPT_LOOP
+			default:
+			}
+
+			conn, err = ln.Accept()
+			if err != nil {
+				utils.Logger.Error("try to accept connection got error", zap.Error(err))
+				break ACCEPT_LOOP
+			}
+
+			utils.Logger.Info("accept new connection", zap.String("remote", conn.RemoteAddr().String()))
+			go r.decodeMsg(ctx, conn)
+		}
+
+		utils.Logger.Info("close listener", zap.String("addr", r.Addr))
+		ln.Close()
 	}
 }
 
-func (r *FluentdRecv) decodeMsg(conn net.Conn) {
+func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
+	defer utils.Logger.Info("connection closed", zap.String("name", r.GetName()))
 	defer conn.Close()
 	var (
 		reader = msgp.NewReader(conn)
@@ -145,8 +157,16 @@ func (r *FluentdRecv) decodeMsg(conn net.Conn) {
 	)
 
 	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
 		if err = v.DecodeMsg(reader); err == eof {
-			utils.Logger.Info("connection closed", zap.String("remote", conn.RemoteAddr().String()))
+			utils.Logger.Info("remote closed",
+				zap.String("name", r.GetName()),
+				zap.String("remote", conn.RemoteAddr().String()))
 			r.closeConcatCtx(conCtx)
 			return
 		} else if err != nil {

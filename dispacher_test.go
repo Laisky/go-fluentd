@@ -2,8 +2,6 @@ package concator_test
 
 import (
 	"testing"
-
-	utils "github.com/Laisky/go-utils"
 )
 
 func TestFor(t *testing.T) {
@@ -12,8 +10,4 @@ func TestFor(t *testing.T) {
 		i++
 	}
 	t.Log(i)
-}
-
-func init() {
-	utils.Settings.Setup("/Users/laisky/repo/pateo/configs/go-fluentd")
 }

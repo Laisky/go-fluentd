@@ -19,10 +19,6 @@ import (
 	"github.com/Laisky/zap"
 )
 
-var (
-	ctxKey = utils.CtxKeyT{}
-)
-
 // Controllor is an IoC that manage all roles
 type Controllor struct {
 	msgPool *sync.Pool
@@ -37,7 +33,7 @@ func NewControllor() (c *Controllor) {
 			New: func() interface{} {
 				return &libs.FluentMsg{
 					// Message: map[string]interface{}{},
-					Id: -1,
+					// Id: -1,
 				}
 			},
 		},
@@ -496,7 +492,6 @@ func (c *Controllor) runHeartBeat(ctx context.Context) {
 		utils.Logger.Info("heartbeat",
 			zap.Int("goroutine", runtime.NumGoroutine()),
 		)
-		utils.Logger.Sync()
 		time.Sleep(utils.Settings.GetDuration("heartbeat") * time.Second)
 	}
 }
@@ -556,5 +551,5 @@ func (c *Controllor) Run(ctx context.Context) {
 	monitor.BindHTTP(server)
 
 	go producer.Run(ctx)
-	RunServer(utils.Settings.GetString("addr"))
+	RunServer(ctx, utils.Settings.GetString("addr"))
 }

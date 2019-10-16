@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-fluentd/monitor"
@@ -25,12 +24,6 @@ type AcceptorPipeline struct {
 	reEnterChan chan *libs.FluentMsg
 	counter     *utils.Counter
 	throttle    *utils.Throttle
-}
-
-// PendingMsg is the message wait tobe concatenate
-type PendingMsg struct {
-	msg   *libs.FluentMsg
-	lastT time.Time
 }
 
 func NewAcceptorPipeline(cfg *AcceptorPipelineCfg, filters ...AcceptorFilterItf) *AcceptorPipeline {
@@ -84,7 +77,7 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 	skipDumpChan = make(chan *libs.FluentMsg, f.OutChanSize)
 
 	if f.IsThrottle {
-		f.throttle.Run()
+		f.throttle.RunWithCtx(ctx)
 	}
 
 	for i := 0; i < f.NFork; i++ {

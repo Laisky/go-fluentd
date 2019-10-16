@@ -1,4 +1,4 @@
-<https://blog.laisky.com/p/go-fluentd/>
+请阅读：<https://blog.laisky.com/p/go-fluentd/>
 
 # 使用 Golang 写一个取代 fluentd 的日志处理器
 

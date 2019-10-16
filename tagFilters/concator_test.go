@@ -3,30 +3,7 @@ package tagFilters_test
 import (
 	"regexp"
 	"testing"
-
-	"github.com/Laisky/go-fluentd/libs"
-	"github.com/Laisky/go-fluentd/tagFilters"
 )
-
-type Factory struct {
-	*tagFilters.BaseTagFilterFactory
-}
-
-func (f *Factory) DiscardMsg(msg *libs.FluentMsg) {
-
-}
-
-func (f *Factory) GetName() string {
-	return "TestFactory"
-}
-
-func (f *Factory) IsTagSupported(tag string) bool {
-	return true
-}
-
-func (f *Factory) Spawn(tag string, outChan chan<- *libs.FluentMsg) chan<- *libs.FluentMsg {
-	return make(chan *libs.FluentMsg, 1000)
-}
 
 // func BenchmarkConcator(b *testing.B) {
 // 	// utils.SetupLogger("debug")

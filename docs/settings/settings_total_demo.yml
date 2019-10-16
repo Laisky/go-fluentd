@@ -2,6 +2,7 @@ consts:
   ports:
     "18083": rsyslog recv
     "22800": http
+    "24224": fluentd for k8s
     "24225": fluentd recv
     "24226": forward recv
   kafka:
@@ -33,6 +34,7 @@ consts:
       - fluentd-forward
       - usertracking
       - bigdata-wuling
+      - kube-nginx
   envs:
     all-env: &all-env
       - sit
@@ -63,13 +65,21 @@ settings:
         #   tag_key: tag
         #   name: wechat-mini-program
         #   path: "/api/v1/log/wechat/:env"
+        fluentd-k8s:
+          type: fluentd
+          active_env: *all-env
+          tag_key: tag
+          addr: 0.0.0.0:24224
+          is_rewrite_tag_from_tag_key: true
+          origin_rewrite_tag_key: app-log-tag
+          concat_max_len: 100000
         fluentd:
           type: fluentd
           active_env: *all-env
           tag_key: tag
           addr: 0.0.0.0:24225
           is_rewrite_tag_from_tag_key: false
-          concat_max_len: 100000
+          concat_max_len: 300000
           concat:
             test:
               msg_key: log
@@ -143,6 +153,7 @@ settings:
           tag_key: tag
           addr: 0.0.0.0:24226
           is_rewrite_tag_from_tag_key: true
+          origin_rewrite_tag_key: tag
         rsyslog:
           type: rsyslog
           active_env: *all-env
@@ -152,6 +163,31 @@ settings:
           msg_key: content
           new_time_key: "@timestamp"
           new_time_format: "2006-01-02T15:04:05.000Z"
+        bigdata_wulin:
+          type: kafka
+          active_env:
+            - sit
+            - prod
+          interval_num: 5000
+          interval_sec: 3
+          nconsumer: 6
+          # msg_key: log
+          tag_key: tag
+          is_json_format: true
+          meta:
+            container_id: "@RANDOM_STRING"
+          groups:
+            sit: paas_logsrv_sit
+            prod: paas_logsrv_prod
+          topics:
+            sit: Datamining_wuling
+            prod: Datamining_wuling
+          tags:
+            sit: bigdata-wuling.sit
+            prod: bigdata-wuling.prod
+          brokers:
+            sit: *1-1-1-1-9092
+            prod: *2-2-2-2-9092
         spark:
           type: kafka
           active_env: *all-env
@@ -162,7 +198,7 @@ settings:
           tag_key: tag
           is_json_format: false
           meta:
-            container_id: "go-fluentd"
+            container_id: "@RANDOM_STRING"
           groups:
             sit: paas_spark_log_sit_v2
             uat: paas_spark_log_uat_v2
@@ -211,7 +247,6 @@ settings:
             perf: usertracking.perf
             prod: usertracking.prod
           brokers:
-            sit: *1-1-1-1-9092
             uat: *1-1-1-1-9092
             perf: *1-1-1-1-9092
             prod: *2-2-2-2-9092
@@ -248,80 +283,80 @@ settings:
     # senders
     # support types: fluentd/kafka/es
     plugins:
-      localtest:
+      # localtest:
+      #   active_env: *all-env
+      #   tags: *all-tags
+      #   type: "null"
+      #   forks: 5
+      #   log_level: info
+      #   is_commit: true
+      #   is_discard_when_blocked: false
+      es_general:
+        type: es
         active_env: *all-env
-        tags: *all-tags
-        type: "null"
-        forks: 5
-        log_level: info
-        is_commit: true
+        tags:
+          # - es-general
+          # - test
+          - app.spring
+          - gateway
+          - connector
+          - qingai
+          - cp
+          - ptdeployer
+          - fluentd-forward
+          - httpguard
+          - ramjet
+          - tsp
+          - ai
+          - base
+          - bot
+          - spark
+          - emqtt
+          # - kafkabuf
+          - wechat
+          - usertracking
+          - bigdata-wuling
+        forks: 3
+        addr: http://es/_bulk
+        msg_batch_size: 500
+        max_wait_sec: 5
+        tag_key: tag
+        retry_chan_len: 10000
+        indices:
+          ramjet.{env}: "{env}-spring-logs-write"
+          httpguard.{env}: "{env}-spring-logs-write"
+          fluentd-forward.{env}: "{env}-spring-logs-write"
+          app.spring.{env}: "{env}-spring-logs-write"
+          gateway.{env}: "{env}-gateway-logs-write"
+          connector.{env}: "{env}-connector-logs-write"
+          qingai.{env}: "{env}-qingai-logs-write"
+          cp.{env}: "{env}-cp-logs-write"
+          ptdeployer.{env}: "{env}-spring-logs-write"
+          tsp.{env}: "{env}-spring-logs-write"
+          ai.{env}: "{env}-spring-logs-write"
+          base.{env}: "{env}-spring-logs-write"
+          bot.{env}: "{env}-spring-logs-write"
+          spark.{env}: "{env}-spark-logs-write"
+          emqtt.{env}: "{env}-emqtt-logs-write"
+          wechat.{env}: "{env}-wechat-logs-write"
+          usertracking.{env}: "{env}-usertracking-logs-write"
+          bigdata-wuling.{env}: "{env}-bigdata_wuling-logs-write"
         is_discard_when_blocked: false
-      # es_general:
-      #   type: es
-      #   active_env: *all-env
-      #   tags:
-      #     # - es-general
-      #     # - test
-      #     - app.spring
-      #     - gateway
-      #     - connector
-      #     - qingai
-      #     - cp
-      #     - ptdeployer
-      #     - fluentd-forward
-      #     - httpguard
-      #     - ramjet
-      #     - tsp
-      #     - ai
-      #     - base
-      #     - bot
-      #     - spark
-      #     - emqtt
-      #     # - kafkabuf
-      #     - wechat
-      #     - usertracking
-      #     - bigdata-wuling
-      #   forks: 3
-      #   addr: http://es/_bulk
-      #   msg_batch_size: 1000
-      #   max_wait_sec: 3
-      #   tag_key: tag
-      #   retry_chan_len: 10000
-      #   indices:
-      #     ramjet.{env}: "{env}-spring-logs-write"
-      #     httpguard.{env}: "{env}-spring-logs-write"
-      #     fluentd-forward.{env}: "{env}-spring-logs-write"
-      #     app.spring.{env}: "{env}-spring-logs-write"
-      #     gateway.{env}: "{env}-gateway-logs-write"
-      #     connector.{env}: "{env}-connector-logs-write"
-      #     qingai.{env}: "{env}-qingai-logs-write"
-      #     cp.{env}: "{env}-cp-logs-write"
-      #     ptdeployer.{env}: "{env}-spring-logs-write"
-      #     tsp.{env}: "{env}-spring-logs-write"
-      #     ai.{env}: "{env}-spring-logs-write"
-      #     base.{env}: "{env}-spring-logs-write"
-      #     bot.{env}: "{env}-spring-logs-write"
-      #     spark.{env}: "{env}-spark-logs-write"
-      #     emqtt.{env}: "{env}-emqtt-logs-write"
-      #     wechat.{env}: "{env}-wechat-logs-write"
-      #     usertracking.{env}: "{env}-usertracking-logs-write"
-      #     bigdata-wuling.{env}: "{env}-bigdata_wuling-logs-write"
-      #   is_discard_when_blocked: false
-      # es_geely_v2:
-      #   type: es
-      #   active_env: *all-env
-      #   tags:
-      #     # - es-geely
-      #     - geely
-      #   forks: 10
-      #   addr: http://es/_bulk
-      #   msg_batch_size: 1000
-      #   max_wait_sec: 3
-      #   tag_key: tag
-      #   retry_chan_len: 10000
-      #   indices:
-      #     geely.{env}: "{env}-geely-logs-write"
-      #   is_discard_when_blocked: false
+      es_geely_v2:
+        type: es
+        active_env: *all-env
+        tags:
+          # - es-geely
+          - geely
+        forks: 10
+        addr: http://es/_bulk
+        msg_batch_size: 1000
+        max_wait_sec: 3
+        tag_key: tag
+        retry_chan_len: 10000
+        indices:
+          geely.{env}: "{env}-geely-logs-write"
+        is_discard_when_blocked: false
       # kafkabuf:
       #   type: es
       #   active_env: *all-env
@@ -354,52 +389,54 @@ settings:
       #   max_wait_sec: 5
       #   retry_chan_len: 100000
       #   is_discard_when_blocked: false
-      # kafka_cp:
-      #   type: kafka
-      #   active_env: *all-env
-      #   tag_key: tag
-      #   brokers:
-      #   sit: *1-1-1-1-9092
-      #   perf: *1-1-1-1-9092
-      #   uat: *1-1-1-1-9092
-      #   prod: *2-2-2-2-9092
-      #   topic: docker_message
-      #   tags:
-      #     - cp
-      #   forks: 3
-      #   msg_batch_size: 10000
-      #   max_wait_sec: 5
-      #   retry_chan_len: 100000
-      #   is_discard_when_blocked: false
-      # fluentd_backup_geely:
-      #   type: fluentd
-      #   active_env:
-      #     - prod
-      #   tags:
-      #     - geely.prod
-      #   forks: 3
-      #   addr: fluentd-sit.ptcloud.t.home:24235
-      #   msg_batch_size: 10000
-      #   max_wait_sec: 5
-      #   retry_chan_len: 50000
-      #   is_discard_when_blocked: true
-      # fluentd_backup_emqtt:
-      #   type: fluentd
-      #   active_env:
-      #     - prod
-      #   tags:
-      #     - emqtt.prod
-      #   forks: 3
-      #   addr: fluentd-sit.ptcloud.t.home:24236
-      #   msg_batch_size: 10000
-      #   max_wait_sec: 5
-      #   retry_chan_len: 50000
-      #   is_discard_when_blocked: true
+      kafka_cp:
+        type: kafka
+        active_env: *all-env
+        tag_key: tag
+        brokers:
+          sit: *1-1-1-1-9092
+          perf: *1-1-1-1-9092
+          uat: *1-1-1-1-9092
+          prod: *2-2-2-2-9092
+        topic: docker_message
+        tags:
+          - cp
+        forks: 3
+        msg_batch_size: 10000
+        max_wait_sec: 5
+        retry_chan_len: 100000
+        is_discard_when_blocked: false
+      fluentd_backup:
+        type: fluentd
+        active_env:
+          - prod
+        tags:
+          - geely.prod
+          # - tsp.prod
+        forks: 3
+        addr: fluentd-sit.ptcloud.t.home:24235
+        msg_batch_size: 10000
+        max_wait_sec: 5
+        retry_chan_len: 50000
+        is_discard_when_blocked: true
+      fluentd_backup_emqtt:
+        type: fluentd
+        active_env:
+          - prod
+        tags:
+          - emqtt.prod
+        forks: 3
+        addr: fluentd-sit.ptcloud.t.home:24236
+        msg_batch_size: 10000
+        max_wait_sec: 5
+        retry_chan_len: 50000
+        is_discard_when_blocked: true
   journal:
-    buf_dir_path: /Users/laisky/Downloads/buf
+    buf_dir_path: /data/log/fluentd/go-concator
     buf_file_bytes: 209315200  # 200 MB
     journal_out_chan_len: 100000
     commit_id_chan_len: 500000
+    committed_id_sec: 120
     is_compress: false
   acceptor_filters:
     out_buf_len: 150000
@@ -449,7 +486,7 @@ settings:
           - lat
           - rowkey
           - location
-          # - message
+          - message
         # exclude_fields:
         #   - container_id
         new_fields:
@@ -459,30 +496,30 @@ settings:
         type: custom-bigdata
         tags:
           - bigdata-wuling
-      es_dispatcher:
-        type: es-dispatcher
-        tags:
-          - kafkabuf
-        tag_key: tag
-        rewrite_tag_map:
-          # es-general
-          app.spring.{env}: es-general.{env}
-          gateway.{env}: es-general.{env}
-          connector.{env}: es-general.{env}
-          qingai.{env}: es-general.{env}
-          cp.{env}: es-general.{env}
-          ptdeployer.{env}: es-general.{env}
-          tsp.{env}: es-general.{env}
-          ai.{env}: es-general.{env}
-          base.{env}: es-general.{env}
-          bot.{env}: es-general.{env}
-          spark.{env}: es-general.{env}
-          emqtt.{env}: es-general.{env}
-          bigdata-wuling.{env}: es-general.{env}
-          # es-geely
-          geely.{env}: es-geely.{env}
+      # es_dispatcher:
+      #   type: es-dispatcher
+      #   tags:
+      #     - kafkabuf
+      #   tag_key: tag
+      #   rewrite_tag_map:
+      #     # es-general
+      #     app.spring.{env}: es-general.{env}
+      #     gateway.{env}: es-general.{env}
+      #     connector.{env}: es-general.{env}
+      #     qingai.{env}: es-general.{env}
+      #     cp.{env}: es-general.{env}
+      #     ptdeployer.{env}: es-general.{env}
+      #     tsp.{env}: es-general.{env}
+      #     ai.{env}: es-general.{env}
+      #     base.{env}: es-general.{env}
+      #     bot.{env}: es-general.{env}
+      #     spark.{env}: es-general.{env}
+      #     emqtt.{env}: es-general.{env}
+      #     bigdata-wuling.{env}: es-general.{env}
+      #     # es-geely
+      #     geely.{env}: es-geely.{env}
   dispatcher:
-    nfork: 2
+    nfork: 3
     out_chan_size: 10000
   tag_filters:
     internal_chan_size: 10000
@@ -513,7 +550,7 @@ settings:
       qingai:
         type: parser
         lb_key: container_id
-        nfork: 3
+        nfork: 4
         tags:
           - qingai
         msg_key: log
@@ -536,7 +573,7 @@ settings:
       connector:
         type: parser
         lb_key: container_id
-        nfork: 3
+        nfork: 4
         tags:
           - connector
           - gateway
@@ -563,7 +600,7 @@ settings:
       geely:
         type: parser
         lb_key: container_id
-        nfork: 3
+        nfork: 4
         tags:
           - geely
         msg_key: log
@@ -585,7 +622,7 @@ settings:
       bigdata-wuling:
         type: parser
         lb_key: container_id
-        nfork: 3
+        nfork: 4
         tags:
           - bigdata-wuling
         # ⬇⬇ time
@@ -602,7 +639,7 @@ settings:
       emqtt:
         type: parser
         lb_key: container_id
-        nfork: 1
+        nfork: 4
         tags:
           - emqtt
         add:
@@ -633,7 +670,7 @@ settings:
       usertracking:
         type: parser
         lb_key: container_id
-        nfork: 1
+        nfork: 4
         parse_json_key: log
         tags:
           - usertracking
@@ -679,7 +716,7 @@ settings:
       cp:
         type: parser
         lb_key: container_id
-        nfork: 1
+        nfork: 4
         tags:
           - cp
         msg_key: log
@@ -704,7 +741,7 @@ settings:
       spring:
         type: parser
         lb_key: container_id
-        nfork: 3
+        nfork: 4
         tags:
           - app.spring
           - ai
@@ -745,7 +782,7 @@ settings:
       #   config:
       #     max_length: 100000
       #     lb_key: container_id
-      #     nfork: 3
+      #     nfork: 4
       #   plugins:
       #     test:
       #       msg_key: log

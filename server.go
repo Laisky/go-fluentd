@@ -1,7 +1,9 @@
 package concator
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	middlewares "github.com/Laisky/go-utils/gin-middlewares"
 
@@ -13,14 +15,19 @@ import (
 )
 
 var (
-	server       = gin.New()
-	closeEvtChan = make(chan struct{})
+	server                   = gin.Default()
+	defaultGraceShutdownWait = 3 * time.Second
 )
 
 // RunServer starting http server
-func RunServer(addr string) {
+func RunServer(ctx context.Context, addr string) {
 	if !utils.Settings.GetBool("debug") {
 		gin.SetMode(gin.ReleaseMode)
+	}
+
+	httpSrv := http.Server{
+		Addr:    addr,
+		Handler: server,
 	}
 
 	server.Any("/health", func(ctx *gin.Context) {
@@ -33,5 +40,15 @@ func RunServer(addr string) {
 	middlewares.BindPrometheus(server)
 
 	utils.Logger.Info("listening on http", zap.String("addr", addr))
-	utils.Logger.Panic("server exit", zap.Error(server.Run(addr)))
+	go func() {
+		utils.Logger.Panic("server exit", zap.Error(httpSrv.ListenAndServe()))
+	}()
+
+	<-ctx.Done()
+	srvCtx, cancel := context.WithTimeout(ctx, defaultGraceShutdownWait)
+	defer cancel()
+	if err := httpSrv.Shutdown(srvCtx); err != nil {
+		utils.Logger.Error("shutdown monitor server", zap.Error(err))
+	}
+
 }

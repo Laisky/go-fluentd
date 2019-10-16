@@ -36,17 +36,17 @@ func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 			delete(msg.Message, k)
 		}
 
-		switch v.(type) {
+		switch v := v.(type) {
 		case []byte: // convert all bytes fields to string
-			msg.Message[k] = string(v.([]byte))
+			msg.Message[k] = string(v)
 		case string:
-			msg.Message[k] = v.(string)
+			msg.Message[k] = v
 		}
 
-		switch v.(type) {
+		switch v := v.(type) {
 		case string:
-			if len(msg.Message[k].(string)) > f.MaxLen {
-				msg.Message[k] = msg.Message[k].(string)[:f.MaxLen]
+			if len(v) > f.MaxLen {
+				msg.Message[k] = v[:f.MaxLen]
 			}
 		}
 	}

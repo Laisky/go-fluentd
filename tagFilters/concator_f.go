@@ -146,7 +146,7 @@ func (c *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCfg
 			continue
 		}
 
-		if pmsg, ok = c.slot[identifier]; !ok { // new identifier
+		if _, ok = c.slot[identifier]; !ok { // new identifier
 			// new line with incorrect format, skip
 			if !cfg.Regexp.Match(log) {
 				outChan <- msg
@@ -164,14 +164,16 @@ func (c *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCfg
 			continue
 		}
 
+		pmsg = c.slot[identifier]
+
 		// replace exists msg in slot
 		if cfg.Regexp.Match(log) { // new line
 			utils.Logger.Debug("got new line",
 				zap.ByteString("log", log),
 				zap.String("tag", msg.Tag))
-			outChan <- c.slot[identifier].msg
-			c.slot[identifier].msg = msg
-			c.slot[identifier].lastT = utils.Clock.GetUTCNow()
+			outChan <- pmsg.msg
+			pmsg.msg = msg
+			pmsg.lastT = utils.Clock.GetUTCNow()
 			continue
 		}
 
@@ -179,21 +181,21 @@ func (c *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCfg
 		utils.Logger.Debug("concat lines",
 			zap.String("tag", msg.Tag),
 			zap.ByteString("log", msg.Message[cfg.MsgKey].([]byte)))
-		// c.slot[identifier].msg.Message[cfg.MsgKey] =
-		// 	append(c.slot[identifier].msg.Message[cfg.MsgKey].([]byte), '\n')
-		c.slot[identifier].msg.Message[cfg.MsgKey] =
-			append(c.slot[identifier].msg.Message[cfg.MsgKey].([]byte), msg.Message[cfg.MsgKey].([]byte)...)
-		if c.slot[identifier].msg.ExtIds == nil {
-			c.slot[identifier].msg.ExtIds = []int64{} // create ids, wait to append tail-msg's id
+		// pmsg.msg.Message[cfg.MsgKey] =
+		// 	append(pmsg.msg.Message[cfg.MsgKey].([]byte), '\n')
+		pmsg.msg.Message[cfg.MsgKey] =
+			append(pmsg.msg.Message[cfg.MsgKey].([]byte), msg.Message[cfg.MsgKey].([]byte)...)
+		if pmsg.msg.ExtIds == nil {
+			pmsg.msg.ExtIds = []int64{} // create ids, wait to append tail-msg's id
 		}
-		c.slot[identifier].msg.ExtIds = append(c.slot[identifier].msg.ExtIds, msg.Id)
-		c.slot[identifier].lastT = utils.Clock.GetUTCNow()
+		pmsg.msg.ExtIds = append(pmsg.msg.ExtIds, msg.Id)
+		pmsg.lastT = utils.Clock.GetUTCNow()
 
 		// too long to send
-		if len(c.slot[identifier].msg.Message[cfg.MsgKey].([]byte)) >= c.MaxLen {
+		if len(pmsg.msg.Message[cfg.MsgKey].([]byte)) >= c.MaxLen {
 			utils.Logger.Debug("too long to send", zap.String("msgKey", cfg.MsgKey), zap.String("tag", msg.Tag))
-			outChan <- c.slot[identifier].msg
-			c.pMsgPool.Put(c.slot[identifier])
+			outChan <- pmsg.msg
+			c.pMsgPool.Put(pmsg)
 			delete(c.slot, identifier)
 		}
 

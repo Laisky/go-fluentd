@@ -37,13 +37,13 @@ func NewCustomBigDataFilter(cfg *CustomBigDataFilterCfg) *CustomBigDataFilter {
 }
 
 const (
-	tsKey            = "@timestamp"
-	timeFormat       = "2006-01-02T15:04:05.000Z"
-	rowkeyTimeFormat = "2006-01-02 15:04:05"
+	tsKey      = "@timestamp"
+	timeFormat = "2006-01-02T15:04:05.000Z"
+	// rowkeyTimeFormat = "2006-01-02 15:04:05"
 )
 
 var (
-	loc, _ = time.LoadLocation("Asia/Shanghai")
+// loc, _ = time.LoadLocation("Asia/Shanghai")
 )
 
 func (f *CustomBigDataFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {

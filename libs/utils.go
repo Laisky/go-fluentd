@@ -7,11 +7,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	jsoniter "github.com/json-iterator/go"
 )
 
-var json = jsoniter.ConfigCompatibleWithStandardLibrary
+// var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 func LoadTagsAppendEnv(env string, tags []string) []string {
 	ret := []string{}

@@ -153,7 +153,9 @@ func (r *HTTPRecv) validate(ctx *gin.Context, msg *libs.FluentMsg) bool {
 
 // BadRequest set bad http response
 func (r *HTTPRecv) BadRequest(ctx *gin.Context, msg string) {
-	ctx.AbortWithError(http.StatusBadRequest, fmt.Errorf(msg))
+	if err := ctx.AbortWithError(http.StatusBadRequest, fmt.Errorf(msg)); err != nil {
+		utils.Logger.Error("abort http", zap.Error(err), zap.String("msg", msg))
+	}
 }
 
 // HTTPLogHandler process log received by HTTP

@@ -4,6 +4,15 @@
 
 
 
+*v1.11.5*
+---
+
+- 2019-10-16 (Laisky) docs: update changelog
+- 2019-10-16 (Laisky) perf: tidy
+- 2019-10-15 (Laisky) test: fix ci lint
+- 2019-10-09 (Laisky) docs: update example settings
+- 2019-10-09 (Laisky) fix: fluentd decodeMsg with context
+
 *v1.11.4*
 ---
 

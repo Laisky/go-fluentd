@@ -9,7 +9,6 @@ import (
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
 )
 
 // SetupSettings setup arguments restored in viper
@@ -43,7 +42,9 @@ func SetupSettings() {
 	}
 
 	// log
-	utils.SetupLogger(utils.Settings.GetString("log-level"))
+	if err := utils.Logger.ChangeLevel(utils.Settings.GetString("log-level")); err != nil {
+		utils.Logger.Panic("change log level", zap.Error(err))
+	}
 
 	// clock
 	utils.SetupClock(100 * time.Millisecond)
@@ -99,11 +100,12 @@ func SetupArgs() {
 	pflag.String("log-level", "info", "`debug/info/error`")
 	pflag.Int("heartbeat", 60, "heartbeat seconds")
 	pflag.Parse()
-	viper.BindPFlags(pflag.CommandLine)
+	if err := utils.Settings.BindPFlags(pflag.CommandLine); err != nil {
+		utils.Logger.Panic("parse command arguments", zap.Error(err))
+	}
 }
 
 func main() {
-	defer utils.Logger.Sync()
 	SetupArgs()
 	SetupSettings()
 	defer utils.Logger.Info("All done")

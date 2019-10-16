@@ -135,11 +135,11 @@ func (d *Dispatcher) registerMonitor() {
 	lastT := time.Now()
 	monitor.AddMetric("dispatcher", func() map[string]interface{} {
 		metrics := map[string]interface{}{
-			"msgPerSec": utils.Round(float64(d.counter.Get())/(time.Now().Sub(lastT).Seconds()), .5, 1),
+			"msgPerSec": utils.Round(float64(d.counter.Get())/(time.Since(lastT).Seconds()), .5, 1),
 		}
 		d.counter.Set(0)
 		d.tag2Counter.Range(func(tagi interface{}, ci interface{}) bool {
-			metrics[tagi.(string)+".MsgPerSec"] = utils.Round(float64(ci.(*utils.Counter).Get())/(time.Now().Sub(lastT).Seconds()), .5, 1)
+			metrics[tagi.(string)+".MsgPerSec"] = utils.Round(float64(ci.(*utils.Counter).Get())/(time.Since(lastT).Seconds()), .5, 1)
 			ci.(*utils.Counter).Set(0)
 			return true
 		})

@@ -33,23 +33,35 @@ func TestMarshalUnmarshalFluentBatchMsg(t *testing.T) {
 }
 
 func BenchmarkMarshalMsgFluentBatchMsg(b *testing.B) {
-	v := FluentBatchMsg{}
+	var (
+		v   = FluentBatchMsg{}
+		err error
+	)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		v.MarshalMsg(nil)
+		if _, err = v.MarshalMsg(nil); err != nil {
+			b.Fatalf("%+v", err)
+		}
 	}
 }
 
 func BenchmarkAppendMsgFluentBatchMsg(b *testing.B) {
-	v := FluentBatchMsg{}
+	var (
+		v   = FluentBatchMsg{}
+		err error
+	)
 	bts := make([]byte, 0, v.Msgsize())
-	bts, _ = v.MarshalMsg(bts[0:0])
+	if bts, err = v.MarshalMsg(bts[0:0]); err != nil {
+		b.Fatalf("%+v", err)
+	}
 	b.SetBytes(int64(len(bts)))
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		bts, _ = v.MarshalMsg(bts[0:0])
+		if bts, err = v.MarshalMsg(bts[0:0]); err != nil {
+			b.Fatalf("%+v", err)
+		}
 	}
 }
 
@@ -68,9 +80,14 @@ func BenchmarkUnmarshalFluentBatchMsg(b *testing.B) {
 }
 
 func TestEncodeDecodeFluentBatchMsg(t *testing.T) {
-	v := FluentBatchMsg{}
+	var (
+		v   = FluentBatchMsg{}
+		err error
+	)
 	var buf bytes.Buffer
-	msgp.Encode(&buf, &v)
+	if err = msgp.Encode(&buf, &v); err != nil {
+		t.Fatalf("%+v", err)
+	}
 
 	m := v.Msgsize()
 	if buf.Len() > m {
@@ -78,13 +95,15 @@ func TestEncodeDecodeFluentBatchMsg(t *testing.T) {
 	}
 
 	vn := FluentBatchMsg{}
-	err := msgp.Decode(&buf, &vn)
+	err = msgp.Decode(&buf, &vn)
 	if err != nil {
 		t.Error(err)
 	}
 
 	buf.Reset()
-	msgp.Encode(&buf, &v)
+	if err = msgp.Encode(&buf, &v); err != nil {
+		t.Fatalf("%+v", err)
+	}
 	err = msgp.NewReader(&buf).Skip()
 	if err != nil {
 		t.Error(err)
@@ -92,31 +111,42 @@ func TestEncodeDecodeFluentBatchMsg(t *testing.T) {
 }
 
 func BenchmarkEncodeFluentBatchMsg(b *testing.B) {
-	v := FluentBatchMsg{}
-	var buf bytes.Buffer
-	msgp.Encode(&buf, &v)
+	var (
+		err error
+		v   = FluentBatchMsg{}
+		buf bytes.Buffer
+	)
+	if err = msgp.Encode(&buf, &v); err != nil {
+		b.Fatal(err)
+	}
 	b.SetBytes(int64(buf.Len()))
 	en := msgp.NewWriter(msgp.Nowhere)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		v.EncodeMsg(en)
+		if err = v.EncodeMsg(en); err != nil {
+			b.Fatalf("%+v", err)
+		}
 	}
 	en.Flush()
 }
 
 func BenchmarkDecodeFluentBatchMsg(b *testing.B) {
-	v := FluentBatchMsg{}
-	var buf bytes.Buffer
-	msgp.Encode(&buf, &v)
+	var (
+		v   = FluentBatchMsg{}
+		err error
+		buf bytes.Buffer
+	)
+	if err = msgp.Encode(&buf, &v); err != nil {
+		b.Fatal(err)
+	}
 	b.SetBytes(int64(buf.Len()))
 	rd := msgp.NewEndlessReader(buf.Bytes(), b)
 	dc := msgp.NewReader(rd)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err := v.DecodeMsg(dc)
-		if err != nil {
+		if err = v.DecodeMsg(dc); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -146,11 +176,16 @@ func TestMarshalUnmarshalFluentMsg(t *testing.T) {
 }
 
 func BenchmarkMarshalMsgFluentMsg(b *testing.B) {
-	v := FluentMsg{}
+	var (
+		v   = FluentMsg{}
+		err error
+	)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		v.MarshalMsg(nil)
+		if _, err = v.MarshalMsg(nil); err != nil {
+			b.Fatalf("marshal: %+v", err)
+		}
 	}
 }
 
@@ -181,9 +216,14 @@ func BenchmarkUnmarshalFluentMsg(b *testing.B) {
 }
 
 func TestEncodeDecodeFluentMsg(t *testing.T) {
-	v := FluentMsg{}
-	var buf bytes.Buffer
-	msgp.Encode(&buf, &v)
+	var (
+		buf bytes.Buffer
+		v   = FluentMsg{}
+		err error
+	)
+	if err = msgp.Encode(&buf, &v); err != nil {
+		t.Fatal(err)
+	}
 
 	m := v.Msgsize()
 	if buf.Len() > m {
@@ -191,45 +231,56 @@ func TestEncodeDecodeFluentMsg(t *testing.T) {
 	}
 
 	vn := FluentMsg{}
-	err := msgp.Decode(&buf, &vn)
-	if err != nil {
+	if err = msgp.Decode(&buf, &vn); err != nil {
 		t.Error(err)
 	}
 
 	buf.Reset()
-	msgp.Encode(&buf, &v)
-	err = msgp.NewReader(&buf).Skip()
-	if err != nil {
+	if err = msgp.Encode(&buf, &v); err != nil {
+		t.Fatal(err)
+	}
+	if err = msgp.NewReader(&buf).Skip(); err != nil {
 		t.Error(err)
 	}
 }
 
 func BenchmarkEncodeFluentMsg(b *testing.B) {
-	v := FluentMsg{}
-	var buf bytes.Buffer
-	msgp.Encode(&buf, &v)
+	var (
+		v   = FluentMsg{}
+		err error
+		buf bytes.Buffer
+	)
+	if err = msgp.Encode(&buf, &v); err != nil {
+		b.Fatal(err)
+	}
 	b.SetBytes(int64(buf.Len()))
 	en := msgp.NewWriter(msgp.Nowhere)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		v.EncodeMsg(en)
+		if err = v.EncodeMsg(en); err != nil {
+			b.Fatalf("%+v", err)
+		}
 	}
 	en.Flush()
 }
 
 func BenchmarkDecodeFluentMsg(b *testing.B) {
-	v := FluentMsg{}
-	var buf bytes.Buffer
-	msgp.Encode(&buf, &v)
+	var (
+		v   = FluentMsg{}
+		err error
+		buf bytes.Buffer
+	)
+	if err = msgp.Encode(&buf, &v); err != nil {
+		b.Fatal(err)
+	}
 	b.SetBytes(int64(buf.Len()))
 	rd := msgp.NewEndlessReader(buf.Bytes(), b)
 	dc := msgp.NewReader(rd)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		err := v.DecodeMsg(dc)
-		if err != nil {
+		if err = v.DecodeMsg(dc); err != nil {
 			b.Fatal(err)
 		}
 	}

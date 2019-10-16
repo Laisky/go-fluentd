@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Laisky/zap"
+
 	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
 )
@@ -82,6 +84,8 @@ func TestTimerSleep(t *testing.T) {
 }
 
 func init() {
-	utils.Settings.Setup("/Users/laisky/repo/pateo/configs/go-fluentd")
-	utils.SetupLogger("debug")
+	// utils.Settings.Setup("/Users/laisky/repo/pateo/configs/go-fluentd")
+	if err := utils.Logger.ChangeLevel("debug"); err != nil {
+		utils.Logger.Panic("change level", zap.Error(err))
+	}
 }

@@ -1,4 +1,5 @@
-FROM registry:5000/gobase:1.13.0-alpine3.10 AS gobuild
+# docker build --build-arg http_proxy=http://172.16.4.26:17777 --build-arg https_proxy=http://172.16.4.26:17777
+FROM registry:5000/gobase:1.13.3-alpine3.10 AS gobuild
 
 ENV GO111MODULE=on
 WORKDIR /go-fluentd

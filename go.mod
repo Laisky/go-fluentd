@@ -4,7 +4,7 @@ go 1.12
 
 require (
 	github.com/Laisky/go-syslog v2.3.3+incompatible
-	github.com/Laisky/go-utils v1.8.0
+	github.com/Laisky/go-utils v1.8.1
 	github.com/Laisky/zap v1.9.2
 	github.com/OneOfOne/xxhash v1.2.5 // indirect
 	github.com/RoaringBitmap/roaring v0.4.21 // indirect

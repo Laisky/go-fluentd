@@ -1,6 +1,6 @@
 # docker build . -f ./.docker/test.Dockerfile -t registry:5000/go-fluentd-test:v1
 # docker push registry:5000/go-fluentd-test:v1
-FROM registry:5000/gobase:1.13.0-alpine3.10
+FROM registry:5000/gobase:1.13.3-alpine3.10
 ENV GO111MODULE=on
 
 WORKDIR /go-fluentd

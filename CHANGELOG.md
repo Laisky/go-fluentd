@@ -2,7 +2,8 @@
 *CURRENT*
 ---
 
-
+- 2019-10-18 (Laisky) ci: upgrade golang v1.13.3
+- 2019-10-18 (Laisky) fix: upgrade go-utils v1.8.1
 
 *v1.11.5*
 ---

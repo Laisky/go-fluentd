@@ -1,8 +1,0 @@
-apiVersion: v2
-name: ${CI_PROJECT_NAME}
-version: ${CI_PIPELINE_IID}-${CI_COMMIT_SHORT_SHA}
-appVersion: ${CI_PIPELINE_IID}-${CI_COMMIT_SHORT_SHA}
-home: ${CI_PROJECT_URL}
-maintainers:
-  - name: ${GITLAB_USER_NAME}
-    email: ${GITLAB_USER_EMAIL}

@@ -1,6 +1,7 @@
 consts:
   ports:
-    "18083": rsyslog recv
+    "24514": rsyslog recv
+    "24515": speech rsyslog recv
     "22800": http
     "24224": fluentd for k8s
     "24225": fluentd recv
@@ -28,6 +29,7 @@ consts:
       - bot
       - spark
       - emqtt
+      - speech
       - kafkabuf
       - wechat
       - forward-wechat
@@ -42,6 +44,10 @@ consts:
       - uat
       - prod
 settings:
+  logger:
+    push_api: "https://blog.laisky.com/graphql/query/"
+    alert_type: laisky
+    push_token: "******"
   acceptor:
     async_out_chan_size: 100000
     sync_out_chan_size: 10000
@@ -69,14 +75,86 @@ settings:
           type: fluentd
           active_env: *all-env
           tag_key: tag
+          lb_key: pod_name
+          nfork: 8
+          internal_buf_size: 5000
           addr: 0.0.0.0:24224
           is_rewrite_tag_from_tag_key: true
           origin_rewrite_tag_key: app-log-tag
           concat_max_len: 100000
+          concat:
+            test:
+              msg_key: log
+              identifier: pod_name
+              head_regexp: ^\d{4}-\d{2}-\d{2}
+            spark:
+              # 1999/22/22 22:22:22.222 jiejwfijef
+              msg_key: log
+              identifier: pod_name
+              head_regexp: ^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d{3} +[^ ]
+            cp:
+              # 2018-02-01 16:15:43.518 - ms:cp|type:platform|uuid:4f99962d-c272-43bb-85d9-20ab030180b7|dateTime:2018-02-01 16:15:43.518|customerSid:27|customerCode:DT00000000|customerName:默认
+              msg_key: log
+              identifier: pod_name
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} *- *ms:cp\|
+            ramjet:
+              # [2018-08-03T05:42:42.714151Z - DEBUG - /go/src/github.com/Laisky/go-ramjet/tasks/logrotate/backup/main.go:129] IsFileReadyToUpload for 2018050700.log.gz
+              msg_key: log
+              identifier: pod_name
+              head_regexp: ^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{6}Z *-
+            spring:
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              msg_key: log
+              identifier: pod_name
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+            tsp:
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              msg_key: log
+              identifier: pod_name
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+            ai:
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              msg_key: log
+              identifier: pod_name
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+            base:
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              msg_key: log
+              identifier: pod_name
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+            bot:
+              msg_key: log
+              identifier: pod_name
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+            gateway:
+              msg_key: log
+              identifier: pod_name
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+            connector:
+              msg_key: log
+              identifier: pod_name
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+            qingai:
+              msg_key: log
+              identifier: pod_name
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+            geely:
+              # 2018-02-05 10:33:13.408 | geely:nlcc | INFO | http-bio-8081-exec-3 | com.tservice.cc.web.interceptor.MyLoggingOutInterceptor.handleMessage:57 - Outbound Message:{ID:1, Address:http://10.133.200.77:8082/gisnavi/tservice/gisnavi/poi/poicategory, Http-Method:GET, Content-Type:application/json, Headers:{Content-Type=[application/json], Accept=[application/json]}}
+              # 2018-04-15 10:59:31.096 | geely:vca | INFO  | I/O dispatcher 2 | MONITORLOG.writeMonitorLog:26 - 2018-04-15 10:59:31.096|VCA|XXX19YYYY10040463|vca00157f9c04ff887f2b3488ddc4f2b|VCA_TRIGGER_OUT'
+              msg_key: log
+              identifier: pod_name
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} +\|
+            ptdeployer:
+              msg_key: log
+              identifier: pod_name
+              head_regexp: ^\[\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} +-
         fluentd:
           type: fluentd
           active_env: *all-env
           tag_key: tag
+          lb_key: container_id
+          nfork: 8
+          internal_buf_size: 5000
           addr: 0.0.0.0:24225
           is_rewrite_tag_from_tag_key: false
           concat_max_len: 300000
@@ -85,7 +163,6 @@ settings:
               msg_key: log
               identifier: container_id
               head_regexp: ^\d{4}-\d{2}-\d{2}
-
             spark:
               # 1999/22/22 22:22:22.222 jiejwfijef
               msg_key: log
@@ -101,23 +178,23 @@ settings:
               msg_key: log
               identifier: container_id
               head_regexp: ^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{6}Z *-
-            app.spring:
-              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+            spring:
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
               msg_key: log
               identifier: container_id
               head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
             tsp:
-              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
               msg_key: log
               identifier: container_id
               head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
             ai:
-              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
               msg_key: log
               identifier: container_id
               head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
             base:
-              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
               msg_key: log
               identifier: container_id
               head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
@@ -151,18 +228,36 @@ settings:
           type: fluentd
           active_env: *all-env
           tag_key: tag
+          lb_key: pod_name
+          nfork: 8
+          internal_buf_size: 5000
           addr: 0.0.0.0:24226
           is_rewrite_tag_from_tag_key: true
           origin_rewrite_tag_key: tag
         rsyslog:
           type: rsyslog
           active_env: *all-env
+          tag: emqtt.{env}
           tag_key: tag
           addr: 0.0.0.0:24514
+          # time_shift_sec: -28800
           time_key: timestamp
           msg_key: content
           new_time_key: "@timestamp"
           new_time_format: "2006-01-02T15:04:05.000Z"
+        speech:
+          type: rsyslog
+          active_env: *all-env
+          tag: speech.{env}
+          tag_key: tag
+          addr: 0.0.0.0:24515
+          time_shift_sec: -28800
+          time_key: timestamp
+          msg_key: content
+          new_time_key: "@timestamp"
+          new_time_format: "2006-01-02T15:04:05.000Z"
+          rewrite_tags:
+            tag: origin_tag
         bigdata_wulin:
           type: kafka
           active_env:
@@ -312,6 +407,7 @@ settings:
           - bot
           - spark
           - emqtt
+          - speech
           # - kafkabuf
           - wechat
           - usertracking
@@ -338,9 +434,14 @@ settings:
           bot.{env}: "{env}-spring-logs-write"
           spark.{env}: "{env}-spark-logs-write"
           emqtt.{env}: "{env}-emqtt-logs-write"
+          speech.{env}: "{env}-speech-logs-write"
           wechat.{env}: "{env}-wechat-logs-write"
           usertracking.{env}: "{env}-usertracking-logs-write"
           bigdata-wuling.{env}: "{env}-bigdata_wuling-logs-write"
+          forward-wechat.sit: "sit-wechat-logs-write"
+          forward-wechat.perf: "perf-wechat-logs-write"
+          forward-wechat.uat: "uat-wechat-logs-write"
+          forward-wechat.prod: "prod-wechat-logs-write"
         is_discard_when_blocked: false
       es_geely_v2:
         type: es
@@ -554,7 +655,7 @@ settings:
         tags:
           - qingai
         msg_key: log
-        # 2019-07-06 13:34:48.313|http-nio-8010-exec-9|INFO|bot-parking|com.pateo.parking.service.impl.ParkingListServiceImpl|108:{"deviceId":"12345","input":"附近的停车场","intentName":"检索停车场","recordId":"bf728b47b8fe47c7a9f35b1eb1c347ae","shouldEndSession":"false","text":"找到这些你需要的停车场要去哪一个","userId":"12345","version":"1.0"}
+        # 2019-07-06 13:34:48.313|http-nio-8010-exec-9|INFO|bot-parking|com.google.parking.service.impl.ParkingListServiceImpl|108:{"deviceId":"12345","input":"附近的停车场","intentName":"检索停车场","recordId":"bf728b47b8fe47c7a9f35b1eb1c347ae","shouldEndSession":"false","text":"找到这些你需要的停车场要去哪一个","userId":"12345","version":"1.0"}
         pattern: (?ms)^(?P<time>.{23}) *\| *(?P<app>[^|]+) *\| *(?P<level>[^|]+) *\| *(?P<thread>[^|]+) *\| *(?P<class>[^|]+) *\| *(?P<line>\d+) *[|:] *(?P<args>\{.*\})
         is_remove_orig_log: true
         parse_json_key: args
@@ -578,10 +679,10 @@ settings:
           - connector
           - gateway
         msg_key: log
-        # 2018-04-02 02:02:10.928 | sh-datamining | INFO | http-nio-8080-exec-80 | com.pateo.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74 | {"key": "value"}: xxx
-        # 2018-04-02 02:02:10.928 | sh-datamining | INFO | http-nio-8080-exec-80 | com.pateo.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74 | xxx
-        # 2018-03-12 02:02:10.928 | gateway | INFO | http-nio-8080-exec-80 | com.pateo.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74: {"key": "value"}:xxx
-        # 2019-02-18 15:42:06.635 | usertracking | DEBUG | kafka-producer-network-thread | producer-1 | com.pateo.qingcloud.base.usertracking.service.KafkaServiceBase$ProducerCallBack | 63: onCompletion when sendMessage to topic:UserTracking,partition:0  success!!
+        # 2018-04-02 02:02:10.928 | sh-datamining | INFO | http-nio-8080-exec-80 | com.google.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74 | {"key": "value"}: xxx
+        # 2018-04-02 02:02:10.928 | sh-datamining | INFO | http-nio-8080-exec-80 | com.google.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74 | xxx
+        # 2018-03-12 02:02:10.928 | gateway | INFO | http-nio-8080-exec-80 | com.google.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74: {"key": "value"}:xxx
+        # 2019-02-18 15:42:06.635 | usertracking | DEBUG | kafka-producer-network-thread | producer-1 | com.google.qingcloud.base.usertracking.service.KafkaServiceBase$ProducerCallBack | 63: onCompletion when sendMessage to topic:UserTracking,partition:0  success!!
         pattern: (?ms)^(?P<time>.{23}) *\| *(?P<app>[^|]+) *\| *(?P<level>[^|]+) *\| *(?P<thread>[^|]+) *\| *(?:(?P<producer>[\w\-]+) *\| *)?(?P<class>[^|]+) *\| *(?P<line>\d+) *(?:[|:] *(?P<args>\{.*\}))? *(?:[|:] *(?P<message>.*))?
         is_remove_orig_log: true
         parse_json_key: args
@@ -652,7 +753,7 @@ settings:
         tags:
           - spark
         msg_key: log
-        # 2018/03/06 15:19:23.619 INFO 6356e435e4894a22a41c80e6ade35526 com.pateo.qingcloud.ai.sparkstreaming.db.AiDbService: Enter getFuseDataType  function!
+        # 2018/03/06 15:19:23.619 INFO 6356e435e4894a22a41c80e6ade35526 com.google.qingcloud.ai.sparkstreaming.db.AiDbService: Enter getFuseDataType  function!
         pattern: '(?ms)^(?P<time>.{23}) *(?P<level>[^ ]+) +(?P<uuid>[^ ]+) +(?P<app_info>[^:]+) *: *(?P<message>.*)'
         is_remove_orig_log: true
         must_include: app_info
@@ -695,7 +796,7 @@ settings:
         tags:
           - ptdeployer
         msg_key: log
-        # [2019-08-01 08:20:46,082 - DEBUG - /Users/laisky/repo/pateo/ptdeployer/deployer/handlers.py:16 - app_log] - get_deployer with env sit
+        # [2019-08-01 08:20:46,082 - DEBUG - /Users/laisky/repo/google/ptdeployer/deployer/handlers.py:16 - app_log] - get_deployer with env sit
         pattern: (?ms)^\[(?P<time>.{23}) *- *(?P<level>[^\-]+) *- *(?P<class>[^\-]+):(?P<line>\d+) *- *(?P<app>[^|]+)\] *- *(?P<message>.*)
         is_remove_orig_log: true
         must_include: app
@@ -749,7 +850,7 @@ settings:
           - base
           - bot
         msg_key: log
-        # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+        # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
         # 2019-04-23 17:02:09.733 | mswallet| DEBUG | http-nio-8080-exec-2 | org.apache.ibatis.logging.jdbc.BaseJdbcLogger | 145 | {c83dd4a0244146fe9ada4dfcc8a737b4}| ==> Parameters: 123(Long)
         pattern: '(?ms)^(?P<time>.{23}) *\| *(?P<app>[^|]+) *\| *(?P<level>[^|]+) *\| *(?P<thread>[^|]+) *\| *(?P<class>[^|]+) *\| *(?P<line>\d+) *(?:[|:] *(?P<args>\{[^\}]+\}))?(?: *[|:] *(?P<message>.*))?'
         is_remove_orig_log: true
@@ -807,22 +908,22 @@ settings:
       #     app.spring:
       #       msg_key: log
       #       identifier: container_id
-      #       # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+      #       # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
       #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
       #     tsp:
       #       msg_key: log
       #       identifier: container_id
-      #       # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+      #       # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
       #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
       #     ai:
       #       msg_key: log
       #       identifier: container_id
-      #       # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+      #       # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
       #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
       #     base:
       #       msg_key: log
       #       identifier: container_id
-      #       # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+      #       # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
       #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
       #     bot:
       #       msg_key: log

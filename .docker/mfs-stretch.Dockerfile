@@ -1,5 +1,5 @@
-# docker build . -f ./.docker/mfs-stretch.Dockerfile -t registry:5000/mfs-stretch:20190116
-# docker push registry:5000/mfs-stretch:20190116
+# docker build . -f ./.docker/mfs-stretch.Dockerfile -t registry.paas.ptcloud.t.home/paas/mfs-stretch:20190116
+# docker push registry.paas.ptcloud.t.home/paas/mfs-stretch:20190116
 FROM debian:stretch
 
 # mfs

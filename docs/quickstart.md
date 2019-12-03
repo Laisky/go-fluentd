@@ -27,7 +27,7 @@ and port 8080 to monitor HTTP API.
 $ git clone https://github.com/Laisky/go-fluentd.git
 
 # running
-$ cd go-fluentd/example
+$ cd go-fluentd/docs/example
 $ sudo docker-compose up -d --remove-orphans --force-recreate
 
 # check

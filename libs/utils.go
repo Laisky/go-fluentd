@@ -11,6 +11,9 @@ import (
 
 // var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
+// LoadTagsAppendEnv append env to tags slice
+//
+// []string{"spring"} -> []string{"spring.sit"}
 func LoadTagsAppendEnv(env string, tags []string) []string {
 	ret := []string{}
 	for _, t := range tags {
@@ -20,6 +23,27 @@ func LoadTagsAppendEnv(env string, tags []string) []string {
 	return ret
 }
 
+// LoadTagReplaceEnv replace `{env}` to env
+//
+// "spring.{env}" -> "spring.sit"
+func LoadTagReplaceEnv(env, tag string) string {
+	return strings.ReplaceAll(tag, "{env}", env)
+}
+
+// LoadTagsReplaceEnv replace `{env}` to env
+//
+// []string{"spring.{env}"} -> []string{"spring.sit"}
+func LoadTagsReplaceEnv(env string, tags []string) []string {
+	nts := make([]string, len(tags))
+	for i, t := range tags {
+		nts[i] = strings.ReplaceAll(t, "{env}", env)
+	}
+	return nts
+}
+
+// LoadTagsMapAppendEnv append env to tags map
+//
+// map[string]interface{}{"spring": "xxx"} -> map[string]interface{}{"spring.sit": "xxx"}
 func LoadTagsMapAppendEnv(env string, tags map[string]interface{}) map[string]interface{} {
 	ret := map[string]interface{}{}
 	for t, v := range tags {
@@ -86,4 +110,12 @@ func TemplateWithMapAndRegexp(tplReg *regexp.Regexp, tpl string, data map[string
 	}
 
 	return tpl
+}
+
+// AbsInt return abs(int)
+func AbsInt(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }

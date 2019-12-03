@@ -1,0 +1,147 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appInfo.name }}
+  namespace: {{ .Values.appInfo.namespace }}
+  labels:
+    {{- range $key, $value := .Values.appInfo.labels }}
+    {{ $key }}: {{ $value }}
+    {{- end }}
+spec:
+  replicas: {{ .Values.startPolicy.replicas }}
+  progressDeadlineSeconds: {{ .Values.startPolicy.progressDeadlineSeconds }}
+  minReadySeconds: {{ .Values.startPolicy.minReadySeconds }}
+  strategy:
+    type: {{ .Values.startPolicy.strategy.type }}
+    {{- if eq .Values.startPolicy.strategy.type "RollingUpdate" }}
+    rollingUpdate:
+      maxUnavailable: {{ .Values.startPolicy.strategy.rollingUpdate.maxUnavailable }}
+      maxSurge: {{ .Values.startPolicy.strategy.rollingUpdate.maxSurge }}
+    {{- end }}
+  selector:
+    matchLabels:
+      {{- range $key, $value := .Values.startPolicy.labels }}
+      {{ $key }}: {{ $value }}
+      {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- range $key, $value := .Values.podInfo.labels }}
+        {{ $key }}: {{ $value }}
+        {{- end }}
+    spec:
+      imagePullSecrets:
+        {{- range .Values.podInfo.imagePullSecrets }}
+        - name: {{ . | quote }}
+        {{- end }}
+      {{- if .Values.podInfo.containers }}
+      containers:
+      {{- range .Values.podInfo.containers  }}
+        - name: {{ .name }}
+          image: {{ .image | lower | quote }}
+          ports:
+            {{- range .ports }}
+            - name: {{ .name }}
+              containerPort: {{ .containerPort }}
+              protocol: {{ .protocol }}
+            {{- end }}
+          resources:
+            limits:
+              cpu: {{ .resources.limits.cpu | quote }}
+              memory: {{ .resources.limits.memory | quote }}
+            requests:
+              cpu: {{ .resources.requests.cpu | quote }}
+              memory: {{ .resources.requests.memory | quote }}
+          readinessProbe:
+            {{ .healthCheck.type }}:
+              {{- if eq .healthCheck.type "httpGet" }}
+              path: {{ .healthCheck.path | quote }}
+              {{- end }}
+              port: {{ .healthCheck.port | quote }}
+              httpHeaders:
+                - name: "X-Custom-Header"
+                  value: "kube-readinessProbe"
+            initialDelaySeconds: {{ .healthCheck.initialDelaySeconds }}
+            periodSeconds: {{ .healthCheck.periodSeconds }}
+            timeoutSeconds: {{ .healthCheck.timeoutSeconds }}
+            successThreshold: {{ .healthCheck.successThreshold }}
+            failureThreshold: {{ .healthCheck.failureThreshold }}
+          livenessProbe:
+            {{ .healthCheck.type }}:
+              {{- if eq .healthCheck.type "httpGet" }}
+              path: {{ .healthCheck.path | quote }}
+              {{- end }}
+              port: {{ .healthCheck.port | quote }}
+              httpHeaders:
+                - name: "X-Custom-Header"
+                  value: "kube-readinessProbe"
+            initialDelaySeconds: {{ .healthCheck.initialDelaySeconds }}
+            periodSeconds: {{ .healthCheck.periodSeconds }}
+            timeoutSeconds: {{ .healthCheck.timeoutSeconds }}
+            successThreshold: {{ .healthCheck.successThreshold }}
+            failureThreshold: {{ .healthCheck.failureThreshold }}
+          securityContext:
+            {{- if .security.privileged }}
+            privileged: true
+            {{- else }}
+            privileged: false
+            {{- end }}
+            {{- if .security.cap.enabled }}
+            capabilities:
+              add:
+                {{- range .security.cap.list }}
+                - {{ . | quote }}
+                {{- end }}
+            {{- end }}
+          {{- if $.Values.settings.env.enabled }}
+          env:
+            {{- range $index, $value := $.Values.settings.env.list }}
+            - name: {{ $value.name | quote }}
+              value: {{ $value.value | quote }}
+            {{- end -}}
+          {{- end }}
+      {{- if or .volumes.Generic.enabled .volumes.CharDevice.enabled }}
+          volumeMounts:
+          {{- if .volumes.Generic.enabled }}
+          {{- range $index, $value := .volumes.Generic.volumes }}
+            - mountPath: {{ $value.conPath }}
+              name: vol-generic-{{ $index }}
+              readOnly: {{ $value.readonly }}
+          {{- end }}
+          {{- end }}
+          {{- if .volumes.CharDevice.enabled }}
+          {{- range $index, $value := .volumes.CharDevice.volumes }}
+            - mountPath: {{ $value.hostPath }}
+              name: vol-chardev-{{ $index }}
+              readOnly: false
+          {{- end }}
+          {{- end }}
+      volumes:
+        {{- if .volumes.Generic.enabled }}
+        {{- range $index, $value := .volumes.Generic.volumes }}
+        - name: vol-generic-{{ $index }}
+          hostPath:
+            path: {{ $value.hostPath }}
+        {{- end }}
+        {{- end }}
+        {{- if .volumes.CharDevice.enabled }}
+        {{- range $index, $value := .volumes.CharDevice.volumes }}
+        - name: vol-chardev-{{ $index }}
+          hostPath:
+            path: {{ $value.hostPath }}
+            type: CharDevice
+        {{- end }}
+        {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- end }}
+      {{- if .Values.settings.hosts.enabled }}
+      hostAliases:
+        {{- range $index, $value := .Values.settings.hosts.list }}
+        - ip: {{ $value.ip | quote }}
+          hostnames:
+            {{- range $value.hostnames }}
+            - {{ . | quote }}
+            {{- end }}
+        {{- end -}}
+      {{- end }}

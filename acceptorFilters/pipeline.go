@@ -9,6 +9,7 @@ import (
 	"github.com/Laisky/go-fluentd/monitor"
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
+	"github.com/pkg/errors"
 )
 
 type AcceptorPipelineCfg struct {
@@ -26,14 +27,13 @@ type AcceptorPipeline struct {
 	throttle    *utils.Throttle
 }
 
-func NewAcceptorPipeline(cfg *AcceptorPipelineCfg, filters ...AcceptorFilterItf) *AcceptorPipeline {
+func NewAcceptorPipeline(ctx context.Context, cfg *AcceptorPipelineCfg, filters ...AcceptorFilterItf) (a *AcceptorPipeline, err error) {
 	utils.Logger.Info("NewAcceptorPipeline")
-
 	if cfg.NFork < 1 {
 		panic(fmt.Errorf("NFork should greater than 1, got: %v", cfg.NFork))
 	}
 
-	a := &AcceptorPipeline{
+	a = &AcceptorPipeline{
 		AcceptorPipelineCfg: cfg,
 		filters:             filters,
 		reEnterChan:         make(chan *libs.FluentMsg, cfg.ReEnterChanSize),
@@ -49,13 +49,17 @@ func NewAcceptorPipeline(cfg *AcceptorPipelineCfg, filters ...AcceptorFilterItf)
 		utils.Logger.Info("enable acceptor throttle",
 			zap.Int("max", a.ThrottleMax),
 			zap.Int("n_perf_sec", a.ThrottleNPerSec))
-		a.throttle = utils.NewThrottle(&utils.ThrottleCfg{
-			NPerSec: a.ThrottleNPerSec,
-			Max:     a.ThrottleMax,
-		})
+		if a.throttle, err = utils.NewThrottleWithCtx(
+			ctx,
+			&utils.ThrottleCfg{
+				NPerSec: a.ThrottleNPerSec,
+				Max:     a.ThrottleMax,
+			}); err != nil {
+			return nil, errors.Wrap(err, "enable accrptor throttle")
+		}
 	}
 
-	return a
+	return a, nil
 }
 
 func (f *AcceptorPipeline) registerMonitor() {
@@ -75,10 +79,6 @@ func (f *AcceptorPipeline) DiscardMsg(msg *libs.FluentMsg) {
 func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan chan *libs.FluentMsg) (outChan, skipDumpChan chan *libs.FluentMsg) {
 	outChan = make(chan *libs.FluentMsg, f.OutChanSize)
 	skipDumpChan = make(chan *libs.FluentMsg, f.OutChanSize)
-
-	if f.IsThrottle {
-		f.throttle.RunWithCtx(ctx)
-	}
 
 	for i := 0; i < f.NFork; i++ {
 		go func() {

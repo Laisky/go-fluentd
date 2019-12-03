@@ -78,18 +78,23 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 					Name:                   name,
 					Addr:                   utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".addr"),
 					TagKey:                 utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tag_key"),
+					LBKey:                  utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".lb_key"),
 					IsRewriteTagFromTagKey: utils.Settings.GetBool("settings.acceptor.recvs.plugins." + name + ".is_rewrite_tag_from_tag_key"),
 					OriginRewriteTagKey:    utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".origin_rewrite_tag_key"),
 					ConcatMaxLen:           utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".concat_max_len"),
+					NFork:                  utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".nfork"),
+					ConcatorBufSize:        utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".internal_buf_size"),
 					ConcatCfg:              libs.LoadTagsMapAppendEnv(env, utils.Settings.GetStringMap("settings.acceptor.recvs.plugins."+name+".concat")),
 				}))
 			case "rsyslog":
 				receivers = append(receivers, recvs.NewRsyslogRecv(&recvs.RsyslogCfg{
 					Name:          name,
+					RewriteTags:   utils.Settings.GetStringMapString("settings.acceptor.recvs.plugins." + name + ".rewrite_tags"),
 					Addr:          utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".addr"),
-					Env:           env,
+					Tag:           libs.LoadTagReplaceEnv(env, utils.Settings.GetString("settings.acceptor.recvs.plugins."+name+".tag")),
 					TagKey:        utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tag_key"),
 					MsgKey:        utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".msg_key"),
+					TimeShift:     utils.Settings.GetDuration("settings.acceptor.recvs.plugins."+name+".time_shift_sec") * time.Second,
 					NewTimeFormat: utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".new_time_format"),
 					TimeKey:       utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".time_key"),
 					NewTimeKey:    utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".new_time_key"),
@@ -170,7 +175,7 @@ func (c *Controllor) initAcceptor(ctx context.Context, journal *Journal, receive
 	return acceptor
 }
 
-func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorPipeline {
+func (c *Controllor) initAcceptorPipeline(ctx context.Context, env string) (*acceptorFilters.AcceptorPipeline, error) {
 	afs := []acceptorFilters.AcceptorFilterItf{}
 	switch utils.Settings.Get("settings.acceptor_filters.plugins").(type) {
 	case map[string]interface{}:
@@ -216,7 +221,7 @@ func (c *Controllor) initAcceptorPipeline(env string) *acceptorFilters.AcceptorP
 		SupportedTags:      utils.Settings.GetStringSlice("consts.tags.all-tags"),
 	}))
 
-	return acceptorFilters.NewAcceptorPipeline(&acceptorFilters.AcceptorPipelineCfg{
+	return acceptorFilters.NewAcceptorPipeline(ctx, &acceptorFilters.AcceptorPipelineCfg{
 		OutChanSize:     utils.Settings.GetInt("settings.acceptor_filters.out_buf_len"),
 		MsgPool:         c.msgPool,
 		ReEnterChanSize: utils.Settings.GetInt("settings.acceptor_filters.reenter_chan_len"),
@@ -505,7 +510,10 @@ func (c *Controllor) Run(ctx context.Context) {
 
 	receivers := c.initRecvs(env)
 	acceptor := c.initAcceptor(ctx, journal, receivers)
-	acceptorPipeline := c.initAcceptorPipeline(env)
+	acceptorPipeline, err := c.initAcceptorPipeline(ctx, env)
+	if err != nil {
+		utils.Logger.Panic("initAcceptorPipeline", zap.Error(err))
+	}
 
 	waitCommitChan := journal.GetCommitChan()
 	waitAccepPipelineSyncChan := acceptor.GetSyncOutChan()

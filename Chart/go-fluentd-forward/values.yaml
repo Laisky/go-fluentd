@@ -1,0 +1,113 @@
+# 应用基本信息
+appInfo:
+  name: ${CI_PROJECT_NAME}
+  namespace: ${GROUP_NAME}
+  labels:
+    app: ${CI_PROJECT_NAME}
+startPolicy:
+  labels:
+    app: ${CI_PROJECT_NAME}
+  replicas: 1
+  progressDeadlineSeconds: 1800
+  minReadySeconds: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 100%
+      maxSurge: 50%
+
+# 容器基本信息
+podInfo:
+  labels:
+    app: ${CI_PROJECT_NAME}
+    app-log: enabled
+    app-log-tag: fluentd-forward.sit
+  imagePullSecrets:
+    - "registry.paas.ptcloud.t.home"
+  containers:
+    - name: ${CI_PROJECT_NAME}
+      image: "${DOCKER_IMAGE_NAME}"
+      ports:
+        - name: tcp-22800
+          containerPort: 22800
+          protocol: TCP
+      resources:
+        limits:
+          cpu: "0.5"
+          memory: "1024Mi"
+        requests:
+          cpu: "0.5"
+          memory: "1024Mi"
+      volumes:
+        Generic:
+          enabled: false
+        CharDevice:
+          enabled: true
+          volumes:
+            - hostPath: "/dev/fuse"
+      healthCheck:
+        type: httpGet
+        path: /metrics
+        port: tcp-22800
+        initialDelaySeconds: 5
+        periodSeconds: 5
+        timeoutSeconds: 5
+        successThreshold: 1
+        failureThreshold: 3
+      security:
+        privileged: true
+        cap:
+          enabled: false
+          list:
+            - "SYS_TIME"
+
+# 容器额外参数
+settings:
+  hosts:
+    enabled: false
+  env:
+    enabled: true
+    list:
+      - name: "TZ"
+        value: "Asia/Shanghai"
+      - name: MFS_MASTER
+        value: mfs-master.sit.ptcloud.t.home
+      - name: LOG_LEVEL
+        value: info
+      - name: CONFIG_SERVER_URL
+        value: http://config-server.paas.ptcloud.t.home
+      - name: CONFIG_SERVER_APP
+        value: go-fluentd
+      - name: CONFIG_SERVER_PROFILE
+        value: forward
+      - name: CONFIG_SERVER_LABEL
+        value: master
+      - name: CONFIG_SERVER_KEY
+        value: raw
+
+# Kubernetes service 基本参数
+service:
+  sessionAffinity: None
+  sessionAffinityConfig:
+    timeoutSeconds: 10800
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 22800
+      protocol: TCP
+
+# Kubernetes Ingress 基本参数
+ingress:
+  annotations:
+    kubernetes.io/ingress.class: "external"
+  rules:
+    - host: ${DNS_NAME}
+      paths:
+        - path: /
+          backend:
+            serviceName: ${CI_PROJECT_NAME}
+            servicePort: 80
+  tls:
+    - hosts:
+        - "${DNS_NAME}"
+      secretName: "pateo.com.cn"

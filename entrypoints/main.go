@@ -98,6 +98,7 @@ func SetupArgs() {
 	pflag.String("addr", "localhost:8080", "like `localhost:8080`")
 	pflag.String("env", "", "environment `sit/perf/uat/prod`")
 	pflag.String("log-level", "info", "`debug/info/error`")
+	pflag.Bool("log-alert", false, "is enable log AlertPusher")
 	pflag.Int("heartbeat", 60, "heartbeat seconds")
 	pflag.Parse()
 	if err := utils.Settings.BindPFlags(pflag.CommandLine); err != nil {
@@ -105,12 +106,39 @@ func SetupArgs() {
 	}
 }
 
+func setupLogger(ctx context.Context) {
+	if !utils.Settings.GetBool("log-alert") {
+		return
+	}
+	utils.Logger.Info("enable alert pusher")
+	// log
+	alertPusher, err := utils.NewAlertPusherWithAlertType(
+		ctx,
+		utils.Settings.GetString("settings.logger.push_api"),
+		utils.Settings.GetString("settings.logger.alert_type"),
+		utils.Settings.GetString("settings.logger.push_token"),
+	)
+	if err != nil {
+		utils.Logger.Panic("create AlertPusher", zap.Error(err))
+	}
+
+	hook := utils.NewAlertHook(alertPusher)
+	if _, err := utils.SetDefaultLogger(
+		"go-fluentd:"+utils.Settings.GetString("env"),
+		utils.Settings.GetString("log-level"),
+		zap.HooksWithFields(hook.GetZapHook())); err != nil {
+		utils.Logger.Panic("setup logger", zap.Error(err))
+	}
+}
+
 func main() {
+	ctx := context.Background()
 	SetupArgs()
 	SetupSettings()
+	setupLogger(ctx)
 	defer utils.Logger.Info("All done")
 
 	// run
 	controllor := concator.NewControllor()
-	controllor.Run(context.Background())
+	controllor.Run(ctx)
 }

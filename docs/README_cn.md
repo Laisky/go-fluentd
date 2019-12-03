@@ -1,10 +1,5 @@
-请阅读：<https://blog.laisky.com/p/go-fluentd/>
 
 # 使用 Golang 写一个取代 fluentd 的日志处理器
-
-> Changelog:
->
-> * updated at 2019/9/30：一些优化的说明
 
 ## 起因
 
@@ -131,11 +126,6 @@ fluentd 采取了 messagepack 的形式来编解码数据，最初一版里我�
 如果后续处理不及时时，宁愿丢弃消息也不能阻塞 tcp。实现的方法就是上述的 `syncOutChan/asyncOutChan`。
 
 
-2019/9/30 补充：在 v1.11.0 后，把拼接的逻辑放进了 fluentd-recv 里，
-原因是 acceptorPipeline 是并行的，这会导致日志片段（fragments，也就是被拆碎的日志）出现乱序，
-为了确保能够按照正确的顺序进行拼接，所以把拼接的逻辑放进了 fluentd-recv
-（反正似乎也只有 docker fluentd-driver 需要拼接。）
-
 
 ### AcceptorPipeline
 
@@ -222,62 +212,6 @@ ids 文件采用简单的 binary Big Endian 存储定长的 int64。
 另一个小问题是，从 pprof 上来看，`File.Stat` 的开销还不小，看来这个操作也挺费时的。
 
 
-#### 2019/9/30 优化
-
-后来对 journal 尝试做了很多优化。
-
-首先是尝试了启用 gzip，但是发现启用 gzip 后，对于 50KB 的数据，
-即使是采用 best speed，也要慢接近 80 倍。
-按照 291897ns 处理 50KB 的速度，每秒钟可以处理的数据为 167 MB。
-考虑到写文件的速度为 412151ns 的话，每秒处理速度为 118MB。
-
-```
-BenchmarkGZCompressor/normal_write_50KB-4    	  531210	      2313 ns/op	       0 B/op	       0 allocs/op
-BenchmarkGZCompressor/gz_write_50kB_default-4        	     652	   1593705 ns/op	       0 B/op	       0 allocs/op
-BenchmarkGZCompressor/gz_write_50kB_best_compression-4         	     783	   1491124 ns/op	       0 B/op	       0 allocs/op
-BenchmarkGZCompressor/gz_write_50kB_best_speed-4               	    4370	    291897 ns/op	       0 B/op	       0 allocs/op
-BenchmarkGZCompressor/gz_write_50kB_HuffmanOnly-4              	    4652	    250891 ns/op	       0 B/op	       0 allocs/op
-BenchmarkGZCompressor/gz_write_50KB_to_file-4                  	     286	   5067483 ns/op	       0 B/op	       0 allocs/op
-BenchmarkGZCompressor/gz_write_50KB_to_file_best_speed-4       	    3494	    412151 ns/op	  148759 B/op	       0 allocs/op
-BenchmarkGZCompressor/gz_write_50KB_to_file_BestCompression-4  	     690	   1596123 ns/op	       0 B/op	       0 allocs/op
-```
-
-不过因为启用 gzip 后会显著增加 CPU 开销，所以将默认配置项设置为了 false。
-
-另一个优化是，以前是把所有的文件都写入同一个 journal file，后来做了优化，
-每一个 tag 都实例化一个 journal，写入到不同的文件中，极大的分散了 IO。
-这样即使某些项出了问题，也不会干扰到其他 tag。
-
-```sh
-[root@qing-dataplatform-srv4 laisky]# du -sh /data/go-concator/*
-200M    /data/log/fluentd/go-concator/ai.prod
-200M    /data/log/fluentd/go-concator/app.spring.prod
-201M    /data/log/fluentd/go-concator/base.prod
-200M    /data/log/fluentd/go-concator/bigdata-wuling.prod
-200M    /data/log/fluentd/go-concator/bot.prod
-201M    /data/log/fluentd/go-concator/connector.prod
-200M    /data/log/fluentd/go-concator/cp.prod
-200M    /data/log/fluentd/go-concator/emqtt.prod
-200M    /data/log/fluentd/go-concator/gateway.prod
-201M    /data/log/fluentd/go-concator/geely.prod
-200M    /data/log/fluentd/go-concator/qingai.prod
-200M    /data/log/fluentd/go-concator/spark.prod
-201M    /data/log/fluentd/go-concator/tsp.prod
-200M    /data/log/fluentd/go-concator/usertracking.prod
-200M    /data/log/fluentd/go-concator/wechat.prod
-```
-
-然后为了减少日志的重复率，默认至少保存一个 journal buf file，
-也就是除了当前正在写入的那个文件外，额外会保留最近一份文件不作处理。
-因为按照以前的逻辑，有可能一个 log 刚被写入文件就遇到了 rotate，然后立刻就被加载处理了，
-从而导致重复。
-
-同样是为了减少日志重复率，在内存中更长时间的保存 committed ids。
-可以通过 `settings.journal.committed_id_sec` 设置。
-
-最后一个优化就是启用了磁盘预分配，所以看到的文件夹大小都是 200MB。
-
-
 ### Dispatcher & tagFilters
 
 其实最初导致 Fluentd 不能水平扩展的根本原因就在于我们需要让日志以 tag & container_id 来分流，
@@ -296,7 +230,7 @@ type TagFilterFactoryItf interface {
     GetName() string
 
     SetMsgPool(*sync.Pool)
-    SetCommittedChan(chan<- int64)
+    SetCommittedChan(chan<- *libs.FluentMsg)
     SetDefaultIntervalChanSize(int)
     DiscardMsg(*libs.FluentMsg)
 }
@@ -338,7 +272,7 @@ Pipeline 是对每一个 msg，由外部去调用每一个 filters 的 Filter �
 type PostFilterItf interface {
     SetUpstream(chan *libs.FluentMsg)
     SetMsgPool(*sync.Pool)
-    SetCommittedChan(chan<- int64)
+    SetCommittedChan(chan<- *libs.FluentMsg)
 
     Filter(*libs.FluentMsg) *libs.FluentMsg
     DiscardMsg(*libs.FluentMsg)
@@ -367,7 +301,7 @@ type SenderItf interface {
     GetName() string
 
     SetMsgPool(*sync.Pool)
-    SetCommitChan(chan<- int64)
+    SetCommitChan(chan<- *libs.FluentMsg)
     SetSupportedTags([]string)
     SetDiscardChan(chan<- *libs.FluentMsg)
     SetDiscardWithoutCommitChan(chan<- *libs.FluentMsg)
@@ -403,7 +337,7 @@ producer 的主要职责除了将 msg 传递给各个 senders 外，还负责统
 
 ### Monitor
 
-一个基于 iris 提供 HTTP 监控接口的组件。通过 `HTTP GET /monitor` 返回监控结果。
+一个基于 gin 提供 HTTP 监控接口的组件。通过 `HTTP GET /monitor` 返回监控结果。
 
 需要手动采集监控数据，在代码的任何地方，
 都可以通过调用 monitor.AddMetric 为最终的监控结果（以 json 呈现）中添加一个字段：
@@ -420,8 +354,8 @@ func AddMetric(name string, metric func() map[string]interface{}) {
 - `name`：会呈现为 json 中的一个 key；
 - `metric`：一个返回 map 的 func，每当监控接口被调用时，该 func 就会被调用，并将结果拼合到最终的 json 之中。
 
-
-一个监控结果的例子：
+<details><summary>一个监控结果的例子：</summary>
+<p>
 
 ```go
 {
@@ -539,17 +473,19 @@ func AddMetric(name string, metric func() map[string]interface{}) {
 }
 ```
 
+</p>
+</details>
 
 
 ---
 
 ## 运行
 
-使用 glide 安装依赖，然后直接编译运行即可。
+使用 go mod 安装依赖，然后直接编译运行即可。
 
 ```sh
 # 安装依赖
-glide i
+go mod download
 
 # 运行
 ➜  go-fluentd git:(master) go run ./entrypoints/main.go --help
@@ -613,31 +549,31 @@ exit status 2
 
 golang 的性能调优真是器大活好！
 
-我使用了 iris 提供的 HTTP 在线导出 pprof 数据的功能。
+我使用了 gin 提供的 HTTP 在线导出 pprof 数据的功能。
 用法非常简单，只需要注册一个 endpoint：
 
 ```go
 // supported action:
 // cmdline, profile, symbol, goroutine, heap, threadcreate, debug/block
-Server.Any("/admin/pprof/{action:path}", pprof.New())
+Server.Any("/pprof/{action:path}", pprof.New())
 ```
 
 然后就可以调用：
 
-- `/admin/pprof/cmdline`：启动时的命令行参数
-- `/admin/pprof/profile`：下载 CPU dump
-- `/admin/pprof/symbol`
-- `/admin/pprof/goroutine`：goroutine 信息
-- `/admin/pprof/heap`：下载 heap dump
-- `/admin/pprof/heap?debug=1`：一些运行时信息
-- `/admin/pprof/threadcreate`
-- `/admin/pprof/debug/block`
-- `/admin/pprof/`
+- `/pprof/cmdline`：启动时的命令行参数
+- `/pprof/profile`：下载 CPU dump
+- `/pprof/symbol`
+- `/pprof/goroutine`：goroutine 信息
+- `/pprof/heap`：下载 heap dump
+- `/pprof/heap?debug=1`：一些运行时信息
+- `/pprof/threadcreate`
+- `/pprof/debug/block`
+- `/pprof/`
 
 
 ### CPU Profile
 
-针对 CPU 做优化时最常用的就是 profile，访问 `/admin/pprof/profile` 后，
+针对 CPU 做优化时最常用的就是 profile，访问 `/pprof/profile` 后，
 会自动启动采样，等待 30 秒后，会下载一个 `profile` 文件，然后就可以启动 go tool 的交互式工具：
 
 ```sh

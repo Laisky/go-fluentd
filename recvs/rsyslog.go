@@ -38,7 +38,10 @@ func NewRsyslogSrv(addr string) (*syslog.Server, syslog.LogPartsChannel, error) 
 }
 
 type RsyslogCfg struct {
-	Name, Addr, Env, TagKey, MsgKey    string
+	RewriteTags map[string]string
+	TimeShift   time.Duration
+	Name, Addr, TagKey, MsgKey,
+	Tag,
 	NewTimeFormat, TimeKey, NewTimeKey string
 }
 
@@ -60,17 +63,17 @@ func (r *RsyslogRecv) GetName() string {
 }
 
 func (r *RsyslogRecv) Run(ctx context.Context) {
-	utils.Logger.Info("Run RsyslogRecv")
+	utils.Logger.Info("run RsyslogRecv", zap.String("tag", r.Tag))
 
 	go func() {
 		defer utils.Logger.Info("rsyslog reciver exit", zap.String("name", r.GetName()))
 		var (
-			ok      bool
-			msg     *libs.FluentMsg
-			tag     = "emqtt." + r.Env
-			logPart format.LogParts
-			ctx2Srv context.Context
-			cancel  func()
+			ok                        bool
+			msg                       *libs.FluentMsg
+			logPart                   format.LogParts
+			ctx2Srv                   context.Context
+			cancel                    func()
+			rewriteKey, rewriteNewKey string
 		)
 	SERVER_LOOP:
 		for {
@@ -116,9 +119,9 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 					}
 				}
 
-				switch logPart[r.TimeKey].(type) {
+				switch t := logPart[r.TimeKey].(type) {
 				case time.Time:
-					logPart[r.NewTimeKey] = logPart[r.TimeKey].(time.Time).UTC().Format(r.NewTimeFormat)
+					logPart[r.NewTimeKey] = t.Add(r.TimeShift).UTC().Format(r.NewTimeFormat)
 					delete(logPart, r.TimeKey)
 				default:
 					utils.Logger.Error("unknown timestamp format")
@@ -131,11 +134,17 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 				msg = r.msgPool.Get().(*libs.FluentMsg)
 				// utils.Logger.Info(fmt.Sprintf("got %p", msg))
 				msg.Id = r.counter.Count()
-				msg.Tag = tag
+				msg.Tag = r.Tag
 				msg.Message = logPart
-				msg.Message[r.TagKey] = msg.Tag
+				for rewriteKey, rewriteNewKey = range r.RewriteTags { // rewrite key
+					msg.Message[rewriteNewKey] = msg.Message[rewriteKey]
+					delete(msg.Message, rewriteKey)
+				}
+				if r.TagKey != "" { // reset tag
+					msg.Message[r.TagKey] = r.Tag
+				}
 
-				utils.Logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id))
+				utils.Logger.Debug("receive new msg", zap.String("tag", r.Tag), zap.Int64("id", msg.Id))
 				r.asyncOutChan <- msg
 			}
 

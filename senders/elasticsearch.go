@@ -94,15 +94,19 @@ func (s *ElasticSearchSender) getMsgStarting(msg *libs.FluentMsg) ([]byte, error
 }
 
 func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*libs.FluentMsg) (err error) {
+	if len(msgs) == 0 {
+		return nil
+	}
+
 	bulkCtx.cnt = bulkCtx.cnt[:0]
+	var b []byte
 	for _, bulkCtx.msg = range msgs {
 		if bulkCtx.starting, err = s.getMsgStarting(bulkCtx.msg); err != nil {
 			utils.Logger.Warn("try to generate bulk index got error", zap.Error(err))
 			continue
 		}
 
-		b, err := json.Marshal(bulkCtx.msg.Message)
-		if err != nil {
+		if b, err = json.Marshal(bulkCtx.msg.Message); err != nil {
 			return errors.Wrap(err, "try to marshal messages got error")
 		}
 
@@ -112,6 +116,10 @@ func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*libs.Flue
 		bulkCtx.cnt = append(bulkCtx.cnt, bulkCtx.starting...)
 		bulkCtx.cnt = append(bulkCtx.cnt, b...)
 		bulkCtx.cnt = append(bulkCtx.cnt, '\n')
+	}
+
+	if len(bulkCtx.cnt) == 0 {
+		return nil
 	}
 
 	bulkCtx.buf.Reset()
@@ -266,6 +274,7 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *lib
 						utils.Logger.Error("try send message got error",
 							zap.Error(err),
 							zap.String("tag", tag),
+							zap.ByteString("content", bulkCtx.cnt),
 							zap.Int("num", len(msgBatchDelivery)))
 						for _, msg = range msgBatchDelivery {
 							s.discardWithoutCommitChan <- msg

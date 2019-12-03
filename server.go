@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	server                   = gin.Default()
+	server                   = gin.New()
 	defaultGraceShutdownWait = 3 * time.Second
 )
 
@@ -30,6 +30,7 @@ func RunServer(ctx context.Context, addr string) {
 		Handler: server,
 	}
 
+	server.Use(gin.Recovery())
 	server.Any("/health", func(ctx *gin.Context) {
 		ctx.String(http.StatusOK, "hello, world")
 	})

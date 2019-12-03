@@ -116,3 +116,4 @@ cpu.pprof
 # docs
 
 coverage.txt
+entrypoints/main.go

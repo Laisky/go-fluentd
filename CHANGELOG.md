@@ -2,6 +2,36 @@
 *CURRENT*
 ---
 
+
+
+*v1.12.1*
+---
+
+- 2019-12-27 (Laisky) fix: support es6
+- 2019-12-12 (Laisky) ci: upgrade go-utils
+- 2019-12-12 (Laisky) ci: upgrade go-utils
+
+*v1.12.0*
+---
+
+- 2019-12-03 (Laisky) ci: remove marathon build
+- 2019-12-03 (Laisky) docs: update docs
+- 2019-12-03 (Laisky) fix: add more log
+- 2019-12-02 (Laisky) feat(paas-445): support k8s fluent-bit daemonset
+- 2019-11-29 (Laisky) ci: upgrade golang v1.13.4
+- 2019-11-28 (Laisky) feat(paas-441): support k8s
+- 2019-11-28 (Laisky) fix: rewrite rsys log
+- 2019-11-28 (Laisky) fix: do not reset rsyslog tag
+- 2019-11-28 (Laisky) fix: do not reset rsyslog tag
+- 2019-11-28 (Laisky) feat(paas-444): rsyslog support custom tag
+- 2019-11-12 (Laisky) fix: need root
+- 2019-11-12 (Laisky) ci: set user
+- 2019-11-12 (Laisky) fix: avoid empty es body
+- 2019-11-11 (Laisky) feat: upgrade zap
+- 2019-11-08 (Laisky) fix: zap fields parse
+- 2019-11-08 (Laisky) fix: upgrade zap
+- 2019-11-06 (Laisky) feat: add logger alert
+- 2019-10-23 (Laisky) perf: disable gin log
 - 2019-10-18 (Laisky) ci: upgrade golang v1.13.3
 - 2019-10-18 (Laisky) fix: upgrade go-utils v1.8.1
 
@@ -430,4 +460,4 @@
 - 2018-12-06 (Laisky) fix: typo
 - 2018-12-06 (Laisky) feat(paas-220): support rsyslog recv
 - 2018-12-04 (Laisky) fix(paas-208): change flatten delimiter to "__"
-- 2018-12-04 (Laisky) build: rename to `google.com`
+- 2018-12-04 (Laisky) build: rename to `pateo.com`

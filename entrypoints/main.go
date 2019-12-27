@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	concator "github.com/Laisky/go-fluentd"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/spf13/pflag"
+	concator "pateo.com/go-fluentd"
 )
 
 // SetupSettings setup arguments restored in viper
@@ -66,17 +66,16 @@ func SetupSettings() {
 		utils.Settings.GetString("config-server-profile") != "" &&
 		utils.Settings.GetString("config-server-label") != "" &&
 		utils.Settings.GetString("config-server-key") != "" {
-		cfgSrvCfg := &utils.ConfigServerCfg{
-			URL:     utils.Settings.GetString("config-server"),
-			Profile: utils.Settings.GetString("config-server-profile"),
-			Label:   utils.Settings.GetString("config-server-label"),
-			App:     utils.Settings.GetString("config-server-appname"),
-		}
-		if err := utils.Settings.SetupFromConfigServerWithRawYaml(cfgSrvCfg, utils.Settings.GetString("config-server-key")); err != nil {
+		if err := utils.Settings.SetupFromConfigServerWithRawYaml(
+			utils.Settings.GetString("config-server"),
+			utils.Settings.GetString("config-server-appname"),
+			utils.Settings.GetString("config-server-profile"),
+			utils.Settings.GetString("config-server-label"),
+			utils.Settings.GetString("config-server-key"),
+		); err != nil {
 			utils.Logger.Panic("try to load configuration from config-server got error", zap.Error(err))
 		} else {
-			utils.Logger.Info("success load configuration from config-server",
-				zap.String("cfg", fmt.Sprint(cfgSrvCfg)))
+			utils.Logger.Info("success load configuration from config-server")
 			isCfgLoaded = true
 		}
 	}

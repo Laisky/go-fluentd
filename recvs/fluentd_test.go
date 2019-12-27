@@ -2,6 +2,9 @@ package recvs_test
 
 import (
 	"context"
+	"github.com/Laisky/go-utils"
+	"github.com/cespare/xxhash"
+	"math/rand"
 	"net"
 	"testing"
 	"time"
@@ -21,9 +24,11 @@ func TestFluentdRecv(t *testing.T) {
 	)
 
 	cfg := &recvs.FluentdRecvCfg{
-		Name:   "fluentd-test",
-		Addr:   "127.0.0.1:24228",
-		TagKey: "tag",
+		NFork:           3,
+		ConcatorBufSize: 1000,
+		Name:            "fluentd-test",
+		Addr:            "127.0.0.1:24228",
+		TagKey:          "tag",
 	}
 	recv := recvs.NewFluentdRecv(cfg)
 
@@ -108,4 +113,58 @@ func TestFluentdRecv(t *testing.T) {
 		}
 	}
 
+}
+
+func choice(s []string) string {
+	return s[rand.Intn(len(s))]
+}
+
+type hashCacheItem struct {
+	v uint64
+	t time.Time
+}
+
+func BenchmarkLB(b *testing.B) {
+	lbkeys := []string{}
+	for i := 0; i < 100; i++ {
+		lbkeys = append(lbkeys, utils.RandomStringWithLength(25))
+	}
+
+	var (
+		lbKey string
+		hashV uint64
+		// hashItem *hashCacheItem
+	)
+	b.Run("hash base lb", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			lbKey = choice(lbkeys)
+			hashV = xxhash.Sum64String(lbKey)
+		}
+	})
+
+	// hashCache := map[string]*hashCacheItem{}
+	hashCache := map[string]uint64{}
+	var ok bool
+	// expires := 1 * time.Second
+	b.Run("hash and cache", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			lbKey = choice(lbkeys)
+			if _, ok = hashCache[lbKey]; ok {
+				continue
+			}
+
+			hashV = xxhash.Sum64String(lbKey)
+			hashCache[lbKey] = hashV
+			// hashCache[lbKey] = &hashCacheItem{
+			// 	t: utils.Clock.GetUTCNow(),
+			// 	v: hashV,
+			// }
+		}
+
+		// for lbKey, hashItem = range hashCache {
+		// 	if hashItem.t.Add(expires).After(utils.Clock.GetUTCNow()) {
+		// 		delete(hashCache, lbKey)
+		// 	}
+		// }
+	})
 }

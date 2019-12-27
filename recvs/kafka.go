@@ -115,14 +115,17 @@ func (r *KafkaRecv) Run(ctx context.Context) {
 				}
 
 				ctx2Consumer, cancel = context.WithTimeout(ctx, r.ReconnectInterval)
-				cli, err := kafka.NewKafkaCliWithGroupId(ctx2Consumer, &kafka.KafkaCliCfg{
-					Brokers:          r.Brokers,
-					Topics:           r.Topics,
-					Groupid:          r.Group,
-					KMsgPool:         r.KMsgPool,
-					IntervalNum:      r.IntervalNum,
-					IntervalDuration: r.IntervalDuration,
-				})
+				cli, err := kafka.NewKafkaCliWithGroupID(
+					ctx2Consumer,
+					&kafka.KafkaCliCfg{
+						Brokers:  r.Brokers,
+						Topics:   r.Topics,
+						Groupid:  r.Group,
+						KMsgPool: r.KMsgPool,
+					},
+					kafka.WithCommitFilterCheckInterval(r.IntervalDuration),
+					kafka.WithCommitFilterCheckNum(r.IntervalNum),
+				)
 				if err != nil {
 					utils.Logger.Error("try to connect to kafka got error", zap.Error(err))
 					cancel()

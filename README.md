@@ -10,6 +10,7 @@ Rewrite fluentd-server by Golang, Higher performance with less resource requirem
 * multiple senders(support multiple backend: elasticsearch, fluentd, ...)
 * multiple environments deployment(`--env`: sit, perf, uat, prod)
 
+[![pipeline status](http://gitlab.google.com.cn:10080/PaaS/go-fluentd/badges/master/pipeline.svg)](http://gitlab.google.com.cn:10080/PaaS/go-fluentd/commits/master)
 ![GitHub release](https://img.shields.io/github/release/Laisky/go-fluentd.svg)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://travis-ci.org/Laisky/go-fluentd.svg?branch=master)](https://travis-ci.org/Laisky/go-fluentd)
@@ -25,7 +26,7 @@ When processing 400mbps logs flood: ![cpu](https://s3.laisky.com/uploads/2019/10
 
 Documents:
 
-- [中文文档](https://blog.laisky.com/p/go-fluentd/)
+- [中文文档](docs/README_cn.md)
 - [Quick Start](docs/quickstart.md)
 - [Build with Docker](.docker)
 

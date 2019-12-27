@@ -107,7 +107,8 @@ func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*libs.Flue
 		}
 
 		if b, err = json.Marshal(bulkCtx.msg.Message); err != nil {
-			return errors.Wrap(err, "try to marshal messages got error")
+			utils.Logger.Warn("try to marshal messages got error", zap.Error(err))
+			continue
 		}
 
 		utils.Logger.Debug("prepare bulk content send to es",
@@ -135,6 +136,7 @@ func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*libs.Flue
 	}
 	req.Close = true
 	req.Header.Set("Content-encoding", "gzip")
+	req.Header.Set("Content-Type", "application/json;charset=UTF-8")
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return errors.Wrap(err, "try to request es got error")
@@ -229,6 +231,7 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *lib
 			bulkCtx.buf = &bytes.Buffer{}
 			bulkCtx.gzWriter = gzip.NewWriter(bulkCtx.buf)
 
+		NEW_MSG_LOOP:
 			for {
 				select {
 				case <-ctx.Done():
@@ -267,21 +270,24 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *lib
 					continue
 				}
 
-			SEND_MSG:
-				if err = s.SendBulkMsgs(bulkCtx, msgBatchDelivery); err != nil {
-					nRetry++
-					if nRetry > maxRetry {
-						utils.Logger.Error("try send message got error",
-							zap.Error(err),
-							zap.String("tag", tag),
-							zap.ByteString("content", bulkCtx.cnt),
-							zap.Int("num", len(msgBatchDelivery)))
-						for _, msg = range msgBatchDelivery {
-							s.discardWithoutCommitChan <- msg
+				for {
+					if err = s.SendBulkMsgs(bulkCtx, msgBatchDelivery); err != nil {
+						nRetry++
+						if nRetry > maxRetry {
+							utils.Logger.Error("try send message got error",
+								zap.Error(err),
+								zap.String("tag", tag),
+								zap.ByteString("content", bulkCtx.cnt),
+								zap.Int("num", len(msgBatchDelivery)))
+							for _, msg = range msgBatchDelivery {
+								s.discardWithoutCommitChan <- msg
+							}
+							continue NEW_MSG_LOOP
 						}
 						continue
 					}
-					goto SEND_MSG
+
+					break
 				}
 
 				utils.Logger.Debug("success sent message to backend",

@@ -292,7 +292,7 @@ func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommit
 
 	return tagFilters.NewTagPipeline(ctx, &tagFilters.TagPipelineCfg{
 		MsgPool:                 c.msgPool,
-		CommitedChan:            waitCommitChan,
+		WaitCommitChan:          waitCommitChan,
 		DefaultInternalChanSize: utils.Settings.GetInt("settings.tag_filters.internal_chan_size"),
 	},
 		fs...,
@@ -375,7 +375,7 @@ func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- *libs.Fl
 
 	return postFilters.NewPostPipeline(&postFilters.PostPipelineCfg{
 		MsgPool:         c.msgPool,
-		CommittedChan:   waitCommitChan,
+		WaitCommitChan:  waitCommitChan,
 		NFork:           utils.Settings.GetInt("settings.post_filters.fork"),
 		ReEnterChanSize: utils.Settings.GetInt("settings.post_filters.reenter_chan_len"),
 		OutChanSize:     utils.Settings.GetInt("settings.post_filters.out_chan_size"),

@@ -20,14 +20,14 @@ type TagFilterFactoryItf interface {
 	GetName() string
 
 	SetMsgPool(*sync.Pool)
-	SetCommittedChan(chan<- *libs.FluentMsg)
+	SetWaitCommitChan(chan<- *libs.FluentMsg)
 	SetDefaultIntervalChanSize(int)
 	DiscardMsg(*libs.FluentMsg)
 }
 
 type BaseTagFilterFactory struct {
 	msgPool                 *sync.Pool
-	committedChan           chan<- *libs.FluentMsg
+	waitCommitChan          chan<- *libs.FluentMsg
 	defaultInternalChanSize int
 }
 
@@ -35,8 +35,8 @@ func (f *BaseTagFilterFactory) SetMsgPool(msgPool *sync.Pool) {
 	f.msgPool = msgPool
 }
 
-func (f *BaseTagFilterFactory) SetCommittedChan(committedChan chan<- *libs.FluentMsg) {
-	f.committedChan = committedChan
+func (f *BaseTagFilterFactory) SetWaitCommitChan(waitCommitChan chan<- *libs.FluentMsg) {
+	f.waitCommitChan = waitCommitChan
 }
 
 func (f *BaseTagFilterFactory) SetDefaultIntervalChanSize(size int) {
@@ -44,7 +44,7 @@ func (f *BaseTagFilterFactory) SetDefaultIntervalChanSize(size int) {
 }
 
 func (f *BaseTagFilterFactory) DiscardMsg(msg *libs.FluentMsg) {
-	f.committedChan <- msg
+	f.waitCommitChan <- msg
 }
 
 func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan chan *libs.FluentMsg, inchans []chan *libs.FluentMsg) {

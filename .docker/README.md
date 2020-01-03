@@ -17,8 +17,8 @@ go mod download
 go mod vendor
 
 # build base image
-docker build . -f ./.docker/gobase.Dockerfile -t registry.paas.ptcloud.t.home/paas/gobase:1.13.4-alpine3.10
-docker push registry.paas.ptcloud.t.home/paas/gobase:1.13.4-alpine3.10
+docker build . -f ./.docker/gobase.Dockerfile -t registry.paas.ptcloud.t.home/paas/gobase:1.13.5-alpine3.11
+docker push registry.paas.ptcloud.t.home/paas/gobase:1.13.5-alpine3.11
 
 # build image
 docker build . -f ./.docker/Dockerfile -t registry.paas.ptcloud.t.home/paas/go-fluentd:1.8.2

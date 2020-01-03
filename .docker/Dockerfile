@@ -1,5 +1,5 @@
 # docker build --build-arg http_proxy=http://172.16.4.26:17777 --build-arg https_proxy=http://172.16.4.26:17777
-FROM registry.paas.ptcloud.t.home/paas/gobase:1.13.4-alpine3.10 AS gobuild
+FROM registry.paas.ptcloud.t.home/paas/gobase:1.13.5-alpine3.11 AS gobuild
 
 ENV GO111MODULE=on
 WORKDIR /go-fluentd
@@ -13,7 +13,7 @@ RUN go build -a --ldflags '-extldflags "-static"' entrypoints/main.go
 
 
 # copy executable file and certs to a pure container
-FROM alpine:3.10
+FROM alpine:3.11
 COPY --from=gobuild /etc/ssl/certs /etc/ssl/certs
 COPY --from=gobuild /go-fluentd/main go-fluentd
 

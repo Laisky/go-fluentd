@@ -37,6 +37,7 @@ type ElasticSearchSenderCfg struct {
 type ElasticSearchSender struct {
 	*BaseSender
 	*ElasticSearchSenderCfg
+	logger       *utils.LoggerType
 	retryMsgChan chan *libs.FluentMsg
 	httpClient   *http.Client
 }
@@ -52,6 +53,7 @@ func NewElasticSearchSender(cfg *ElasticSearchSenderCfg) *ElasticSearchSender {
 	}
 
 	s := &ElasticSearchSender{
+		logger: utils.Logger.With(zap.String("name", cfg.Name)),
 		BaseSender: &BaseSender{
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
 		},
@@ -102,16 +104,16 @@ func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*libs.Flue
 	var b []byte
 	for _, bulkCtx.msg = range msgs {
 		if bulkCtx.starting, err = s.getMsgStarting(bulkCtx.msg); err != nil {
-			utils.Logger.Warn("try to generate bulk index got error", zap.Error(err))
+			s.logger.Warn("try to generate bulk index got error", zap.Error(err))
 			continue
 		}
 
 		if b, err = json.Marshal(bulkCtx.msg.Message); err != nil {
-			utils.Logger.Warn("try to marshal messages got error", zap.Error(err))
+			s.logger.Warn("try to marshal messages got error", zap.Error(err))
 			continue
 		}
 
-		utils.Logger.Debug("prepare bulk content send to es",
+		s.logger.Debug("prepare bulk content send to es",
 			zap.ByteString("starting", bulkCtx.starting),
 			zap.ByteString("body", b))
 		bulkCtx.cnt = append(bulkCtx.cnt, bulkCtx.starting...)
@@ -144,10 +146,11 @@ func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*libs.Flue
 	defer resp.Body.Close()
 
 	if err = s.checkResp(resp); err != nil {
+		// TODO: should ignore mapping & field type conlifct
 		return errors.Wrap(err, "request es got error")
 	}
 
-	utils.Logger.Debug("elasticsearch bulk all done", zap.Int("batch", len(msgs)))
+	s.logger.Debug("elasticsearch bulk all done", zap.Int("batch", len(msgs)))
 	return nil
 }
 
@@ -178,7 +181,7 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
 	ret := &ESResp{}
 	bb, err2 := ioutil.ReadAll(resp.Body)
 	if err2 != nil {
-		utils.Logger.Error("try to read es resp body got error",
+		s.logger.Error("try to read es resp body got error",
 			zap.Error(err2),
 			zap.Error(err))
 		return errors.Wrap(err2, "try to read es resp body got error")
@@ -186,24 +189,24 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
 	if err != nil {
 		return errors.Wrap(err, string(bb))
 	}
-	utils.Logger.Debug("got es response", zap.ByteString("resp", bb))
+	s.logger.Debug("got es response", zap.ByteString("resp", bb))
 
 	if err = json.Unmarshal(bb, ret); err != nil {
-		utils.Logger.Error("try to unmarshal body got error, body",
+		s.logger.Error("try to unmarshal body got error, body",
 			zap.Error(err),
 			zap.ByteString("body", bb))
 		return nil
 	}
 
-	if ret.Errors { // ignore
-		utils.Logger.Warn("es return error", zap.ByteString("resp", bb))
+	if ret.Errors {
+		return fmt.Errorf("es return error: %v", string(bb))
 	}
 
 	return nil
 }
 
 func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *libs.FluentMsg {
-	utils.Logger.Info("SpawnForTag", zap.String("tag", tag))
+	s.logger.Info("SpawnForTag", zap.String("tag", tag))
 	inChan := make(chan *libs.FluentMsg, s.InChanSize) // for each tag
 	go s.runFlusher(ctx, inChan)
 
@@ -223,7 +226,7 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *lib
 				nRetry, j int
 				ok        bool
 			)
-			defer utils.Logger.Info("producer exits",
+			defer s.logger.Info("producer exits",
 				zap.String("tag", tag),
 				zap.Int("i", i),
 				zap.String("name", s.GetName()))
@@ -238,7 +241,7 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *lib
 					return
 				case msg, ok = <-inChan:
 					if !ok {
-						utils.Logger.Info("inChan closed")
+						s.logger.Info("inChan closed")
 						return
 					}
 				}
@@ -262,7 +265,7 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *lib
 				nRetry = 0
 				if utils.Settings.GetBool("dry") {
 					for j, msg = range msgBatchDelivery {
-						utils.Logger.Info("send message to backend",
+						s.logger.Info("send message to backend",
 							zap.String("tag", tag),
 							zap.String("log", fmt.Sprint(msgBatch[j].Message)))
 						s.discardChan <- msg
@@ -274,7 +277,7 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *lib
 					if err = s.SendBulkMsgs(bulkCtx, msgBatchDelivery); err != nil {
 						nRetry++
 						if nRetry > maxRetry {
-							utils.Logger.Error("try send message got error",
+							s.logger.Error("try send message got error",
 								zap.Error(err),
 								zap.String("tag", tag),
 								zap.ByteString("content", bulkCtx.cnt),
@@ -290,7 +293,7 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *lib
 					break
 				}
 
-				utils.Logger.Debug("success sent message to backend",
+				s.logger.Debug("success sent message to backend",
 					zap.String("backend", s.Addr),
 					zap.Int("batch", len(msgBatchDelivery)),
 					zap.String("tag", msg.Tag))

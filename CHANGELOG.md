@@ -2,7 +2,7 @@
 *CURRENT*
 ---
 
-
+- 2020-01-03 (Laisky) fix: handle es return error
 
 *v1.12.1*
 ---
@@ -460,4 +460,4 @@
 - 2018-12-06 (Laisky) fix: typo
 - 2018-12-06 (Laisky) feat(paas-220): support rsyslog recv
 - 2018-12-04 (Laisky) fix(paas-208): change flatten delimiter to "__"
-- 2018-12-04 (Laisky) build: rename to `pateo.com`
+- 2018-12-04 (Laisky) build: rename to `google.com`

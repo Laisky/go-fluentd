@@ -17,7 +17,7 @@ type TagPipelineItf interface {
 type TagPipelineCfg struct {
 	DefaultInternalChanSize int
 	MsgPool                 *sync.Pool
-	CommitedChan            chan<- *libs.FluentMsg
+	WaitCommitChan          chan<- *libs.FluentMsg
 }
 
 type TagPipeline struct {
@@ -35,7 +35,7 @@ func NewTagPipeline(ctx context.Context, cfg *TagPipelineCfg, itfs ...TagFilterF
 
 	for _, itf := range itfs {
 		itf.SetMsgPool(cfg.MsgPool)
-		itf.SetCommittedChan(cfg.CommitedChan)
+		itf.SetWaitCommitChan(cfg.WaitCommitChan)
 		itf.SetDefaultIntervalChanSize(cfg.DefaultInternalChanSize)
 	}
 

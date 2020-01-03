@@ -202,12 +202,12 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 				zap.String("remote", conn.RemoteAddr().String()))
 			return
 		} else if err != nil {
-			r.logger.Error("decode message got error", zap.Error(err))
+			r.logger.Error("decode connection", zap.Error(err))
 			return
 		}
 
 		if len(v) < 2 {
-			r.logger.Error("unknown message format for length", zap.String("msg", fmt.Sprint(v)))
+			r.logger.Error("unknown message format, length should be 2", zap.String("msg", fmt.Sprint(v)))
 			continue
 		}
 
@@ -217,7 +217,7 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 		case string:
 			tag = msgTag
 		default:
-			r.logger.Error("message[0] is not `[]byte` or string", zap.String("tag", fmt.Sprint(v[0])))
+			r.logger.Error("unknown message format, message[0] is not `[]byte` or string", zap.String("tag", fmt.Sprint(v[0])))
 			continue
 		}
 		r.logger.Debug("got message tag", zap.String("tag", tag))
@@ -228,7 +228,7 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 			for _, entryI = range msgBody {
 				msg = r.msgPool.Get().(*libs.FluentMsg)
 				if msg.Message, ok = entryI.([]interface{})[1].(map[string]interface{}); !ok {
-					r.logger.Error("failed to decode message", zap.String("tag", tag))
+					r.logger.Error("unknown message format, cannot decode", zap.String("tag", tag))
 					r.msgPool.Put(msg)
 					continue
 				}
@@ -255,15 +255,15 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 				if err = v2.DecodeMsg(reader2); err == eof {
 					break
 				} else if err != nil {
-					r.logger.Error("failed to decode message")
+					r.logger.Error("unknown message format, cannot decode")
 					continue
 				} else if len(v2) < 2 {
-					r.logger.Error("unknown message format for length", zap.String("msg", fmt.Sprint(v2)))
+					r.logger.Error("unknown message format, length should be 2", zap.String("msg", fmt.Sprint(v2)))
 					continue
 				} else {
 					msg = r.msgPool.Get().(*libs.FluentMsg)
 					if msg.Message, ok = v2[1].(map[string]interface{}); !ok {
-						r.logger.Error("msg format incorrect", zap.String("msg", fmt.Sprint(v2[1])))
+						r.logger.Error("unknown message format", zap.String("msg", fmt.Sprint(v2[1])))
 						r.msgPool.Put(msg)
 						continue
 					}
@@ -283,7 +283,7 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 			}
 		default:
 			if len(v) < 3 {
-				r.logger.Error("unknown message format for length", zap.String("msg", fmt.Sprint(v)))
+				r.logger.Error("unknown message format for length, length should be 3", zap.String("msg", fmt.Sprint(v)))
 				continue
 			}
 

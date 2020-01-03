@@ -45,13 +45,13 @@ func (f *DefaultFilter) IsTagInConfigs(tag string) (ok bool) {
 
 func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	if f.RemoveEmptyTag && msg.Tag == "" {
-		utils.Logger.Warn("remove empty tag", zap.String("tag", msg.Tag))
+		utils.Logger.Warn("discard log since empty tag", zap.String("tag", msg.Tag))
 		f.DiscardMsg(msg)
 		return nil
 	}
 
 	if f.RemoveUnsupportTag && !f.IsTagInConfigs(msg.Tag) {
-		utils.Logger.Warn("remove unsupported tag", zap.String("tag", msg.Tag))
+		utils.Logger.Warn("discard log since unsupported tag", zap.String("tag", msg.Tag))
 		f.DiscardMsg(msg)
 		return nil
 	}

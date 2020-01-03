@@ -1,6 +1,6 @@
-# docker build . -f ./.docker/gobase.Dockerfile -t registry.paas.ptcloud.t.home/paas/gobase:1.13.4-alpine3.10
-# docker push registry.paas.ptcloud.t.home/paas/gobase:1.13.4-alpine3.10
-FROM golang:1.13.4-alpine3.10
+# docker build . -f ./.docker/gobase.Dockerfile -t registry.paas.ptcloud.t.home/paas/gobase:1.13.5-alpine3.11
+# docker push registry.paas.ptcloud.t.home/paas/gobase:1.13.5-alpine3.11
+FROM golang:1.13.5-alpine3.11
 
 # run dependencies
 RUN apk update && apk upgrade && \

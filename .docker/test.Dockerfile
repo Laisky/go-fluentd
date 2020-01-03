@@ -1,6 +1,6 @@
 # docker build . -f ./.docker/test.Dockerfile -t registry.paas.ptcloud.t.home/paas/go-fluentd-test:v1
 # docker push registry.paas.ptcloud.t.home/paas/go-fluentd-test:v1
-FROM registry.paas.ptcloud.t.home/paas/gobase:1.13.4-alpine3.10
+FROM registry.paas.ptcloud.t.home/paas/gobase:1.13.5-alpine3.11
 ENV GO111MODULE=on
 
 WORKDIR /go-fluentd

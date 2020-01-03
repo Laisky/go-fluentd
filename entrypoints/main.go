@@ -8,7 +8,7 @@ import (
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/spf13/pflag"
-	concator "pateo.com/go-fluentd"
+	concator "github.com/Laisky/go-fluentd"
 )
 
 // SetupSettings setup arguments restored in viper

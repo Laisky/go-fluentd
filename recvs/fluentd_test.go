@@ -119,10 +119,10 @@ func choice(s []string) string {
 	return s[rand.Intn(len(s))]
 }
 
-type hashCacheItem struct {
-	v uint64
-	t time.Time
-}
+// type hashCacheItem struct {
+// 	v uint64
+// 	t time.Time
+// }
 
 func BenchmarkLB(b *testing.B) {
 	lbkeys := []string{}

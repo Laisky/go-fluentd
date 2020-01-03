@@ -9,16 +9,16 @@ import (
 type PostFilterItf interface {
 	SetUpstream(chan *libs.FluentMsg)
 	SetMsgPool(*sync.Pool)
-	SetCommittedChan(chan<- *libs.FluentMsg)
+	SetWaitCommitChan(chan<- *libs.FluentMsg)
 
 	Filter(*libs.FluentMsg) *libs.FluentMsg
 	DiscardMsg(*libs.FluentMsg)
 }
 
 type BaseFilter struct {
-	upstreamChan  chan *libs.FluentMsg
-	committedChan chan<- *libs.FluentMsg
-	msgPool       *sync.Pool
+	upstreamChan   chan *libs.FluentMsg
+	waitCommitChan chan<- *libs.FluentMsg
+	msgPool        *sync.Pool
 }
 
 func (f *BaseFilter) SetUpstream(upChan chan *libs.FluentMsg) {
@@ -29,10 +29,10 @@ func (f *BaseFilter) SetMsgPool(msgPool *sync.Pool) {
 	f.msgPool = msgPool
 }
 
-func (f *BaseFilter) SetCommittedChan(committedChan chan<- *libs.FluentMsg) {
-	f.committedChan = committedChan
+func (f *BaseFilter) SetWaitCommitChan(waitCommitChan chan<- *libs.FluentMsg) {
+	f.waitCommitChan = waitCommitChan
 }
 
 func (f *BaseFilter) DiscardMsg(msg *libs.FluentMsg) {
-	f.committedChan <- msg
+	f.waitCommitChan <- msg
 }

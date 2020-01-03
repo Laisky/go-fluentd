@@ -23,7 +23,8 @@ const (
 	defaultInnerJournalIDChanLen   = 10000
 	minimalBufSizeByte             = 10485760 // 10 MB
 	intervalToStartingLegacy       = 3 * time.Second
-	intervalForceGC                = 1 * time.Minute
+	defaultJournalLegacyWait       = 1 * time.Second
+	intervalForceGC                = 3 * time.Minute
 )
 
 type JournalCfg struct {
@@ -174,6 +175,7 @@ func (j *Journal) ProcessLegacyMsg(dumpChan chan *libs.FluentMsg) (maxID int64, 
 			}
 
 			startTs := utils.Clock.GetUTCNow()
+		NEXT_LEGACY_MSG:
 			for {
 				msg = j.MsgPool.Get().(*libs.FluentMsg)
 				data.Data["message"] = nil // alloc new map to avoid old data contaminate
@@ -222,7 +224,14 @@ func (j *Journal) ProcessLegacyMsg(dumpChan chan *libs.FluentMsg) (maxID int64, 
 
 				// rewrite data into journal
 				// only committed id can really remove a msg
-				dumpChan <- msg
+				for {
+					select {
+					case dumpChan <- msg:
+						continue NEXT_LEGACY_MSG
+					default:
+						time.Sleep(defaultJournalLegacyWait) // do not block dumpchan
+					}
+				}
 			}
 		}(k.(string), v.(*journal.Journal))
 
@@ -483,7 +492,7 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 			case jji.(chan *libs.FluentMsg) <- msg:
 			case j.outChan <- msg:
 			default:
-				utils.Logger.Error("discard msg since of journal & downstream busy",
+				utils.Logger.Error("discard log since of journal & downstream busy",
 					zap.String("tag", msg.Tag),
 					zap.String("msg", fmt.Sprint(msg)),
 				)

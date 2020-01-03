@@ -54,13 +54,13 @@ func (f *ESDispatcherFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	}
 
 	if msg.Message[f.TagKey].(string) == "" {
-		utils.Logger.Error("msg tag should not empty", zap.String("msg", fmt.Sprint(msg)))
+		utils.Logger.Warn("discard log since tag is empty", zap.String("msg", fmt.Sprint(msg)))
 		f.DiscardMsg(msg)
 		return nil
 	}
 
 	if msg.Tag, ok = f.ReTagMap[msg.Message[f.TagKey].(string)]; !ok {
-		utils.Logger.Error("tag not exists in retagmap", zap.String("tag", msg.Message[f.TagKey].(string)))
+		utils.Logger.Warn("discard log since tag not exists in retagmap", zap.String("tag", msg.Message[f.TagKey].(string)))
 		f.DiscardMsg(msg)
 		return nil
 	}

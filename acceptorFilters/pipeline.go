@@ -136,6 +136,7 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 			var (
 				filter AcceptorFilterItf
 				msg    *libs.FluentMsg
+				ok     bool
 			)
 			defer utils.Logger.Info("quit acceptorPipeline syncChan", zap.String("last_msg", fmt.Sprint(msg)))
 
@@ -144,7 +145,11 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 				select {
 				case <-ctx.Done():
 					return
-				case msg = <-syncInChan:
+				case msg, ok = <-syncInChan:
+					if !ok {
+						utils.Logger.Info("syncInChan closed")
+						return
+					}
 				}
 				// utils.Logger.Debug("AcceptorPipeline got blockable msg")
 				f.counter.Count()

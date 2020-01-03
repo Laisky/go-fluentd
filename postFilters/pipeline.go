@@ -13,7 +13,7 @@ import (
 
 type PostPipelineCfg struct {
 	MsgPool                             *sync.Pool
-	CommittedChan                       chan<- *libs.FluentMsg
+	WaitCommitChan                      chan<- *libs.FluentMsg
 	ReEnterChanSize, OutChanSize, NFork int
 }
 
@@ -39,7 +39,7 @@ func NewPostPipeline(cfg *PostPipelineCfg, filters ...PostFilterItf) *PostPipeli
 	for _, filter := range pp.filters {
 		filter.SetUpstream(pp.reEnterChan)
 		filter.SetMsgPool(pp.MsgPool)
-		filter.SetCommittedChan(pp.CommittedChan)
+		filter.SetWaitCommitChan(pp.WaitCommitChan)
 	}
 
 	return pp

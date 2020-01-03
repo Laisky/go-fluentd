@@ -161,7 +161,7 @@ func (p *Producer) RunMsgCollector(ctx context.Context, tag2NSender *sync.Map, d
 			isCommit = false
 		}
 
-		// ⚠️Notify: Do not change tag in any sender
+		// ⚠️Warning: Do not change tag in any sender
 		if itf, ok = tag2NSender.Load(msg.Tag); !ok {
 			utils.Logger.Panic("[panic] tag2NSender should contains tag",
 				zap.String("tag", msg.Tag),

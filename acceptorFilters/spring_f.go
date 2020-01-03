@@ -63,7 +63,7 @@ func (f *SpringFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	case string:
 		msg.Message[f.MsgKey] = []byte(msg.Message[f.MsgKey].(string))
 	default:
-		utils.Logger.Warn("unknown type of msg",
+		utils.Logger.Warn("discard log since unknown type of msg",
 			zap.String("tag", msg.Tag),
 			zap.String("msg", fmt.Sprint(msg.Message[f.MsgKey])))
 		f.DiscardMsg(msg)

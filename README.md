@@ -10,7 +10,6 @@ Rewrite fluentd-server by Golang, Higher performance with less resource requirem
 * multiple senders(support multiple backend: elasticsearch, fluentd, ...)
 * multiple environments deployment(`--env`: sit, perf, uat, prod)
 
-[![pipeline status](http://gitlab.google.com.cn:10080/PaaS/go-fluentd/badges/master/pipeline.svg)](http://gitlab.google.com.cn:10080/PaaS/go-fluentd/commits/master)
 ![GitHub release](https://img.shields.io/github/release/Laisky/go-fluentd.svg)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://travis-ci.org/Laisky/go-fluentd.svg?branch=master)](https://travis-ci.org/Laisky/go-fluentd)

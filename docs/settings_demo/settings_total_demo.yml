@@ -1,3 +1,5 @@
+# 不会生效的注释项
+# 只是用来提醒自己，目前用了哪些端口，或者后续的配置中可以直接引用
 consts:
   ports:
     "24514": rsyslog recv
@@ -43,47 +45,120 @@ consts:
       - perf
       - uat
       - prod
+
+# settings 里保存的就是会真实生效的配置了。
+# controllor 里会遍历各个插件内的租户（tenants），自动加载。
+#
+# 流水线的顺序：acceptor -> acceptpipeline -> journal -> dispatcher -> tagPipeline -> postFilter -> producer
+#
+# ⚠️：对于不同地方出现的相同字段，只会注释一次，所以若遇到未注释的字段，可以向上搜索看看在其他地方的注释。
 settings:
+  # logger 配置的是我自己的 AlertPusher 插件，
+  # https://github.com/Laisky/go-utils/blob/c7190c02426f233f7479eb66a94d21390653f9f1/logger.go#L301
+  # 会自动通过 telegram 推送 Warn／Error 级别的日志
   logger:
     push_api: "https://blog.laisky.com/graphql/query/"
     alert_type: laisky
     push_token: "******"
+
+  # acceptor 的配置，这里决定了日志的来源
   acceptor:
+    # 首先是一些通用的配置项
+
+    # 这两个 async/sync chan 是用来收集 acceptor.recvs 的消息，然后向后传递的。
+    # async_out_chan_size 不会阻塞，适用于 docker 这种需要保证日志消费的源，速度过快时会丢弃。
+    # docker container v17、18 有 bug，log-driver 的 buffer 塞满后，会导致容器内进程阻塞。
     async_out_chan_size: 100000
+    # sync_out_chan_size 会阻塞，适用于 kafka 这样的应该控速的源。
     sync_out_chan_size: 10000
+
+    # msg_id 的滚动阈值，采用 int64，一般来说设一个远大于每日日质量的数准没错。
+    # 一旦设定，就不要轻易中途改小，因为可能会出现冲突导致丢数据。
     max_rotate_id: 4294967295  # do not change to smaller number
+
+    # recvs 插件的配置
     recvs:
       plugins:
-        # wechat_mini_program_forward:
-        #   type: http
-        #   active_env: *all-env
-        #   msg_key: log
-        #   max_body_byte: 1048576
-        #   max_allowed_delay_sec: 300
-        #   max_allowed_ahead_sec: 60
-        #   orig_tag: wechat
-        #   tag: forward-wechat
-        #   ts_regexp: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$
-        #   time_key: "@timestamp"
-        #   time_format: "2006-01-02T15:04:05.000Z"
-        #   signature_key: sig
-        #   signature_salt: ri3j2ij3fjf23ofjsjfwifjpie02a
-        #   tag_key: tag
-        #   name: wechat-mini-program
-        #   path: "/api/v1/log/wechat/:env"
+        # HTTP JSON 的接收插件，基于 MD5 加盐计算签名。
+        # {"@timestamp": "2006-01-02T15:04:05.000Z", "xx": "yy", "sig": "d7c291b6119345cc8e1c50a77e3e20be"}
+        wechat_mini_program_forward:
+          # 指定插件类型
+          type: http
+
+          # 激活的环境，取决于命令行参数 `--env`
+          active_env: *all-env
+
+          # 所有的消息都会被放置进 map[string]interface{} 中，
+          # 接收到的原始日志会以`msg_key` 为 key 放在 map 里。
+          msg_key: log
+
+          # 最长能接受到 HTTP body
+          max_body_byte: 1048576
+
+          # HTTP JSON 中会包含一个时间戳，以这个时间戳为中心，
+          # 可以前后浮动一段时间内的消息。ts - max_allowed_ahead_sec ~ ts + max_allowed_delay_sec
+          max_allowed_delay_sec: 300
+          max_allowed_ahead_sec: 60
+
+          # 设置 `msg.Message[<tag_key>] = <orig_tag>
+          tag_key: tag
+          orig_tag: wechat
+
+          # 设置 `msg.Tag`。
+          # 需要区分 msg.Tag 和 msg.Message[<tag_key>]，是因为需要通过 msg.Tag 来转发消息，
+          # 然后下游的 aggregator 会通过 msg.Message[<tag_key>] 恢复其真正的 tag。
+          tag: forward-wechat
+
+          # 解析 JSON 内的时间戳
+          ts_regexp: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z$
+          time_key: "@timestamp"
+          time_format: "2006-01-02T15:04:05.000Z"
+
+          # 校验 HTTP body，签名保存在 <signature_key>，
+          # 计算方法是 md5(body + signature_salt)
+          signature_key: sig
+          signature_salt: fkoi1094ja01l2jdfwefq
+
+          # 插件的名字，用于调试
+          name: wechat-mini-program
+
+          # 监听的 HTTP path
+          path: "/api/v1/log/wechat/:env"
+
+        # fluentd 监听插件
+        # docker fluentd log-driver 会自动拆分日志，拆分规则为 `\n` 或大于 20KB，
+        # 而且在 18 及以前的 docker 里，被拆分的日志没有任何标志符来表面自己是被拆分的，
+        # 所以只能在日志处理器中根据 head regexp 来进行识别和拼接。
         fluentd-k8s:
           type: fluentd
           active_env: *all-env
           tag_key: tag
+
+          # 通过 msg.Message[<lb_key>] 的 hash 来分配 concator
           lb_key: pod_name
+          # concator 池的大小
           nfork: 8
+
+          # 每个 concator 的 buf chan size
           internal_buf_size: 5000
+
+          # 监听地址，TCP
           addr: 0.0.0.0:24224
+
+          # 是否需要改写 msg.tag = msg.Message[<origin_rewrite_tag_key>]
           is_rewrite_tag_from_tag_key: true
           origin_rewrite_tag_key: app-log-tag
+
+          # 拼接时的最大长度，超出此长度后就自动退出拼接，交给下游处理。
           concat_max_len: 100000
+
+          # concator 的具体配置，决定了该如何拼接日志。
           concat:
+            # 每一项是一个拼接的规则
             test:
+              # 需要拼接的 key，从 `msg.Message[<msg_key>]` 获得要拼接的字符串，
+              # 拼接的规则为，将具有相同 `msg.Message[<identifier>]` 的字符串拼接在一起，
+              # 以 `head_regexp` 来判断是否是首行，非首行就拼接到上一条，是首行的话就作为一条新的日志。
               msg_key: log
               identifier: pod_name
               head_regexp: ^\d{4}-\d{2}-\d{2}
@@ -148,6 +223,8 @@ settings:
               msg_key: log
               identifier: pod_name
               head_regexp: ^\[\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} +-
+
+        # 监听 DC/OS fluentd log-driver 的日志
         fluentd:
           type: fluentd
           active_env: *all-env
@@ -224,6 +301,9 @@ settings:
               msg_key: log
               identifier: container_id
               head_regexp: ^\[\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} +-
+
+        # 监听 fluentd-forward 转发来的日志，
+        # fluentd-forward 是面向外网的日志接口，目前只有 wechat 在用
         fluentd-forward:
           type: fluentd
           active_env: *all-env
@@ -234,17 +314,26 @@ settings:
           addr: 0.0.0.0:24226
           is_rewrite_tag_from_tag_key: true
           origin_rewrite_tag_key: tag
+
+        # rsyslog 的日志接口，面向 EMQTT
         rsyslog:
           type: rsyslog
           active_env: *all-env
           tag: emqtt.{env}
           tag_key: tag
           addr: 0.0.0.0:24514
+
+          # 调整时间
           # time_shift_sec: -28800
+
+          # 从 rsyslog 中获取原始时间
           time_key: timestamp
           msg_key: content
+
+          # 转换时间格式为 ES 统一的格式
           new_time_key: "@timestamp"
           new_time_format: "2006-01-02T15:04:05.000Z"
+
         speech:
           type: rsyslog
           active_env: *all-env
@@ -256,8 +345,14 @@ settings:
           msg_key: content
           new_time_key: "@timestamp"
           new_time_format: "2006-01-02T15:04:05.000Z"
+
+          # 以 `old_key: new_key` 的形式，重新日志中的 key，
+          # `msg.Message[new_key] = msg.Message[old_key]`
+          # old_key 会被删除
           rewrite_tags:
             tag: origin_tag
+
+        # kafka 消费端
         bigdata_wulin:
           type: kafka
           active_env:
@@ -265,127 +360,100 @@ settings:
             - prod
           interval_num: 5000
           interval_sec: 3
+
+          # 设置各个环境（env）的 kafka brokers
+          brokers:
+            sit: *1-1-1-1-9092
+            prod: *2-2-2-2-9092
+
+          # consumer 的并发数，共用同一个 consumer group
           nconsumer: 6
-          # msg_key: log
-          tag_key: tag
-          is_json_format: true
-          meta:
-            container_id: "@RANDOM_STRING"
+
+          # 设置 consumer group，可以为不同环境（env）设置不同的值
           groups:
             sit: paas_logsrv_sit
             prod: paas_logsrv_prod
+
+          # 设置 consumer topic
           topics:
             sit: Datamining_wuling
             prod: Datamining_wuling
+
+          # 设置如何处理 kafka 的消息，msg_key 和 is_json_format 二者必须设置一个。
+          # msg_key 将会将 kafka 的消息（字符串）放进 `msg.Message[<msg_key>]`。
+          # is_json_format 会把 kafka 的消息用 json 解析后放进 `msg.Message`。
+          # msg_key: log
+          is_json_format: true
+
+
+          # meta 用来添加自定义的 key:val
+          meta:
+            container_id: "@RANDOM_STRING"
+
+          # 为不同环境设置不同的 msg.Tag 和 msg.Message["tag"]
+          tag_key: tag
           tags:
             sit: bigdata-wuling.sit
             prod: bigdata-wuling.prod
-          brokers:
-            sit: *1-1-1-1-9092
-            prod: *2-2-2-2-9092
-        spark:
-          type: kafka
-          active_env: *all-env
-          interval_num: 5000
-          interval_sec: 3
-          nconsumer: 6
-          msg_key: log
-          tag_key: tag
-          is_json_format: false
-          meta:
-            container_id: "@RANDOM_STRING"
-          groups:
-            sit: paas_spark_log_sit_v2
-            uat: paas_spark_log_uat_v2
-            perf: paas_spark_log_perf_v2
-            prod: paas_spark_log_prod_v2
-          topics:
-            sit: logaiSit
-            uat: logaiUat
-            perf: logaiPerf
-            prod: logaiPro
-          tags:
-            sit: spark.sit
-            uat: spark.uat
-            perf: spark.perf
-            prod: spark.prod
-          brokers:
-            sit: *1-1-1-1-9092
-            uat: *1-1-1-1-9092
-            perf: *1-1-1-1-9092
-            prod: *2-2-2-2-9092
-        usertracking:
-          type: kafka
-          active_env:
-            - perf
-            - uat
-            - prod
-          interval_num: 5000
-          interval_sec: 3
-          nconsumer: 6
-          msg_key: log
-          tag_key: tag
-          is_json_format: false
-          meta:
-            container_id: "go-fluentd"
-          groups:
-            perf: paas_spark_log_perf_v2
-            uat: paas_spark_log_uat_v2
-            prod: paas_spark_log_prod_v2
-          topics:
-            perf: UserTracking_perf
-            uat: UserTracking
-            prod: UserTracking
-          tags:
-            sit: usertracking.sit
-            uat: usertracking.uat
-            perf: usertracking.perf
-            prod: usertracking.prod
-          brokers:
-            uat: *1-1-1-1-9092
-            perf: *1-1-1-1-9092
-            prod: *2-2-2-2-9092
-        # kafkabuf:
-        #   type: kafka
-        #   active_env: *all-env
-        #   interval_num: 5000
-        #   interval_sec: 3
-        #   nconsumer: 6
-        #   msg_key: log
-        #   is_json_format: true
-        #   json_tag_key: tag
-        #   tag_key: tag
-        #   # rewrite_tag: kafkabuf
-        #   groups:
-        #     sit: paas_log_platform_sit
-        #     perf: paas_log_platform_perf
-        #     uat: paas_log_platform_uat
-        #     prod: paas_log_platform_prod
-        #   topics:
-        #     sit: logbuf_sit
-        #     uat: logbuf_uat
-        #     perf: logbuf_perf
-        #     prod: logbuf_prod
-        #   brokers:
-        #     sit: *2-2-2-2-9092
-        #     uat: *2-2-2-2-9092
-        #     perf: *2-2-2-2-9092
-        #     prod: *2-2-2-2-9092
+
+  # producer 负责将上游传递过来的消息按照 tag 通过 channel 分发给各个 senders。
+  # sender 负责将日志消息发给下游（比如 ElasticSearch），
+  # 目前支持的 sender plugins 有 ElasticSearch、kafka、fluentd、null。
   producer:
+    # sender 完成消息发送后，需要将消息交回给 producer，producer 会统计消息是否在所有 senders 中都成功，
+    # 若都成功，producer 才会将消息交给 journal 标记为 committed。
+
+    # sender 通过两个 channel 将消费完成（成功 or 失败）的消息交还给 producer：successedChan & failedChan。
+    # 分别用来传递成功的消息和失败的消息，失败的消息会在下一轮 journal 滚动时被重试。
+
+    # discard_chan_size 就是指定处理已发送消息的 channel 的 size，
+    # 注意有两个 channel：successedChan & failedChan，
+    # 所以该值其实同时设定了两个 channel 的 size。
     discard_chan_size: 50000
+
+    # producer 会将消息按照 tag 通过 channel 交给各个 sender plugins，
+    # sender_inchan_size 指定了每个 sender channel 的 size。
     sender_inchan_size: 50000
+
+    # producer 的并行数，防止消息分发称为瓶颈。
     forks: 3
-    # senders
-    # support types: fluentd/kafka/es
+
+    # senders 插件配置。
+    # 实际发送消息都是由 senders 负责的。
+    # 各个 sender 通过 tag 来匹配自己负责的消息，
+    # 可以有多个 sender 支持相同的 tag，所有的 sender 都成功后，producer 才会将消息标记为成功，
+    # 等所有的 sender 都成功后（通过 successedChan 传递而来），producer 才会 commit 消息。
     plugins:
-      # localtest:
-      #   active_env: *all-env
-      #   tags: *all-tags
-      #   type: "null"
-      #   forks: 5
-      #   log_level: info
-      #   is_commit: true
-      #   is_discard_when_blocked: false
+
+      # null sender
+      # 用来测试的 sender，可以将消息输出到终端
+      localtest:
+        # 设定启动该 plugin 的环境
+        active_env: *all-env
+
+        # 设定该 plugin 接收的 tags，producer 只会将匹配 tag 的消息交给该 plugin
+        tags: *all-tags
+
+        # 指定 plugin 的类型，目前只有几种支持的类型
+        type: "null"
+
+        # 指定该 plugin 的并行数
+        forks: 5
+
+        # 该 sender 会把接收到的日志用 log 打出来，
+        # log_level 设置了打 log 的级别
+        log_level: info
+
+        # is_commit 设置被该插件成功消费的消息是否需要 commit，
+        # 设置为 true，消息就会通过 successedChan 传递回 sender。
+        is_commit: true
+
+        # 如果该 sender 的 inflow chan 阻塞，producer 该如何处理该消息。
+        # is_discard_when_blocked=true：producer 会认为该消息被成功处理。
+        # is_discard_when_blocked=false：producer 会认为该消息发送失败，该消息稍后会被所有 senders 重试。
+        is_discard_when_blocked: false
+
+      # elasticsearch sender
       es_general:
         type: es
         active_env: *all-env
@@ -413,11 +481,22 @@ settings:
           - usertracking
           - bigdata-wuling
         forks: 3
+
+        # elasticsearch 的 HTTP API，如果有 username/passwrd 验证可以直接写在 URL 里
         addr: http://es/_bulk
+
+        # 发送给 ES 的消息会以 bulk 的形式经过 gzip 后发送，
+        # msg_batch_size 指定了每批次 bulk 的容量
         msg_batch_size: 500
+
+        # 在准备 bulk 的 batch 时，batch 满了就会向 ES 发起请求，
+        # 此外每隔 max_wait_sec 秒，即使 batch 没满也会向 ES 发起请求，防止数据延迟过久。
         max_wait_sec: 5
+
         tag_key: tag
-        retry_chan_len: 10000
+
+        # ES index 设置，支持把不同的 tag 发送给不同的 index，
+        # 其中的 `{env}` 会被自动替换为 `--env` 设置的字符串。
         indices:
           ramjet.{env}: "{env}-spring-logs-write"
           httpguard.{env}: "{env}-spring-logs-write"
@@ -443,70 +522,33 @@ settings:
           forward-wechat.uat: "uat-wechat-logs-write"
           forward-wechat.prod: "prod-wechat-logs-write"
         is_discard_when_blocked: false
-      es_geely_v2:
-        type: es
-        active_env: *all-env
-        tags:
-          # - es-geely
-          - geely
-        forks: 10
-        addr: http://es/_bulk
-        msg_batch_size: 1000
-        max_wait_sec: 3
-        tag_key: tag
-        retry_chan_len: 10000
-        indices:
-          geely.{env}: "{env}-geely-logs-write"
-        is_discard_when_blocked: false
-      # kafkabuf:
-      #   type: es
-      #   active_env: *all-env
-      #   tag_key: tag
-      #   brokers:
-      #     - 172.16.4.63:9092
-      #     - 172.16.4.64:9092
-      #     - 172.16.4.65:9092
-      #   topic:
-      #     sit: logbuf_sit
-      #     perf: logbuf_perf
-      #     uat: logbuf_uat
-      #     prod: logbuf_prod
-      #   tags:  # all-tags exclude `kafkabuf`
-      #     - test
-      #     - app.spring
-      #     - gateway
-      #     - connector
-      #     - cp
-      #     - ptdeployer
-      #     - tsp
-      #     - ai
-      #     - base
-      #     - geely
-      #     - bot
-      #     - spark
-      #     - emqtt
-      #   forks: 3
-      #   msg_batch_size: 10000
-      #   max_wait_sec: 5
-      #   retry_chan_len: 100000
-      #   is_discard_when_blocked: false
+
+      # kafka sender
       kafka_cp:
         type: kafka
         active_env: *all-env
         tag_key: tag
+        # 设置各环节的 brokers
         brokers:
           sit: *1-1-1-1-9092
           perf: *1-1-1-1-9092
           uat: *1-1-1-1-9092
           prod: *2-2-2-2-9092
-        topic: docker_message
+        # 设置各环境的 topic
+        topic:
+          sit: docker_message
+          perf: docker_message
+          uat: docker_message
+          prod: docker_message
         tags:
           - cp
         forks: 3
         msg_batch_size: 10000
         max_wait_sec: 5
-        retry_chan_len: 100000
         is_discard_when_blocked: false
+
+      # fluentd sender (msgpack 协议)
+      # 通过 fluentd msgpack 协议向下游转发
       fluentd_backup:
         type: fluentd
         active_env:
@@ -515,45 +557,84 @@ settings:
           - geely.prod
           # - tsp.prod
         forks: 3
+
+        # 下游 fluentd 地址
         addr: fluentd-sit.ptcloud.t.home:24235
         msg_batch_size: 10000
         max_wait_sec: 5
-        retry_chan_len: 50000
         is_discard_when_blocked: true
-      fluentd_backup_emqtt:
-        type: fluentd
-        active_env:
-          - prod
-        tags:
-          - emqtt.prod
-        forks: 3
-        addr: fluentd-sit.ptcloud.t.home:24236
-        msg_batch_size: 10000
-        max_wait_sec: 5
-        retry_chan_len: 50000
-        is_discard_when_blocked: true
+
+  # journal（WAL）在磁盘对日志进行持久化，防止断电时，尚在内存中的数据丢失。
+  # 考虑到 acceptor -> acceptpipeline -> journal，
+  # 所以断电时，还未进入 journal 的数据依然会丢失。除此之外，当磁盘数据性能跟不上时，消息有可能跳过 journal 直接进入 dispatcher。
+  #
+  # journal 会分别将 msg 本体和 committed msgid 分别写入两个文件，并且按照文件大小，不定时的滚动生成新文件，
+  # 并且定时扫描读取旧的 data 和 ids 文件，根据 ids 过滤 data 后，将 journal 尚未 committed 的消失发给下游，
+  # 从而实现 At-Least-Once 的消息语意。
+  #
+  # 绝大部分情况下，journal 都可以利用页缓存，对磁盘的读写性能要求并不高。
   journal:
+    # 文件夹地址
     buf_dir_path: /data/log/fluentd/go-concator
+    # journal data 文件滚动的大小限制
     buf_file_bytes: 209315200  # 200 MB
+
+    # journal 输出 channel 的 size
     journal_out_chan_len: 100000
+
+    # journal 输入 channel 的 size
     commit_id_chan_len: 500000
+
+    # 在内存中保存 committed ids 的时间，实际存活的时间会在 1x ~ 2x 间浮动。
+    # 在内存中长时间的保存 committed ids 是为了减少消息的重复率。
+    # 这个值越大，占用的内存也越多，具体保存的 ids 数量可以在监控接口中查看。
     committed_id_sec: 120
+
+    # 是否启用文件压缩，根据测试，启用压缩会导致写入性能降低 80 倍左右。
+    # CPU 资源紧张时不要考虑使用此项。
     is_compress: false
+
+  # acceptorFilters，紧接着 acceptor，
+  # 过滤掉一些明显不需要后续处理的消息，或者做一些非常简单的消息处理，减轻 journal 的负担。
+  # 因为这一段发生在 journal 之前，消息有可能丢失，所以要尽可能快。
   acceptor_filters:
+    # outflow channel size
     out_buf_len: 150000
+
+    # acceptorFilter 支持 re-enter，也就是被插件处理过的消息可以重新再过一遍 acceptor，
+    # 这是因为有些 plugin 可能会修改消息的 tag，并希望消息可以按照新 tag 再被处理一次。
     reenter_chan_len: 5000
+
     fork: 4
+
+    # 是否启用限流器，限流器采用漏桶算法。
+    # throttle_max 设置的是限流器内池的大小，该值决定了 burst 的极值。
+    # throttle_per_sec 是每秒的流量，池有积累的时候可能会 burst。
     is_throttle: false
     throttle_max: 10000
     throttle_per_sec: 5000
+
+    # 插件配置，插件会被串行的连接在一起，并行 `fork` 份。
+    # 插件的代码放在 ./acceptorFilters/xxx.go 里。
+    #
+    # 一般来说，插件的配置会比较随意，因为插件都是根据具体的业务需求高度定制化的，而不需要过多考虑通用型。
     plugins:
+
+      # 过滤一些消息
       spark:
         type: spark
+        # 从 `msg.Message[<msg_key>]` 获取日志字符串
         msg_key: log
+        # 令 `msg.Message[<identifier>] = "spark"`
         identifier: container_id
+        # 忽略正则匹配的消息
         ignore_regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2},\d{3} +\[
+
+      # 改写一些 tag
       spring:
         type: spring
+
+        # 正则匹配 `msg.Message[<msg_key>]`，然后按照配置，改写 `msg.Tag` 和 `msg.Message[<tag_key>]`
         msg_key: log
         tag_key: tag
         rules:
@@ -563,23 +644,48 @@ settings:
             regexp: ms_\w+
           - new_tag: app.spring.{env}
             regexp: .*
+
+  # postFilters 在 dispatcher 和 tagPiepline 之后，对进入 producer 前的数据进行一些处理，
+  # 和 acceptorFilter 类似，一般也是业务性很强的配置，插件会做的比较特异性。
+  # 不过和 acceptorFilter 最大的区别是，此时的消息几乎已经是最终状态，更容易处理。
   post_filters:
     reenter_chan_len: 10000
     out_chan_size: 50000
     fork: 4
+
+    # 插件配置
     plugins:
+
+      # 设定消息 `msg.Message[<msg_key>]` 的最大长度，超过限额的会被截断
       default:
         msg_key: log
         max_len: 307200
+
+      # 修改 wechat-forward 的 msg.Tag，
+      # 这是一个业务要求，因为 wechat.forward 会将所有环境的日志发送到某个 go-fluetd server，
+      # 该 server 需要在这一步将 msg.Tag 中的 env 改为 `msg.Message[<tag_key>]` 中的 env。
       forward_tag_rewriter:
         type: tag-rewriter
         tag_key: tag
         tag: forward-wechat
-      # 大数据的设备上报位置信息，需要时字段过滤和拼接
+
+      # fields 插件，可以增加、删除消息体中的 fields。
       bigdata_fields:
         type: fields
         tags:
           - bigdata-wuling
+
+        # 新增 fields，可以在 value 中通过 `${<fields>}` 的形式插入已存在的 field 的 value。
+        # 需要注意的是，new_fields 操作发生在 include_fields／exclude_fields 前，
+        # 所以需要在 include_fields 中配置新生成的 field，否则会被过滤掉。
+        new_fields:
+          # rowkey: "${vin}_${ngtpCreateTime}"
+          location: "${lat},${lon}"
+
+        # include_fields 相当于白名单，只在 `msg.Message` 中保留列出来的 fields。
+        # exclude_fields 相当于黑名单，删除这些 fields。
+        #
+        # include_fields 和 exclude_fields 二者只能配置一个，如果都配置了，那只有 include_fields 会生效。
         include_fields:
           - vin
           - ngtpCreateTime
@@ -590,104 +696,85 @@ settings:
           - message
         # exclude_fields:
         #   - container_id
-        new_fields:
-          # rowkey: "${vin}_${ngtpCreateTime}"
-          location: "${lat},${lon}"
+
+      # 大数据的业务需求，做一些 hard-coding 的数据拼接
       bigdata_custom:
         type: custom-bigdata
         tags:
           - bigdata-wuling
-      # es_dispatcher:
-      #   type: es-dispatcher
-      #   tags:
-      #     - kafkabuf
-      #   tag_key: tag
-      #   rewrite_tag_map:
-      #     # es-general
-      #     app.spring.{env}: es-general.{env}
-      #     gateway.{env}: es-general.{env}
-      #     connector.{env}: es-general.{env}
-      #     qingai.{env}: es-general.{env}
-      #     cp.{env}: es-general.{env}
-      #     ptdeployer.{env}: es-general.{env}
-      #     tsp.{env}: es-general.{env}
-      #     ai.{env}: es-general.{env}
-      #     base.{env}: es-general.{env}
-      #     bot.{env}: es-general.{env}
-      #     spark.{env}: es-general.{env}
-      #     emqtt.{env}: es-general.{env}
-      #     bigdata-wuling.{env}: es-general.{env}
-      #     # es-geely
-      #     geely.{env}: es-geely.{env}
+
+  # dispatcher，将 journal 传递过来的消息分发给 tagFilters。
+  # 做这个初衷是因为以前 concator 的逻辑放在 tagFilters 中，但是随着将 concator 逻辑前置进 fluentd-recv 中，
+  # dispatcher 和 tagFilters 的作用已经弱化了，目前最重要的 tagFilter 大概就是正则 parser 了。
+  #
+  # tagFilters 和 acceptorPipeline/PostPipeline 最大的区别就在于，tagFilters 不是串行的，
+  # 而是按照 tag 的不同并行。
   dispatcher:
+    # dispatcher 的并行度，防止消息分发成为瓶颈
     nfork: 3
+
+    # outflow channel size，各个 tagFilter 都共用同一个 outflow channel
     out_chan_size: 10000
+
+  # 配置各个 tagFilter
+  #
+  # 每个 tagFilter 相当于都是一个小工厂模式，
+  # 会启动 nfork 个小 filter 并行，将消息按 lb_key 分配到各个小 filter 中。
   tag_filters:
+    # internal_chan_size 就是每个 tagFilter 中的各个下属小 filter 的 inflow channel size。
     internal_chan_size: 10000
+
     plugins:
-      go-apps:
-        type: parser
-        lb_key: container_id
-        nfork: 1
-        tags:
-          - fluentd-forward
-          - httpguard
-          - ramjet
-        parse_json_key: log
-        # ⬇⬇ time
-        time_key: ts
-        time_format: "2006-01-02T15:04:05.000-0700"
-        new_time_format: "2006-01-02T15:04:05.000000Z"
-        reserved_time_key: false
-        new_time_key: "@timestamp"
-        # ⬇⬇ fields
-        add:  # optional
-          fluentd-forward:
-            datasource: fluentd-forward
-          httpguard:
-            datasource: httpguard
-          ramjet:
-            datasource: ramjet
-      qingai:
-        type: parser
-        lb_key: container_id
-        nfork: 4
-        tags:
-          - qingai
-        msg_key: log
-        # 2019-07-06 13:34:48.313|http-nio-8010-exec-9|INFO|bot-parking|com.google.parking.service.impl.ParkingListServiceImpl|108:{"deviceId":"12345","input":"附近的停车场","intentName":"检索停车场","recordId":"bf728b47b8fe47c7a9f35b1eb1c347ae","shouldEndSession":"false","text":"找到这些你需要的停车场要去哪一个","userId":"12345","version":"1.0"}
-        pattern: (?ms)^(?P<time>.{23}) *\| *(?P<app>[^|]+) *\| *(?P<level>[^|]+) *\| *(?P<thread>[^|]+) *\| *(?P<class>[^|]+) *\| *(?P<line>\d+) *[|:] *(?P<args>\{.*\})
-        is_remove_orig_log: true
-        parse_json_key: args
-        must_include: app
-        # ⬇⬇ time
-        time_key: time
-        time_format: "2006-01-02 15:04:05.000 -0700"
-        new_time_format: "2006-01-02T15:04:05.000000Z"
-        reserved_time_key: false
-        new_time_key: "@timestamp"
-        append_time_zone:
-          sit: "+0800"
-          perf: "+0800"
-          uat: "+0800"
-          prod: "+0800"
+
+      # parser 就是正则解析的 parser
+      #
+      # parser 中各项操作的顺序是：正则解析 -> JSON 解析 -> must_include 检查 -> add 添加新字段 -> 时间解析
       connector:
         type: parser
+
+        # nfork 决定了 worker 池的并行度，
+        # lb_key 决定了如何将消息分配给 fork 出来的 worker。
+        # 按照 `xxhash(msg.Message[<lb_key>]) % nfork` 来分配。
         lb_key: container_id
         nfork: 4
+
         tags:
           - connector
           - gateway
+
+        # 需要解析的字符串存放的位置，`msg.Message[<msg_key>]`
         msg_key: log
+
+        # 一些 msg 字符串的例子
         # 2018-04-02 02:02:10.928 | sh-datamining | INFO | http-nio-8080-exec-80 | com.google.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74 | {"key": "value"}: xxx
         # 2018-04-02 02:02:10.928 | sh-datamining | INFO | http-nio-8080-exec-80 | com.google.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74 | xxx
         # 2018-03-12 02:02:10.928 | gateway | INFO | http-nio-8080-exec-80 | com.google.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74: {"key": "value"}:xxx
         # 2019-02-18 15:42:06.635 | usertracking | DEBUG | kafka-producer-network-thread | producer-1 | com.google.qingcloud.base.usertracking.service.KafkaServiceBase$ProducerCallBack | 63: onCompletion when sendMessage to topic:UserTracking,partition:0  success!!
+
+        # 对消息字符串进行正则匹配，区分出不同的 named group，然后将各个 group 存放进 `msg.Message`
         pattern: (?ms)^(?P<time>.{23}) *\| *(?P<app>[^|]+) *\| *(?P<level>[^|]+) *\| *(?P<thread>[^|]+) *\| *(?:(?P<producer>[\w\-]+) *\| *)?(?P<class>[^|]+) *\| *(?P<line>\d+) *(?:[|:] *(?P<args>\{.*\}))? *(?:[|:] *(?P<message>.*))?
+
+        # 正则解析完毕后，是否删除原始的 `msg.Message[<msg_key>]`
         is_remove_orig_log: true
+
+        # 是否需要对正则解析出来的内容再进行 json 解析，如果需要，就指定需要解析的 key，
+        # updateMap(msg.Message, json.UnMarshal(msg.Message[<parse_json_key>]))。
+        #
+        # 需要注意的是，因为 ES 不建议使用嵌套结构，json 解析的内容会被 flatten，
+        # 也就是说，`{"a": {"b": "c"}}` 会被重整为 `{"a.b": "c"}`。
         parse_json_key: args
+
+        # 这一步在正则解析和 json 解析之后，`msg.Message[<must_include>]` 不存在的消息会被丢弃。
         must_include: app
-        # ⬇⬇ time
+
+        # 针对时间的解析操作,
+        # 当 `time_key` 不为空的时候，会启动该操作。
+        # msg.Message[<new_time_key>] = formatTime(parseTime(msg.Message[<new_time_key>] + " <append_time_zone>"))
+        # 解析时间字符串时，可以通过配置 `append_time_zone` 为其加上 tz 信息，默认会在 tz 前加一个空格。
+        #
+        # time_format 是用来 parse 原时间字符串的格式，
+        # new_time_format 是用来生成新的时间字符串的格式。
+        # reserved_time_key 设置是否要保留原时间 field。
         time_key: time
         time_format: "2006-01-02 15:04:05.000 -0700"
         new_time_format: "2006-01-02T15:04:05.000000Z"
@@ -698,176 +785,10 @@ settings:
           perf: "+0800"
           uat: "+0800"
           prod: "+0800"
-      geely:
-        type: parser
-        lb_key: container_id
-        nfork: 4
-        tags:
-          - geely
-        msg_key: log
-        # 2018-02-05 10:33:13.408 | geely:nlcc | INFO | http-bio-8081-exec-3 | com.tservice.cc.web.interceptor.MyLoggingOutInterceptor.handleMessage:57 - Outbound Message:{ID:1, Address:http://10.133.200.77:8082/gisnavi/tservice/gisnavi/poi/poicategory, Http-Method:GET, Content-Type:application/json, Headers:{Content-Type=[application/json], Accept=[application/json]}}
-        pattern: '(?ms)^(?P<time>.{23}) *\| *(?P<project>[^|]+) *\| *(?P<level>[^|]+) *\| *(?P<thread>[^|]+) *\| *(?P<class>[^:]+) *: *(?P<line>\d+) *- *(?P<message>.+)'
-        is_remove_orig_log: true
-        must_include: project
-        # ⬇⬇ time
-        time_key: time
-        time_format: "2006-01-02 15:04:05.000 -0700"
-        new_time_format: "2006-01-02T15:04:05.000Z"
-        reserved_time_key: false
-        new_time_key: "@timestamp"
-        append_time_zone:
-          sit: "+0800"
-          perf: "+0800"
-          uat: "+0800"
-          prod: "+0800"
-      bigdata-wuling:
-        type: parser
-        lb_key: container_id
-        nfork: 4
-        tags:
-          - bigdata-wuling
-        # ⬇⬇ time
-        time_key: ngtpCreateTime
-        time_format: "2006-01-02 15:04:05 -0700"
-        new_time_format: "2006-01-02T15:04:05.000Z"
-        reserved_time_key: true
-        new_time_key: "@timestamp"
-        append_time_zone:
-          sit: "+0800"
-          perf: "+0800"
-          uat: "+0800"
-          prod: "+0800"
-      emqtt:
-        type: parser
-        lb_key: container_id
-        nfork: 4
-        tags:
-          - emqtt
-        add:
-          emqtt:
-            datasource: emqtt
-      spark:
-        type: parser
-        lb_key: container_id
-        nfork: 1
-        tags:
-          - spark
-        msg_key: log
-        # 2018/03/06 15:19:23.619 INFO 6356e435e4894a22a41c80e6ade35526 com.google.qingcloud.ai.sparkstreaming.db.AiDbService: Enter getFuseDataType  function!
-        pattern: '(?ms)^(?P<time>.{23}) *(?P<level>[^ ]+) +(?P<uuid>[^ ]+) +(?P<app_info>[^:]+) *: *(?P<message>.*)'
-        is_remove_orig_log: true
-        must_include: app_info
-        # ⬇⬇ time
-        time_key: time
-        time_format: "2006/01/02 15:04:05.000 -0700"
-        new_time_format: "2006-01-02T15:04:05.000000Z"
-        reserved_time_key: false
-        new_time_key: "@timestamp"
-        append_time_zone:
-          sit: "+0800"
-          perf: "+0000"
-          uat: "+0000"
-          prod: "+0800"
-      usertracking:
-        type: parser
-        lb_key: container_id
-        nfork: 4
-        parse_json_key: log
-        tags:
-          - usertracking
-        msg_key: log
-        pattern: (?ms).*happentime\\":\\"(?P<time>[\d\- :]+).*
-        is_remove_orig_log: false
-        # ⬇⬇ time
-        time_key: time
-        time_format: "2006-01-02 15:04:05 -0700"
-        new_time_format: "2006-01-02T15:04:05.000000Z"
-        reserved_time_key: false
-        new_time_key: "@timestamp"
-        append_time_zone:
-          sit: "+0800"
-          perf: "+0800"
-          uat: "+0800"
-          prod: "+0800"
-      ptdeployer:
-        type: parser
-        lb_key: container_id
-        nfork: 1
-        tags:
-          - ptdeployer
-        msg_key: log
-        # [2019-08-01 08:20:46,082 - DEBUG - /Users/laisky/repo/google/ptdeployer/deployer/handlers.py:16 - app_log] - get_deployer with env sit
-        pattern: (?ms)^\[(?P<time>.{23}) *- *(?P<level>[^\-]+) *- *(?P<class>[^\-]+):(?P<line>\d+) *- *(?P<app>[^|]+)\] *- *(?P<message>.*)
-        is_remove_orig_log: true
-        must_include: app
+
+        # 增加新字段，格式为 tag: key:val。
         add:  # optional
-          ptdeployer:
-            datasource: ptdeployer
-        # ⬇⬇ time
-        time_key: time
-        time_format: "2006-01-02 15:04:05.000 -0700"
-        new_time_format: "2006-01-02T15:04:05.000000Z"
-        reserved_time_key: false
-        new_time_key: "@timestamp"
-        append_time_zone:
-          sit: "+0000"
-          perf: "+0000"
-          uat: "+0000"
-          prod: "+0000"
-      cp:
-        type: parser
-        lb_key: container_id
-        nfork: 4
-        tags:
-          - cp
-        msg_key: log
-        # 2018-02-01 16:15:43.518 - ms:cp|type:platform|uuid:4f99962d-c272-43bb-85d9-20ab030180b7|dateTime:2018-02-01 16:15:43.518|customerSid:27|customerCode:DT00000000|customerName:默认
-        pattern: '(?ms)^(?P<time>.{23}) *- *(?P<message>ms:cp.*)'
-        is_remove_orig_log: true
-        must_include: message
-        add:  # optional
-          cp:
-            datasource: cp
-        # ⬇⬇ time
-        time_key: time
-        time_format: "2006-01-02 15:04:05.000 -0700"
-        new_time_format: "2006-01-02T15:04:05.000000Z"
-        reserved_time_key: false
-        new_time_key: "@timestamp"
-        append_time_zone:
-          sit: "+0800"
-          perf: "+0800"
-          uat: "+0800"
-          prod: "+0800"
-      spring:
-        type: parser
-        lb_key: container_id
-        nfork: 4
-        tags:
-          - app.spring
-          - ai
-          - tsp
-          - base
-          - bot
-        msg_key: log
-        # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
-        # 2019-04-23 17:02:09.733 | mswallet| DEBUG | http-nio-8080-exec-2 | org.apache.ibatis.logging.jdbc.BaseJdbcLogger | 145 | {c83dd4a0244146fe9ada4dfcc8a737b4}| ==> Parameters: 123(Long)
-        pattern: '(?ms)^(?P<time>.{23}) *\| *(?P<app>[^|]+) *\| *(?P<level>[^|]+) *\| *(?P<thread>[^|]+) *\| *(?P<class>[^|]+) *\| *(?P<line>\d+) *(?:[|:] *(?P<args>\{[^\}]+\}))?(?: *[|:] *(?P<message>.*))?'
-        is_remove_orig_log: true
-        must_include: app
-        # ⬇⬇ time
-        time_key: time
-        time_format: "2006-01-02 15:04:05.000 -0700"
-        new_time_format: "2006-01-02T15:04:05.000000Z"
-        reserved_time_key: false
-        new_time_key: "@timestamp"
-        append_time_zone:
-          sit: "+0800"
-          perf: "+0800"
-          uat: "+0800"
-          prod: "+0800"
-        # ⬇⬇ fields
-        add:  # optional
+          # 为 ai.<env> 的消息加上新的 {"datasource": "ai"}
           ai:
             datasource: ai
           tsp:
@@ -878,76 +799,3 @@ settings:
             datasource: bot
           app.spring:
             datasource: spring
-      # concator:
-      #   type: concator
-      #   config:
-      #     max_length: 100000
-      #     lb_key: container_id
-      #     nfork: 4
-      #   plugins:
-      #     test:
-      #       msg_key: log
-      #       identifier: container_id
-      #       regex: ^\d{4}-\d{2}-\d{2}
-
-      #     spark:
-      #       msg_key: log
-      #       identifier: container_id
-      #       # 1999/22/22 22:22:22.222 jiejwfijef
-      #       regex: ^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}\.\d{3} +[^ ]
-      #     cp:
-      #       msg_key: log
-      #       identifier: container_id
-      #       # 2018-02-01 16:15:43.518 - ms:cp|type:platform|uuid:4f99962d-c272-43bb-85d9-20ab030180b7|dateTime:2018-02-01 16:15:43.518|customerSid:27|customerCode:DT00000000|customerName:默认
-      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} *- *ms:cp\|
-      #     ramjet:
-      #       msg_key: log
-      #       identifier: container_id
-      #       # [2018-08-03T05:42:42.714151Z - DEBUG - /go/src/github.com/Laisky/go-ramjet/tasks/logrotate/backup/main.go:129] IsFileReadyToUpload for 2018050700.log.gz
-      #       regex: ^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{6}Z *-
-      #     app.spring:
-      #       msg_key: log
-      #       identifier: container_id
-      #       # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
-      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
-      #     tsp:
-      #       msg_key: log
-      #       identifier: container_id
-      #       # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
-      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
-      #     ai:
-      #       msg_key: log
-      #       identifier: container_id
-      #       # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
-      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
-      #     base:
-      #       msg_key: log
-      #       identifier: container_id
-      #       # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
-      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
-      #     bot:
-      #       msg_key: log
-      #       identifier: container_id
-      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
-      #     gateway:
-      #       msg_key: log
-      #       identifier: container_id
-      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
-      #     connector:
-      #       msg_key: log
-      #       identifier: container_id
-      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
-      #     qingai:
-      #       msg_key: log
-      #       identifier: container_id
-      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
-      #     geely:
-      #       msg_key: log
-      #       # 2018-02-05 10:33:13.408 | geely:nlcc | INFO | http-bio-8081-exec-3 | com.tservice.cc.web.interceptor.MyLoggingOutInterceptor.handleMessage:57 - Outbound Message:{ID:1, Address:http://10.133.200.77:8082/gisnavi/tservice/gisnavi/poi/poicategory, Http-Method:GET, Content-Type:application/json, Headers:{Content-Type=[application/json], Accept=[application/json]}}
-      #       # 2018-04-15 10:59:31.096 | geely:vca | INFO  | I/O dispatcher 2 | MONITORLOG.writeMonitorLog:26 - 2018-04-15 10:59:31.096|VCA|XXX19YYYY10040463|vca00157f9c04ff887f2b3488ddc4f2b|VCA_TRIGGER_OUT'
-      #       identifier: container_id
-      #       regex: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} +\|
-      #     ptdeployer:
-      #       msg_key: log
-      #       identifier: container_id
-      #       regex: ^\[\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}.\d{3} +-

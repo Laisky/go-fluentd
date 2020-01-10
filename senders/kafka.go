@@ -23,13 +23,13 @@ func NewKafkaProducer(brokers []string) (p sarama.SyncProducer, err error) {
 }
 
 type KafkaSenderCfg struct {
-	Name, TagKey                                string
-	Brokers                                     []string
-	Topic                                       string
-	Tags                                        []string
-	InChanSize, RetryChanSize, NFork, BatchSize int
-	MaxWait                                     time.Duration
-	IsDiscardWhenBlocked                        bool
+	Name, TagKey                 string
+	Brokers                      []string
+	Topic                        string
+	Tags                         []string
+	InChanSize, NFork, BatchSize int
+	MaxWait                      time.Duration
+	IsDiscardWhenBlocked         bool
 }
 
 type KafkaSender struct {
@@ -141,7 +141,7 @@ func (s *KafkaSender) Spawn(ctx context.Context, tag string) chan<- *libs.Fluent
 						utils.Logger.Info("send message to backend",
 							zap.String("tag", tag),
 							zap.ByteString("msg", jb))
-						s.discardChan <- msg
+						s.successedChan <- msg
 						continue
 					}
 
@@ -162,7 +162,7 @@ func (s *KafkaSender) Spawn(ctx context.Context, tag string) chan<- *libs.Fluent
 							zap.String("tag", msg.Tag),
 							zap.Int("num", len(msgBatchDelivery)))
 						for _, msg = range msgBatchDelivery {
-							s.discardWithoutCommitChan <- msg
+							s.failedChan <- msg
 						}
 
 						if err = producer.Close(); err != nil {
@@ -181,7 +181,7 @@ func (s *KafkaSender) Spawn(ctx context.Context, tag string) chan<- *libs.Fluent
 					zap.String("raw_tag", tag),
 					zap.String("tag", msg.Tag))
 				for _, msg = range msgBatchDelivery {
-					s.discardChan <- msg
+					s.successedChan <- msg
 				}
 			}
 		}(i)

@@ -409,7 +409,6 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 					Addr:                 utils.Settings.GetString("settings.producer.plugins." + name + ".addr"),
 					BatchSize:            utils.Settings.GetInt("settings.producer.plugins." + name + ".msg_batch_size"),
 					MaxWait:              utils.Settings.GetDuration("settings.producer.plugins."+name+".max_wait_sec") * time.Second,
-					RetryChanSize:        utils.Settings.GetInt("settings.producer.plugins." + name + ".retry_chan_len"),
 					InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
 					NFork:                utils.Settings.GetInt("settings.producer.plugins." + name + ".forks"),
 					Tags:                 utils.Settings.GetStringSlice("settings.producer.plugins." + name + ".tags"), // do not append env
@@ -419,11 +418,10 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 				ss = append(ss, senders.NewKafkaSender(&senders.KafkaSenderCfg{
 					Name:                 name,
 					Brokers:              utils.Settings.GetStringSlice("settings.producer.plugins." + name + ".brokers." + env),
-					Topic:                utils.Settings.GetString("settings.producer.plugins." + name + ".topic"),
+					Topic:                utils.Settings.GetString("settings.producer.plugins." + name + ".topic." + env),
 					TagKey:               utils.Settings.GetString("settings.producer.plugins." + name + ".tag_key"),
 					BatchSize:            utils.Settings.GetInt("settings.producer.plugins." + name + ".msg_batch_size"),
 					MaxWait:              utils.Settings.GetDuration("settings.producer.plugins."+name+".max_wait_sec") * time.Second,
-					RetryChanSize:        utils.Settings.GetInt("settings.producer.plugins." + name + ".retry_chan_len"),
 					InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
 					NFork:                utils.Settings.GetInt("settings.producer.plugins." + name + ".forks"),
 					Tags:                 libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
@@ -435,7 +433,6 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 					BatchSize:            utils.Settings.GetInt("settings.producer.plugins." + name + ".msg_batch_size"),
 					Addr:                 utils.Settings.GetString("settings.producer.plugins." + name + ".addr"),
 					MaxWait:              utils.Settings.GetDuration("settings.producer.plugins."+name+".max_wait_sec") * time.Second,
-					RetryChanSize:        utils.Settings.GetInt("settings.producer.plugins." + name + ".retry_chan_len"),
 					InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
 					NFork:                utils.Settings.GetInt("settings.producer.plugins." + name + ".forks"),
 					TagKey:               utils.Settings.GetString("settings.producer.plugins." + name + ".tag_key"),

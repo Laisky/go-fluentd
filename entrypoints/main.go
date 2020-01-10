@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	concator "github.com/Laisky/go-fluentd"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/spf13/pflag"
-	concator "github.com/Laisky/go-fluentd"
 )
 
 // SetupSettings setup arguments restored in viper
@@ -45,6 +45,7 @@ func SetupSettings() {
 	if err := utils.Logger.ChangeLevel(utils.Settings.GetString("log-level")); err != nil {
 		utils.Logger.Panic("change log level", zap.Error(err))
 	}
+	utils.Logger.Info("set log level", zap.String("level", utils.Settings.GetString("log-level")))
 
 	// clock
 	utils.SetupClock(100 * time.Millisecond)
@@ -110,23 +111,34 @@ func setupLogger(ctx context.Context) {
 		return
 	}
 	utils.Logger.Info("enable alert pusher")
-	// log
-	alertPusher, err := utils.NewAlertPusherWithAlertType(
-		ctx,
-		utils.Settings.GetString("settings.logger.push_api"),
-		utils.Settings.GetString("settings.logger.alert_type"),
-		utils.Settings.GetString("settings.logger.push_token"),
-	)
-	if err != nil {
-		utils.Logger.Panic("create AlertPusher", zap.Error(err))
+	utils.Logger = utils.Logger.Named("go-fluentd-" + utils.Settings.GetString("env"))
+
+	if utils.Settings.GetString("settings.logger.push_api") != "" {
+		// telegram alert
+		alertPusher, err := utils.NewAlertPusherWithAlertType(
+			ctx,
+			utils.Settings.GetString("settings.logger.push_api"),
+			utils.Settings.GetString("settings.logger.alert_type"),
+			utils.Settings.GetString("settings.logger.push_token"),
+		)
+		if err != nil {
+			utils.Logger.Panic("create AlertPusher", zap.Error(err))
+		}
+		utils.Logger = utils.Logger.
+			WithOptions(zap.HooksWithFields(alertPusher.GetZapHook()))
 	}
 
-	hook := utils.NewAlertHook(alertPusher)
-	if _, err := utils.SetDefaultLogger(
-		"go-fluentd:"+utils.Settings.GetString("env"),
-		utils.Settings.GetString("log-level"),
-		zap.HooksWithFields(hook.GetZapHook())); err != nil {
-		utils.Logger.Panic("setup logger", zap.Error(err))
+	if utils.Settings.GetString("settings.pateo_alert.push_api") != "" {
+		// pateo wechat alert pusher
+		pateoAlertPusher, err := utils.NewPateoAlertPusher(
+			ctx,
+			utils.Settings.GetString("settings.pateo_alert.push_api"),
+			utils.Settings.GetString("settings.pateo_alert.token"),
+		)
+		if err != nil {
+			utils.Logger.Panic("create pateoAlertPusher", zap.Error(err))
+		}
+		utils.Logger = utils.Logger.WithOptions(zap.HooksWithFields(pateoAlertPusher.GetZapHook()))
 	}
 }
 

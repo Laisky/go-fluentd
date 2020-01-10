@@ -21,18 +21,18 @@ type SenderItf interface {
 	SetMsgPool(*sync.Pool)
 	SetCommitChan(chan<- *libs.FluentMsg)
 	SetSupportedTags([]string)
-	SetDiscardChan(chan<- *libs.FluentMsg)
-	SetDiscardWithoutCommitChan(chan<- *libs.FluentMsg)
+	SetSuccessedChan(chan<- *libs.FluentMsg)
+	SetFailedChan(chan<- *libs.FluentMsg)
 }
 
 // BaseSender
 // should not put msg into msgpool in sender
 type BaseSender struct {
-	msgPool                               *sync.Pool
-	commitChan                            chan<- *libs.FluentMsg
-	discardChan, discardWithoutCommitChan chan<- *libs.FluentMsg
-	tags                                  []string
-	IsDiscardWhenBlocked                  bool
+	msgPool                   *sync.Pool
+	commitChan                chan<- *libs.FluentMsg
+	successedChan, failedChan chan<- *libs.FluentMsg
+	tags                      []string
+	IsDiscardWhenBlocked      bool
 }
 
 func (s *BaseSender) runFlusher(ctx context.Context, inChan chan *libs.FluentMsg) {
@@ -56,12 +56,12 @@ func (s *BaseSender) SetCommitChan(commitChan chan<- *libs.FluentMsg) {
 	s.commitChan = commitChan
 }
 
-func (s *BaseSender) SetDiscardChan(discardChan chan<- *libs.FluentMsg) {
-	s.discardChan = discardChan
+func (s *BaseSender) SetSuccessedChan(successedChan chan<- *libs.FluentMsg) {
+	s.successedChan = successedChan
 }
 
-func (s *BaseSender) SetDiscardWithoutCommitChan(discardWithoutCommitChan chan<- *libs.FluentMsg) {
-	s.discardWithoutCommitChan = discardWithoutCommitChan
+func (s *BaseSender) SetFailedChan(failedChan chan<- *libs.FluentMsg) {
+	s.failedChan = failedChan
 }
 
 func (s *BaseSender) SetSupportedTags(tags []string) {

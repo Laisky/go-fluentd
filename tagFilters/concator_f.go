@@ -199,7 +199,7 @@ func (c *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCfg
 			delete(c.slot, identifier)
 		}
 
-		// discard concated msg
+		// discard concated tail msg
 		c.DiscardMsg(msg)
 	}
 }

@@ -24,29 +24,29 @@ type ProducerCfg struct {
 type Producer struct {
 	*ProducerCfg
 	sync.Mutex
-	tag2SenderChan                        *sync.Map
-	senders                               []senders.SenderItf
-	discardChan, discardWithoutCommitChan chan *libs.FluentMsg
+	tag2SenderChan            *sync.Map
+	senders                   []senders.SenderItf
+	successedChan, failedChan chan *libs.FluentMsg
 	// discardMsgCountMap = map[&msg]discardedCount
 	// ⚠️Notify: cannot use `msgid` as key,
 	// since of there could be two msg with same msgid arrive to producer,
 	// the later one come from journal.
 	//
 	// stores the count of each msg, if msg's count equals to the number of sender,
-	// will put the msg into discardChan.
+	// will put the msg into successedChan.
 	discardMsgCountMap *sync.Map
 	counter            *utils.Counter
 	pMsgPool           *sync.Pool // pending msg pool
 
 	unSupportedTags *sync.Map
-	tag2NSender     *sync.Map // map[tag]nSender
-	tag2Cancel      *sync.Map // map[tag]nSender
+	tag2NSender     *sync.Map // map[tag]Sender
+	tag2Cancel      *sync.Map // map[tag]senderCancel
 }
 
-type ProducerPendingDiscardMsg struct {
-	Count    int
-	IsCommit bool
-	Msg      *libs.FluentMsg
+type pendingDiscardMsg struct {
+	count          int
+	isAllSuccessed bool
+	msg            *libs.FluentMsg
 }
 
 // NewProducer create new producer
@@ -58,18 +58,16 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) *Producer {
 	}
 
 	p := &Producer{
-		ProducerCfg:              cfg,
-		senders:                  senders,
-		tag2SenderChan:           &sync.Map{},
-		discardChan:              make(chan *libs.FluentMsg, cfg.DiscardChanSize),
-		discardWithoutCommitChan: make(chan *libs.FluentMsg, cfg.DiscardChanSize),
-		discardMsgCountMap:       &sync.Map{},
-		counter:                  utils.NewCounter(),
+		ProducerCfg:        cfg,
+		senders:            senders,
+		tag2SenderChan:     &sync.Map{},
+		successedChan:      make(chan *libs.FluentMsg, cfg.DiscardChanSize),
+		failedChan:         make(chan *libs.FluentMsg, cfg.DiscardChanSize),
+		discardMsgCountMap: &sync.Map{},
+		counter:            utils.NewCounter(),
 		pMsgPool: &sync.Pool{
 			New: func() interface{} {
-				return &ProducerPendingDiscardMsg{
-					IsCommit: true,
-				}
+				return &pendingDiscardMsg{}
 			},
 		},
 
@@ -83,8 +81,8 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) *Producer {
 		utils.Logger.Info("enable sender", zap.String("name", s.GetName()))
 		s.SetCommitChan(cfg.CommitChan)
 		s.SetMsgPool(cfg.MsgPool)
-		s.SetDiscardChan(p.discardChan)
-		s.SetDiscardWithoutCommitChan(p.discardWithoutCommitChan)
+		s.SetSuccessedChan(p.successedChan)
+		s.SetFailedChan(p.failedChan)
 	}
 
 	return p
@@ -108,8 +106,8 @@ func (p *Producer) registerMonitor() {
 			})
 			return true
 		})
-		metrics["discardChanLen"] = len(p.discardChan)
-		metrics["discardChanCap"] = cap(p.discardChan)
+		metrics["discardChanLen"] = len(p.successedChan)
+		metrics["discardChanCap"] = cap(p.successedChan)
 
 		// get discardMsgCountMap length
 		nMsg := 0
@@ -122,24 +120,24 @@ func (p *Producer) registerMonitor() {
 	})
 }
 
-func (p *Producer) DiscardMsg(pmsg *ProducerPendingDiscardMsg) {
-	if pmsg.IsCommit {
-		p.CommitChan <- pmsg.Msg
+func (p *Producer) discardMsg(pmsg *pendingDiscardMsg) {
+	if pmsg.isAllSuccessed {
+		p.CommitChan <- pmsg.msg
 	} else {
 		// committed msg will recycled in journal
-		p.MsgPool.Put(pmsg.Msg)
+		p.MsgPool.Put(pmsg.msg)
 	}
 
 	p.pMsgPool.Put(pmsg)
 }
 
-func (p *Producer) RunMsgCollector(ctx context.Context, tag2NSender *sync.Map, discardChan chan *libs.FluentMsg) {
+func (p *Producer) runMsgCollector(ctx context.Context, tag2NSender *sync.Map, successedChan chan *libs.FluentMsg) {
 	var (
-		cntToDiscard int
-		ok, isCommit bool
-		itf          interface{}
-		msg          *libs.FluentMsg
-		pmsg         *ProducerPendingDiscardMsg
+		cntToDiscard    int
+		ok, isSuccessed bool
+		itf             interface{}
+		msg             *libs.FluentMsg
+		pmsg            *pendingDiscardMsg
 	)
 	defer utils.Logger.Info("msg collector exit", zap.String("msg", fmt.Sprint(msg)))
 
@@ -147,18 +145,18 @@ func (p *Producer) RunMsgCollector(ctx context.Context, tag2NSender *sync.Map, d
 		select {
 		case <-ctx.Done():
 			return
-		case msg, ok = <-p.discardChan:
+		case msg, ok = <-p.successedChan:
 			if !ok {
-				utils.Logger.Info("discardChan closed")
+				utils.Logger.Info("successedChan closed")
 				return
 			}
-			isCommit = true
-		case msg, ok = <-p.discardWithoutCommitChan:
+			isSuccessed = true
+		case msg, ok = <-p.failedChan:
 			if !ok {
-				utils.Logger.Info("discardWithoutCommitChan closed")
+				utils.Logger.Info("failedChan closed")
 				return
 			}
-			isCommit = false
+			isSuccessed = false
 		}
 
 		// ⚠️Warning: Do not change tag in any sender
@@ -173,23 +171,23 @@ func (p *Producer) RunMsgCollector(ctx context.Context, tag2NSender *sync.Map, d
 
 		if itf, ok = p.discardMsgCountMap.Load(msg); !ok {
 			// create new pmsg
-			pmsg = p.pMsgPool.Get().(*ProducerPendingDiscardMsg)
-			pmsg.IsCommit = isCommit
-			pmsg.Count = 1
-			pmsg.Msg = msg
+			pmsg = p.pMsgPool.Get().(*pendingDiscardMsg)
+			pmsg.isAllSuccessed = isSuccessed
+			pmsg.count = 1
+			pmsg.msg = msg
 		} else {
 			// update existsing pmsg
-			pmsg = itf.(*ProducerPendingDiscardMsg)
-			pmsg.IsCommit = pmsg.IsCommit && isCommit
-			pmsg.Count++
+			pmsg = itf.(*pendingDiscardMsg)
+			pmsg.isAllSuccessed = pmsg.isAllSuccessed && isSuccessed
+			pmsg.count++
 		}
 
-		if pmsg.Count == cntToDiscard {
+		if pmsg.count == cntToDiscard {
 			// msg already sent by all sender
-			p.discardMsgCountMap.Delete(pmsg.Msg)
-			p.DiscardMsg(pmsg)
+			p.discardMsgCountMap.Delete(pmsg.msg)
+			p.discardMsg(pmsg)
 		} else {
-			p.discardMsgCountMap.Store(pmsg.Msg, pmsg)
+			p.discardMsgCountMap.Store(pmsg.msg, pmsg)
 		}
 	}
 }
@@ -198,7 +196,7 @@ func (p *Producer) RunMsgCollector(ctx context.Context, tag2NSender *sync.Map, d
 func (p *Producer) Run(ctx context.Context) {
 	utils.Logger.Info("start producer")
 
-	go p.RunMsgCollector(ctx, p.tag2NSender, p.discardChan)
+	go p.runMsgCollector(ctx, p.tag2NSender, p.successedChan)
 	for i := 0; i < p.NFork; i++ {
 		go func(i int) {
 			var (
@@ -225,7 +223,7 @@ func (p *Producer) Run(ctx context.Context) {
 				p.counter.Count()
 				if _, ok = p.unSupportedTags.Load(msg.Tag); ok {
 					utils.Logger.Warn("do not produce since of unsupported tag", zap.String("tag", msg.Tag))
-					p.discardChan <- msg
+					p.successedChan <- msg
 					continue
 				}
 
@@ -254,7 +252,7 @@ func (p *Producer) Run(ctx context.Context) {
 							utils.Logger.Warn("do not produce since of unsupported tag", zap.String("tag", msg.Tag))
 							p.tag2NSender.Store(msg.Tag, 1)
 							p.unSupportedTags.Store(msg.Tag, struct{}{}) // mark as unsupported
-							p.discardChan <- msg
+							p.successedChan <- msg
 							cancel()
 							p.Unlock()
 							continue
@@ -282,12 +280,12 @@ func (p *Producer) Run(ctx context.Context) {
 					case val.(chan<- *libs.FluentMsg) <- msg:
 					default:
 						if s.DiscardWhenBlocked() {
-							p.discardChan <- msg
+							p.successedChan <- msg
 							utils.Logger.Warn("skip sender and discard msg since of its inchan is full",
 								zap.String("name", s.GetName()),
 								zap.String("tag", msg.Tag))
 						} else {
-							p.discardWithoutCommitChan <- msg
+							p.failedChan <- msg
 							// utils.Logger.Debug("skip sender and not discard msg since of its inchan is full",
 							// 	zap.String("name", s.GetName()),
 							// 	zap.String("tag", msg.Tag))

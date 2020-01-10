@@ -12,19 +12,17 @@ import (
 )
 
 type FluentSenderCfg struct {
-	Name, Addr                                  string
-	Tags                                        []string
-	BatchSize, InChanSize, RetryChanSize, NFork int
-	MaxWait                                     time.Duration
-	IsDiscardWhenBlocked                        bool
-	ConcatCfg                                   map[string]interface{}
+	Name, Addr                   string
+	Tags                         []string
+	BatchSize, InChanSize, NFork int
+	MaxWait                      time.Duration
+	IsDiscardWhenBlocked         bool
+	ConcatCfg                    map[string]interface{}
 }
 
 type FluentSender struct {
 	*BaseSender
 	*FluentSenderCfg
-
-	retryMsgChan chan *libs.FluentMsg
 }
 
 func NewFluentSender(cfg *FluentSenderCfg) *FluentSender {
@@ -41,7 +39,6 @@ func NewFluentSender(cfg *FluentSenderCfg) *FluentSender {
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
 		},
 		FluentSenderCfg: cfg,
-		retryMsgChan:    make(chan *libs.FluentMsg, cfg.RetryChanSize),
 	}
 	s.SetSupportedTags(cfg.Tags)
 	return s
@@ -127,7 +124,7 @@ func (s *FluentSender) Spawn(ctx context.Context, tag string) chan<- *libs.Fluen
 						zap.String("tag", tag),
 						zap.String("log", fmt.Sprint(msgBatch[0].Message)))
 					for _, msg = range msgBatchDelivery {
-						s.discardChan <- msg
+						s.successedChan <- msg
 					}
 					continue
 				}
@@ -139,7 +136,7 @@ func (s *FluentSender) Spawn(ctx context.Context, tag string) chan<- *libs.Fluen
 						utils.Logger.Error("try send message got error", zap.Error(err), zap.String("tag", tag))
 						utils.Logger.Error("discard msg since of sender err", zap.String("tag", msg.Tag), zap.Int("num", len(msgBatchDelivery)))
 						for _, msg = range msgBatchDelivery {
-							s.discardWithoutCommitChan <- msg
+							s.failedChan <- msg
 						}
 
 						if err = conn.Close(); err != nil {
@@ -157,7 +154,7 @@ func (s *FluentSender) Spawn(ctx context.Context, tag string) chan<- *libs.Fluen
 					zap.String("backend", s.Addr),
 					zap.String("tag", tag))
 				for _, msg = range msgBatchDelivery {
-					s.discardChan <- msg
+					s.successedChan <- msg
 				}
 			}
 		}(i)

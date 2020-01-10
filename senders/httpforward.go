@@ -106,7 +106,7 @@ func (s *HTTPSender) Spawn(ctx context.Context, tag string) chan<- *libs.FluentM
 						zap.String("tag", tag),
 						zap.String("log", fmt.Sprint(msgBatch[0].Message)))
 					for _, msg = range msgBatchDelivery {
-						s.discardChan <- msg
+						s.successedChan <- msg
 					}
 					continue
 				}
@@ -118,7 +118,7 @@ func (s *HTTPSender) Spawn(ctx context.Context, tag string) chan<- *libs.FluentM
 						utils.Logger.Error("try send message got error", zap.Error(err), zap.String("tag", tag))
 						utils.Logger.Error("discard msg since of sender err", zap.String("tag", msg.Tag), zap.Int("num", len(msgBatchDelivery)))
 						for _, msg = range msgBatchDelivery {
-							s.discardWithoutCommitChan <- msg
+							s.failedChan <- msg
 						}
 
 						continue
@@ -131,7 +131,7 @@ func (s *HTTPSender) Spawn(ctx context.Context, tag string) chan<- *libs.FluentM
 					zap.Int("batch", len(msgBatchDelivery)),
 					zap.String("tag", msg.Tag))
 				for _, msg = range msgBatchDelivery {
-					s.discardChan <- msg
+					s.successedChan <- msg
 				}
 			}
 		}(i)

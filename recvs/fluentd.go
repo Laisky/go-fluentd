@@ -173,7 +173,6 @@ LISTENER_LOOP:
 }
 
 func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
-	defer r.logger.Info("connection closed")
 	defer conn.Close()
 	var (
 		reader = msgp.NewReader(conn)
@@ -188,9 +187,14 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 		ok      bool
 		entryI  interface{}
 		eof     = msgp.WrapError(io.EOF)
+
+		msgCnt, totalMsgCnt int
 	)
+	defer r.logger.Info("close connection",
+		zap.String("remote", conn.RemoteAddr().String()))
 
 	for {
+		msgCnt = 0
 		select {
 		case <-ctx.Done():
 			return
@@ -207,7 +211,7 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 		}
 
 		if len(v) < 2 {
-			r.logger.Error("unknown message format, length should be 2", zap.String("msg", fmt.Sprint(v)))
+			r.logger.Warn("discard msg since unknown message format, length should be 2", zap.String("msg", fmt.Sprint(v)))
 			continue
 		}
 
@@ -217,28 +221,30 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 		case string:
 			tag = msgTag
 		default:
-			r.logger.Error("unknown message format, message[0] is not `[]byte` or string", zap.String("tag", fmt.Sprint(v[0])))
+			r.logger.Warn("discard msg since unknown message format, message[0] is not `[]byte` or string",
+				zap.String("tag", fmt.Sprint(v[0])))
 			continue
 		}
 		r.logger.Debug("got message tag", zap.String("tag", tag))
 
 		switch msgBody := v[1].(type) {
 		case []interface{}:
-			r.logger.Debug("got message in format: `[]interface{}`")
 			for _, entryI = range msgBody {
 				msg = r.msgPool.Get().(*libs.FluentMsg)
 				if msg.Message, ok = entryI.([]interface{})[1].(map[string]interface{}); !ok {
-					r.logger.Error("unknown message format, cannot decode", zap.String("tag", tag))
+					r.logger.Warn("discard msg since unknown message format, cannot decode",
+						zap.String("tag", tag))
 					r.msgPool.Put(msg)
 					continue
 				}
 				// []interface{})[0] is
 				// "google.qingcloud.kube.sit.aitimer-7b6b654d8-7hpsw_ai_aitimer-f25c8bfea7b30ed7ba7c600cdb75e6aa7326ba4b67139e3338bf873bd5036921"
 				msg.Tag = tag
+				msgCnt++
 				r.ProcessMsg(msg)
 			}
+			r.logger.Debug("got message in format: `[]interface{}`", zap.Int("n", msgCnt))
 		case []byte: // embedded format
-			r.logger.Debug("got message in format: `[]byte`")
 			if buf2 == nil {
 				buf2 = bytes.NewReader(msgBody)
 			} else {
@@ -255,50 +261,49 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 				if err = v2.DecodeMsg(reader2); err == eof {
 					break
 				} else if err != nil {
-					r.logger.Error("unknown message format, cannot decode")
+					r.logger.Warn("discard msg since unknown message format, cannot decode")
 					continue
 				} else if len(v2) < 2 {
-					r.logger.Error("unknown message format, length should be 2", zap.String("msg", fmt.Sprint(v2)))
+					r.logger.Warn("discard msg since unknown message format, length should be 2",
+						zap.String("msg", fmt.Sprint(v2)))
 					continue
 				} else {
 					msg = r.msgPool.Get().(*libs.FluentMsg)
 					if msg.Message, ok = v2[1].(map[string]interface{}); !ok {
-						r.logger.Error("unknown message format", zap.String("msg", fmt.Sprint(v2[1])))
+						r.logger.Warn("discard msg since unknown message format",
+							zap.String("msg", fmt.Sprint(v2[1])))
 						r.msgPool.Put(msg)
 						continue
 					}
-					// switch msgTag := v2[0].(type) {
-					// case []byte:
-					// 	tag = string(msgTag)
-					// case string:
-					// 	tag = msgTag
-					// default:
-					// 	r.logger.Error("message[0] is not `[]byte` or string", zap.String("tag", fmt.Sprint(v[0])))
-					// 	continue
-					// }
-					// r.logger.Debug("got inner tag", zap.String("tag", tag))
 					msg.Tag = tag
 					r.ProcessMsg(msg)
+					msgCnt++
 				}
 			}
+			r.logger.Debug("got message in format: `[]byte`", zap.Int("n", msgCnt))
 		default:
 			if len(v) < 3 {
-				r.logger.Error("unknown message format for length, length should be 3", zap.String("msg", fmt.Sprint(v)))
+				r.logger.Warn("discard msg since unknown message format for length, length should be 3",
+					zap.String("msg", fmt.Sprint(v)))
 				continue
 			}
 
-			r.logger.Debug("got message in format: default")
 			switch msgBody := v[2].(type) {
 			case map[string]interface{}:
 				msg = r.msgPool.Get().(*libs.FluentMsg)
 				msg.Message = msgBody
 			default:
-				r.logger.Error("unknown msg format", zap.String("msg", fmt.Sprint(v)))
+				r.logger.Warn("discard msg since unknown msg format", zap.String("msg", fmt.Sprint(v)))
 				continue
 			}
 			msg.Tag = tag
 			r.ProcessMsg(msg)
+			msgCnt++
+			r.logger.Debug("got message in format: default", zap.Int("n", msgCnt))
 		}
+
+		totalMsgCnt += msgCnt
+		utils.Logger.Debug("msg stats", zap.Int("total", totalMsgCnt))
 	}
 }
 
@@ -311,7 +316,7 @@ func (r *FluentdRecv) ProcessMsg(msg *libs.FluentMsg) {
 		case []byte:
 			msg.Tag = string(tag)
 		default:
-			r.logger.Warn("unknown type of msg tag key",
+			r.logger.Warn("discard msg since unknown type of tag key",
 				zap.String("tag", fmt.Sprint(tag)),
 				zap.String("tag_key", r.OriginRewriteTagKey))
 			r.msgPool.Put(msg)
@@ -327,9 +332,10 @@ func (r *FluentdRecv) ProcessMsg(msg *libs.FluentMsg) {
 	case string:
 		r.concators[int(xxhash.Sum64String(lbkey)%uint64(r.NFork))] <- msg
 	default:
-		r.logger.Warn("unknown type of LBKey", zap.String("LBKey", r.LBKey), zap.String("val", fmt.Sprint(lbkey)))
+		r.logger.Warn("discard msg since unknown type of LBKey",
+			zap.String("LBKey", r.LBKey),
+			zap.String("val", fmt.Sprint(lbkey)))
 		r.msgPool.Put(msg)
-		return
 	}
 }
 
@@ -367,13 +373,14 @@ func (r *FluentdRecv) runConcator(ctx context.Context, i int, inChan chan *libs.
 		idenN, deletN      int
 	)
 	defer cleanTicker.Stop()
+
 NEW_MSG_LOOP:
 	for {
 		select {
 		case <-ctx.Done():
 			break NEW_MSG_LOOP
-		case msg = <-inChan:
-			if msg == nil {
+		case msg, ok = <-inChan:
+			if !ok {
 				break NEW_MSG_LOOP
 			}
 		case <-cleanTicker.C: // clean old msgs

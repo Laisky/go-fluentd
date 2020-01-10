@@ -304,17 +304,17 @@ type SenderItf interface {
     SetCommitChan(chan<- *libs.FluentMsg)
     SetSupportedTags([]string)
     SetDiscardChan(chan<- *libs.FluentMsg)
-    SetDiscardWithoutCommitChan(chan<- *libs.FluentMsg)
+    SetFailedChan(chan<- *libs.FluentMsg)
 }
 ```
 
 producer 的主要职责除了将 msg 传递给各个 senders 外，还负责统计每个 sender 的发送状态，并择机回收 msg，回收的主要逻辑为：
 
 - 首次获取到上游的 msg 后，会遍历 senders，在将 msg 传递给 senders 的同时，会记录有多少个 senders 支持该 tag（计为 n）；
-- 每一个 sender 在发送成功或失败后，会将 msg.Id 交还给 producer（通过 discardChan 或 discardWithoutCommitChan）；
+- 每一个 sender 在发送成功或失败后，会将 msg.Id 交还给 producer（通过 discardChan 或 failedChan）；
 - producer 会对 senders 发回的 msg id 进行计数，当计数达到 n 时，认为该 msg 已经被所有 senders 处理，此时才回收该 msg。
   - 如果 msg id 全部是通过 discardChan 送回的，则在回收消息的同时，将 msg id 提交给 journal 进行记录；
-  - 如果有任意 msg id 是通过 discardWithoutCommitChan 送回的，则仅回收消息，
+  - 如果有任意 msg id 是通过 failedChan 送回的，则仅回收消息，
     但是不向 journal 提交（这会导致该条消息在稍后会被重新处理，适用于消息发送失败，决定稍后重试的场景）。
 
 

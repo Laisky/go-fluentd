@@ -75,7 +75,7 @@ func (f *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.Fl
 			// parse log string
 			if f.Regexp != nil {
 				if err = libs.RegexNamedSubMatch(f.Regexp, msg.Message[f.MsgKey].([]byte), msg.Message); err != nil {
-					utils.Logger.Warn("message format not matched",
+					utils.Logger.Warn("discard message since format not matched",
 						zap.String("tag", msg.Tag),
 						zap.ByteString("log", msg.Message[f.MsgKey].([]byte)))
 					f.DiscardMsg(msg)
@@ -86,15 +86,6 @@ func (f *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.Fl
 			// remove origin log
 			if f.IsRemoveOrigLog {
 				delete(msg.Message, f.MsgKey)
-			}
-		}
-
-		// MustInclude
-		if f.MustInclude != "" {
-			if _, ok = msg.Message[f.MustInclude]; !ok {
-				utils.Logger.Warn("dicard since of missing key", zap.String("key", f.MustInclude))
-				f.DiscardMsg(msg)
-				continue
 			}
 		}
 
@@ -134,19 +125,17 @@ func (f *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.Fl
 				delete(msg.Message, f.ParseJsonKey)
 			}
 		}
-
 		// flatten messages
 		libs.FlattenMap(msg.Message, "__") // do not use `.` as delimiter!
 
-		// // trim
-		// for k, vi = range msg.Message {
-		// 	switch log := vi.(type) {
-		// 	case string:
-		// 		msg.Message[k] = strings.TrimSpace(log)
-		// 	case []byte:
-		// 		msg.Message[k] = bytes.TrimSpace(log)
-		// 	}
-		// }
+		// MustInclude
+		if f.MustInclude != "" {
+			if _, ok = msg.Message[f.MustInclude]; !ok {
+				utils.Logger.Warn("dicard since of missing key", zap.String("key", f.MustInclude))
+				f.DiscardMsg(msg)
+				continue
+			}
+		}
 
 		// add
 		if _, ok = f.Add[msg.Tag]; ok {
@@ -171,7 +160,7 @@ func (f *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.Fl
 					v = ts
 				}
 			default:
-				utils.Logger.Warn("unknown time format",
+				utils.Logger.Warn("discard since unknown time format",
 					zap.Error(err),
 					zap.String("ts", fmt.Sprint(msg.Message[f.TimeKey])),
 					zap.String("tag", msg.Tag),
@@ -184,7 +173,7 @@ func (f *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.Fl
 
 			v = strings.Replace(v, ",", ".", -1)
 			if t, err = time.Parse(f.TimeFormat, v); err != nil {
-				utils.Logger.Warn("parse time got error",
+				utils.Logger.Warn("discard since parse time got error",
 					zap.Error(err),
 					zap.String("ts", v),
 					zap.String("tag", msg.Tag),

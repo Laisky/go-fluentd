@@ -26,20 +26,19 @@ func LoadESTagIndexMap(env string, mapi interface{}) map[string]string {
 }
 
 type ElasticSearchSenderCfg struct {
-	Name, Addr, TagKey                          string
-	Tags                                        []string
-	BatchSize, InChanSize, RetryChanSize, NFork int
-	MaxWait                                     time.Duration
-	TagIndexMap                                 map[string]string
-	IsDiscardWhenBlocked                        bool
+	Name, Addr, TagKey           string
+	Tags                         []string
+	BatchSize, InChanSize, NFork int
+	MaxWait                      time.Duration
+	TagIndexMap                  map[string]string
+	IsDiscardWhenBlocked         bool
 }
 
 type ElasticSearchSender struct {
 	*BaseSender
 	*ElasticSearchSenderCfg
-	logger       *utils.LoggerType
-	retryMsgChan chan *libs.FluentMsg
-	httpClient   *http.Client
+	logger     *utils.LoggerType
+	httpClient *http.Client
 }
 
 func NewElasticSearchSender(cfg *ElasticSearchSenderCfg) *ElasticSearchSender {
@@ -58,7 +57,6 @@ func NewElasticSearchSender(cfg *ElasticSearchSenderCfg) *ElasticSearchSender {
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
 		},
 		ElasticSearchSenderCfg: cfg,
-		retryMsgChan:           make(chan *libs.FluentMsg, cfg.RetryChanSize),
 		httpClient: &http.Client{ // default http client
 			Transport: &http.Transport{
 				MaxIdleConnsPerHost: 20,
@@ -146,7 +144,6 @@ func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*libs.Flue
 	defer resp.Body.Close()
 
 	if err = s.checkResp(resp); err != nil {
-		// TODO: should ignore mapping & field type conlifct
 		return errors.Wrap(err, "request es got error")
 	}
 
@@ -199,6 +196,12 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
 	}
 
 	if ret.Errors {
+		// ignore mapping type conflict & fileds number exceeds
+		if bytes.Contains(bb, []byte("mapper_parsing_exception")) ||
+			bytes.Contains(bb, []byte("Limit of total fields")) {
+			s.logger.Warn("rejected by es", zap.ByteString("error", bb))
+			return nil
+		}
 		return fmt.Errorf("es return error: %v", string(bb))
 	}
 
@@ -268,7 +271,7 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *lib
 						s.logger.Info("send message to backend",
 							zap.String("tag", tag),
 							zap.String("log", fmt.Sprint(msgBatch[j].Message)))
-						s.discardChan <- msg
+						s.successedChan <- msg
 					}
 					continue
 				}
@@ -283,7 +286,7 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *lib
 								zap.ByteString("content", bulkCtx.cnt),
 								zap.Int("num", len(msgBatchDelivery)))
 							for _, msg = range msgBatchDelivery {
-								s.discardWithoutCommitChan <- msg
+								s.failedChan <- msg
 							}
 							continue NEW_MSG_LOOP
 						}
@@ -298,7 +301,7 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *lib
 					zap.Int("batch", len(msgBatchDelivery)),
 					zap.String("tag", msg.Tag))
 				for _, msg = range msgBatchDelivery {
-					s.discardChan <- msg
+					s.successedChan <- msg
 				}
 			}
 		}(i)

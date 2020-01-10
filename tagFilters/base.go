@@ -94,7 +94,7 @@ func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan c
 		select {
 		case downChan <- msg:
 		default:
-			utils.Logger.Warn("concator worker's inchan is full",
+			utils.Logger.Warn("downstream worker's inchan is full",
 				zap.String("tag", msg.Tag),
 				zap.Uint64("idx", hashkey%uint64(nfork)))
 		}

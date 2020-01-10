@@ -2,6 +2,16 @@
 *CURRENT*
 ---
 
+- 2020-01-10 (Laisky) ci: upgrade patch
+- 2020-01-10 (Laisky) docs: update readme
+- 2020-01-10 (Laisky) docs: add more comment
+- 2020-01-10 (Laisky) docs: typo
+- 2020-01-10 (Laisky) style: change some vars name
+- 2020-01-07 (Laisky) fix: detect log-alert config
+- 2020-01-07 (Laisky) feat: enable google & telegram alert
+- 2020-01-07 (Laisky) fix: google alert pusher
+- 2020-01-06 (Laisky) feat: add google alert wechat service
+- 2020-01-03 (Laisky) fix: ignore es type conflict
 - 2020-01-03 (Laisky) fix: handle es return error
 
 *v1.12.1*

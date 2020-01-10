@@ -13,9 +13,12 @@ type ForwardTagRewriterFilterCfg struct {
 }
 
 // ForwardTagRewriterFilter rewrite tag for msgs received by forward-recv.
+// for example, change `forward-wechat.perf` -> `forward-wechat.prod`.
 type ForwardTagRewriterFilter struct {
 	BaseFilter
 	*ForwardTagRewriterFilterCfg
+
+	tagWithoutEnv string
 }
 
 func NewForwardTagRewriterFilter(cfg *ForwardTagRewriterFilterCfg) *ForwardTagRewriterFilter {
@@ -24,6 +27,7 @@ func NewForwardTagRewriterFilter(cfg *ForwardTagRewriterFilterCfg) *ForwardTagRe
 
 	return &ForwardTagRewriterFilter{
 		ForwardTagRewriterFilterCfg: cfg,
+		tagWithoutEnv:               strings.Split(cfg.Tag, ".")[0],
 	}
 }
 
@@ -33,7 +37,7 @@ func (f *ForwardTagRewriterFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	}
 
 	env := strings.Split(msg.Message[f.TagKey].(string), ".")[1]
-	msg.Tag = strings.Split(msg.Tag, ".")[0] + "." + env
+	msg.Tag = f.tagWithoutEnv + "." + env
 	// utils.Logger.Debug("rewrite msg tag", zap.String("new_tag", msg.Tag))
 	return msg
 }

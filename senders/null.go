@@ -90,9 +90,9 @@ func (s *NullSender) Spawn(ctx context.Context, tag string) chan<- *libs.FluentM
 				}
 
 				if s.IsCommit {
-					s.discardChan <- msg
+					s.successedChan <- msg
 				} else {
-					s.discardWithoutCommitChan <- msg
+					s.failedChan <- msg
 				}
 			}
 		}()

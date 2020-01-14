@@ -54,12 +54,12 @@ func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan c
 	}
 
 	var (
-		nfork        = len(inchans)
-		hashkey      uint64
-		emptyHashkey = xxhash.Sum64String("")
-		downChan     = inchans[0]
-		msg          *libs.FluentMsg
-		ok           bool
+		nfork          = len(inchans)
+		hashkey        uint64
+		defaultHashkey = xxhash.Sum64String("")
+		downChan       = inchans[0]
+		msg            *libs.FluentMsg
+		ok             bool
 	)
 	defer utils.Logger.Info("concator lb exit", zap.String("msg", fmt.Sprint(msg)))
 	for {
@@ -80,12 +80,12 @@ func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan c
 			case string:
 				hashkey = xxhash.Sum64String(msg.Message[lbkey].(string))
 			case nil:
-				hashkey = emptyHashkey
+				hashkey = defaultHashkey
 			default:
 				utils.Logger.Warn("unknown type of hash key",
 					zap.String("lb_key", lbkey),
 					zap.String("val", fmt.Sprint(msg.Message[lbkey])))
-				hashkey = emptyHashkey
+				hashkey = defaultHashkey
 			}
 
 			downChan = inchans[int(hashkey%uint64(nfork))]
@@ -94,7 +94,7 @@ func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan c
 		select {
 		case downChan <- msg:
 		default:
-			utils.Logger.Warn("downstream worker's inchan is full",
+			utils.Logger.Warn("discard msg since downstream worker's inchan is full",
 				zap.String("tag", msg.Tag),
 				zap.Uint64("idx", hashkey%uint64(nfork)))
 		}

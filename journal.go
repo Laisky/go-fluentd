@@ -19,21 +19,22 @@ import (
 )
 
 const (
-	defaultInnerJournalDataChanLen = 10000
-	defaultInnerJournalIDChanLen   = 10000
-	minimalBufSizeByte             = 10485760 // 10 MB
-	intervalToStartingLegacy       = 3 * time.Second
-	defaultJournalLegacyWait       = 1 * time.Second
-	intervalForceGC                = 3 * time.Minute
+	minimalBufSizeByte       = 10485760 // 10 MB
+	intervalToStartingLegacy = 3 * time.Second
+	defaultJournalLegacyWait = 1 * time.Second
+	intervalForceGC          = 3 * time.Minute
 )
 
 type JournalCfg struct {
-	BufDirPath                         string
-	BufSizeBytes                       int64
-	JournalOutChanLen, CommitIdChanLen int
-	IsCompress                         bool
-	MsgPool                            *sync.Pool
-	CommittedIDTTL                     time.Duration
+	BufDirPath   string
+	BufSizeBytes int64
+	JournalOutChanLen,
+	CommitIDChanLen,
+	ChildJournalDataInchanLen,
+	ChildJournalIDInchanLen int
+	IsCompress     bool
+	MsgPool        *sync.Pool
+	CommittedIDTTL time.Duration
 }
 
 // Journal dumps all messages to files,
@@ -45,13 +46,15 @@ type Journal struct {
 	outChan    chan *libs.FluentMsg
 	commitChan chan *libs.FluentMsg
 
-	baseJournalDir      string
-	baseJournalCfg      *journal.JournalConfig
-	jjLock              *sync.Mutex
-	tag2JMap            *sync.Map // map[string]*journal.Journal
-	tag2JJInchanMap     *sync.Map // map[string]chan *libs.FluentMsg
-	tag2JJCommitChanMap *sync.Map // map[string]chan *libs.FluentMsg
-	tag2CtxCancelMap    *sync.Map // map[string]context.CancelFunc
+	baseJournalDir string
+	baseJournalCfg *journal.JournalConfig
+	jjLock         *sync.Mutex
+	tag2JMap,      // map[string]*journal.Journal
+	tag2JJInchanMap, // map[string]chan *libs.FluentMsg
+	tag2JJCommitChanMap, // map[string]chan *libs.FluentMsg
+	tag2IDsCounter,
+	tag2DataCounter,
+	tag2CtxCancelMap *sync.Map // map[string]context.CancelFunc
 }
 
 // NewJournal create new Journal with `bufDirPath` and `BufSizeBytes`
@@ -61,6 +64,12 @@ func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 		zap.Int64("size", cfg.BufSizeBytes))
 	if cfg.BufSizeBytes < minimalBufSizeByte {
 		utils.Logger.Warn("journal buf file size too small", zap.Int64("size", cfg.BufSizeBytes))
+	}
+	if cfg.ChildJournalIDInchanLen == 0 {
+		cfg.ChildJournalIDInchanLen = cfg.JournalOutChanLen
+	}
+	if cfg.ChildJournalDataInchanLen == 0 {
+		cfg.ChildJournalDataInchanLen = cfg.CommitIDChanLen
 	}
 
 	jcfg := journal.NewConfig()
@@ -74,7 +83,7 @@ func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 		JournalCfg: cfg,
 		legacyLock: &utils.Mutex{},
 
-		commitChan: make(chan *libs.FluentMsg, cfg.CommitIdChanLen),
+		commitChan: make(chan *libs.FluentMsg, cfg.CommitIDChanLen),
 		outChan:    make(chan *libs.FluentMsg, cfg.JournalOutChanLen),
 
 		jjLock:              &sync.Mutex{},
@@ -84,6 +93,8 @@ func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 		tag2JJInchanMap:     &sync.Map{},
 		tag2JJCommitChanMap: &sync.Map{},
 		tag2CtxCancelMap:    &sync.Map{},
+		tag2IDsCounter:      &sync.Map{},
+		tag2DataCounter:     &sync.Map{},
 	}
 	j.initLegacyJJ(ctx)
 	j.registerMonitor()
@@ -101,9 +112,12 @@ func (j *Journal) CloseTag(tag string) error {
 		j.tag2JJInchanMap.Delete(tag)
 		j.tag2JJCommitChanMap.Delete(tag)
 		j.tag2CtxCancelMap.Delete(tag)
+		j.tag2IDsCounter.Delete(tag)
+		j.tag2DataCounter.Delete(tag)
 		j.jjLock.Unlock()
 	}
 
+	utils.Logger.Info("delete journal tag", zap.String("tag", tag))
 	return nil
 }
 
@@ -266,52 +280,60 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 	jcfg.IsAggresiveGC = false
 	jcfg.BufDirPath = filepath.Join(j.baseJournalDir, tag)
 
-	utils.Logger.Info("createJournalRunner for tag", zap.String("tag", tag))
-	if _, ok = j.tag2JMap.Load(tag); ok {
-		utils.Logger.Panic("tag already exists in tag2JMap", zap.String("tag", tag))
-	}
 	utils.Logger.Info("create new journal.Journal", zap.String("tag", tag))
 	jj := journal.NewJournal(ctxForTag, jcfg)
-	j.tag2JMap.Store(tag, jj)
-
-	if _, ok = j.tag2JJInchanMap.Load(tag); ok {
-		utils.Logger.Panic("tag already exists in tag2JJInchanMap", zap.String("tag", tag))
+	if _, ok = j.tag2JMap.LoadOrStore(tag, jj); ok {
+		utils.Logger.Panic("tag already exists in tag2JMap", zap.String("tag", tag))
 	}
-	j.tag2JJInchanMap.Store(tag, make(chan *libs.FluentMsg, defaultInnerJournalDataChanLen))
-
-	if _, ok = j.tag2JJCommitChanMap.Load(tag); ok {
+	if _, ok = j.tag2JJCommitChanMap.LoadOrStore(tag, make(chan *libs.FluentMsg, j.ChildJournalIDInchanLen)); ok {
 		utils.Logger.Panic("tag already exists in tag2JJCommitChanMap", zap.String("tag", tag))
 	}
-	j.tag2JJCommitChanMap.Store(tag, make(chan *libs.FluentMsg, defaultInnerJournalIDChanLen))
+	if _, ok = j.tag2JJInchanMap.LoadOrStore(tag, make(chan *libs.FluentMsg, j.ChildJournalDataInchanLen)); ok {
+		utils.Logger.Panic("tag already exists in tag2JJInchanMap", zap.String("tag", tag))
+	}
+	if _, ok = j.tag2IDsCounter.LoadOrStore(tag, utils.NewCounter()); ok {
+		utils.Logger.Panic("tag already exists in tag2IDsCounter", zap.String("tag", tag))
+	}
+	if _, ok = j.tag2DataCounter.LoadOrStore(tag, utils.NewCounter()); ok {
+		utils.Logger.Panic("tag already exists in tag2DataCounter", zap.String("tag", tag))
+	}
 
 	// create ids writer
 	go func(ctx context.Context) {
 		var (
-			mid      int64
-			err      error
-			nRetry   int
-			maxRetry = 2
-			msg      *libs.FluentMsg
-			ok       bool
+			mid             int64
+			err             error
+			nRetry          int
+			maxRetry        = 2
+			msg             *libs.FluentMsg
+			ok              bool
+			chani, counteri interface{}
+			msgChan         chan *libs.FluentMsg
+			counter         *utils.Counter
 		)
 
-		chani, ok := j.tag2JJCommitChanMap.Load(tag)
-		if !ok {
+		if chani, ok = j.tag2JJCommitChanMap.Load(tag); !ok {
 			utils.Logger.Panic("tag must in `j.tag2JJCommitChanMap`", zap.String("tag", tag))
 		}
+		msgChan = chani.(chan *libs.FluentMsg)
+		if counteri, ok = j.tag2IDsCounter.Load(tag); !ok {
+			utils.Logger.Panic("tag must in `j.tag2IDsCounter`", zap.String("tag", tag))
+		}
+		counter = counteri.(*utils.Counter)
 
 		defer utils.Logger.Info("journal ids writer exit")
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case msg, ok = <-chani.(chan *libs.FluentMsg):
+			case msg, ok = <-msgChan:
 				if !ok {
 					utils.Logger.Info("tag2JJCommitChan closed", zap.String("tag", tag))
 					return
 				}
 			}
 
+			counter.Count()
 			nRetry = 0
 			for nRetry < maxRetry {
 				if err = jj.WriteId(msg.Id); err != nil {
@@ -332,6 +354,7 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 						}
 						break
 					}
+					counter.Count()
 					if err != nil && nRetry == maxRetry {
 						utils.Logger.Error("try to write id to journal got error", zap.Error(err))
 					}
@@ -346,24 +369,31 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 	// create data writer
 	go func(ctx context.Context) {
 		var (
-			data     = &journal.Data{Data: map[string]interface{}{}}
-			err      error
-			nRetry   int
-			maxRetry = 2
-			ok       bool
-			msg      *libs.FluentMsg
+			data            = &journal.Data{Data: map[string]interface{}{}}
+			err             error
+			nRetry          int
+			maxRetry        = 2
+			ok              bool
+			msg             *libs.FluentMsg
+			chani, counteri interface{}
+			msgChan         chan *libs.FluentMsg
+			counter         *utils.Counter
 		)
-		chani, ok := j.tag2JJInchanMap.Load(tag)
-		if !ok {
+		if chani, ok = j.tag2JJInchanMap.Load(tag); !ok {
 			utils.Logger.Panic("tag should in `j.tag2JJInchanMap`", zap.String("tag", tag))
 		}
+		msgChan = chani.(chan *libs.FluentMsg)
+		if counteri, ok = j.tag2DataCounter.Load(tag); !ok {
+			utils.Logger.Panic("tag should in `j.tag2DataCounter`", zap.String("tag", tag))
+		}
+		counter = counteri.(*utils.Counter)
 
 		defer utils.Logger.Info("journal data writer exit", zap.String("msg", fmt.Sprint(msg)))
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case msg, ok = <-chani.(chan *libs.FluentMsg):
+			case msg, ok = <-msgChan:
 				if !ok {
 					utils.Logger.Info("tag2JJInchan closed", zap.String("tag", tag))
 					return
@@ -374,9 +404,11 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 			data.Data["message"] = msg.Message
 			data.Data["tag"] = msg.Tag
 			nRetry = 0
+			counter.Count()
 			for nRetry < maxRetry {
 				if err = jj.WriteData(data); err != nil {
 					nRetry++
+					continue
 				}
 				break
 			}
@@ -464,6 +496,7 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 		}
 	}()
 
+	// deal with msgs that need dump
 	go func() {
 		var (
 			ok  bool
@@ -490,13 +523,17 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 
 			select {
 			case jji.(chan *libs.FluentMsg) <- msg:
-			case j.outChan <- msg:
 			default:
-				utils.Logger.Error("discard log since of journal & downstream busy",
-					zap.String("tag", msg.Tag),
-					zap.String("msg", fmt.Sprint(msg)),
-				)
-				j.MsgPool.Put(msg)
+				select {
+				case j.outChan <- msg:
+					utils.Logger.Warn("skip dump since journal is busy", zap.String("tag", msg.Tag))
+				default:
+					utils.Logger.Error("discard log since of journal & downstream busy",
+						zap.String("tag", msg.Tag),
+						zap.String("msg", fmt.Sprint(msg)),
+					)
+					j.MsgPool.Put(msg)
+				}
 			}
 		}
 	}()
@@ -560,7 +597,22 @@ func (j *Journal) registerMonitor() {
 	monitor.AddMetric("journal", func() map[string]interface{} {
 		result := map[string]interface{}{}
 		j.tag2JMap.Range(func(k, v interface{}) bool {
-			result[k.(string)] = v.(*journal.Journal).GetMetric()
+			result[k.(string)+".journal"] = v.(*journal.Journal).GetMetric()
+			return true
+		})
+		j.tag2IDsCounter.Range(func(k, v interface{}) bool {
+			result[k.(string)+".ids.msgTotal"] = v.(*utils.Counter).Get()
+			result[k.(string)+".ids.msgPerSec"] = v.(*utils.Counter).GetSpeed()
+			return true
+		})
+		j.tag2DataCounter.Range(func(k, v interface{}) bool {
+			result[k.(string)+".data.msgTotal"] = v.(*utils.Counter).Get()
+			result[k.(string)+".data.msgPerSec"] = v.(*utils.Counter).GetSpeed()
+			return true
+		})
+		j.tag2JJInchanMap.Range(func(k, v interface{}) bool {
+			result[k.(string)+".chanLen"] = len(v.(chan *libs.FluentMsg))
+			result[k.(string)+".chanCap"] = cap(v.(chan *libs.FluentMsg))
 			return true
 		})
 		return result

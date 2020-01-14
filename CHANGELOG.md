@@ -2,15 +2,23 @@
 *CURRENT*
 ---
 
+- 2020-01-14 (Laisky) ci: upgrade go 1.13.6
+- 2020-01-14 (Laisky) docs: update readme
+- 2020-01-14 (Laisky) docs: update settings
+- 2020-01-14 (Laisky) fix: some logs loss
+
+*v1.12.3*
+---
+
 - 2020-01-10 (Laisky) ci: upgrade patch
 - 2020-01-10 (Laisky) docs: update readme
 - 2020-01-10 (Laisky) docs: add more comment
 - 2020-01-10 (Laisky) docs: typo
 - 2020-01-10 (Laisky) style: change some vars name
 - 2020-01-07 (Laisky) fix: detect log-alert config
-- 2020-01-07 (Laisky) feat: enable google & telegram alert
-- 2020-01-07 (Laisky) fix: google alert pusher
-- 2020-01-06 (Laisky) feat: add google alert wechat service
+- 2020-01-07 (Laisky) feat: enable pateo & telegram alert
+- 2020-01-07 (Laisky) fix: pateo alert pusher
+- 2020-01-06 (Laisky) feat: add pateo alert wechat service
 - 2020-01-03 (Laisky) fix: ignore es type conflict
 - 2020-01-03 (Laisky) fix: handle es return error
 
@@ -470,4 +478,4 @@
 - 2018-12-06 (Laisky) fix: typo
 - 2018-12-06 (Laisky) feat(paas-220): support rsyslog recv
 - 2018-12-04 (Laisky) fix(paas-208): change flatten delimiter to "__"
-- 2018-12-04 (Laisky) build: rename to `google.com`
+- 2018-12-04 (Laisky) build: rename to `pateo.com`

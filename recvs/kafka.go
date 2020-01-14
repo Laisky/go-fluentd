@@ -206,7 +206,7 @@ func (r *KafkaRecv) parse2Msg(kmsg *kafka.KafkaMsg) (msg *libs.FluentMsg, err er
 			case string:
 				msg.Tag = msg.Message[r.JSONTagKey].(string)
 			default:
-				utils.Logger.Error("unknown tagkey format", zap.String("tagkey", r.JSONTagKey))
+				utils.Logger.Error("discard log since unknown tagkey format", zap.String("tagkey", r.JSONTagKey))
 				r.msgPool.Put(msg)
 				return nil, errors.New("unknown tagkey format")
 			}

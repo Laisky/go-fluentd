@@ -124,7 +124,7 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 					logPart[r.NewTimeKey] = t.Add(r.TimeShift).UTC().Format(r.NewTimeFormat)
 					delete(logPart, r.TimeKey)
 				default:
-					utils.Logger.Error("unknown timestamp format")
+					utils.Logger.Error("discard log since unknown timestamp format")
 				}
 
 				// rename to message because of the elasticsearch default query field is `message`

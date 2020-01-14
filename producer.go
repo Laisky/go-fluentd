@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-fluentd/monitor"
@@ -90,13 +89,11 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) *Producer {
 
 // registerMonitor bind monitor for producer
 func (p *Producer) registerMonitor() {
-	lastT := time.Now()
 	monitor.AddMetric("producer", func() map[string]interface{} {
 		metrics := map[string]interface{}{
-			"msgPerSec": utils.Round(float64(p.counter.Get())/(time.Since(lastT).Seconds()), .5, 1),
+			"msgPerSec": p.counter.GetSpeed(),
+			"msgTotal":  p.counter.Get(),
 		}
-		p.counter.Set(0)
-		lastT = time.Now()
 
 		p.tag2SenderChan.Range(func(tagi, smi interface{}) bool {
 			smi.(*sync.Map).Range(func(si, ci interface{}) bool {

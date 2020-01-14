@@ -17,8 +17,8 @@ go mod download
 go mod vendor
 
 # build base image
-docker build . -f ./.docker/gobase.Dockerfile -t registry.paas.ptcloud.t.home/paas/gobase:1.13.5-alpine3.11
-docker push registry.paas.ptcloud.t.home/paas/gobase:1.13.5-alpine3.11
+docker build . -f ./.docker/gobase.Dockerfile -t registry.paas.ptcloud.t.home/paas/gobase:1.13.6-alpine3.11
+docker push registry.paas.ptcloud.t.home/paas/gobase:1.13.6-alpine3.11
 
 # build image
 docker build . -f ./.docker/Dockerfile -t registry.paas.ptcloud.t.home/paas/go-fluentd:1.8.2
@@ -38,8 +38,8 @@ build on machine that should installed docker.
 
 ```sh
 # build golang-stretch
-docker build . -f ./.docker/golang-stretch.Dockerfile -t registry.paas.ptcloud.t.home/paas/golang:1.13.4-stretch
-docker push registry.paas.ptcloud.t.home/paas/golang:1.13.4-stretch
+docker build . -f ./.docker/golang-stretch.Dockerfile -t registry.paas.ptcloud.t.home/paas/golang:1.13.6-stretch
+docker push registry.paas.ptcloud.t.home/paas/golang:1.13.6-stretch
 
 # build mfs-stretch
 docker build . -f ./.docker/mfs-stretch.Dockerfile -t registry.paas.ptcloud.t.home/paas/mfs-stretch:20190116

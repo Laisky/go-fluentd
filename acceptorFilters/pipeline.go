@@ -65,6 +65,7 @@ func NewAcceptorPipeline(ctx context.Context, cfg *AcceptorPipelineCfg, filters 
 func (f *AcceptorPipeline) registerMonitor() {
 	monitor.AddMetric("acceptorPipeline", func() map[string]interface{} {
 		metrics := map[string]interface{}{
+			"msgTotal":  f.counter.Get(),
 			"msgPerSec": f.counter.GetSpeed(),
 		}
 		return metrics
@@ -123,10 +124,13 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 
 				select {
 				case outChan <- msg:
-				case skipDumpChan <- msg: // baidu has low disk performance
 				default:
-					utils.Logger.Error("discard log", zap.String("tag", msg.Tag))
-					f.MsgPool.Put(msg)
+					select {
+					case skipDumpChan <- msg: // baidu has low disk performance
+					default:
+						utils.Logger.Error("discard msg since disk & downstream are busy", zap.String("tag", msg.Tag))
+						f.MsgPool.Put(msg)
+					}
 				}
 			}
 		}()

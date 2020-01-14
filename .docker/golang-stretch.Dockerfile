@@ -1,6 +1,6 @@
-# docker build . -f ./.docker/golang-stretch.Dockerfile -t registry.paas.ptcloud.t.home/paas/golang:1.13.4-stretch
-# docker push registry.paas.ptcloud.t.home/paas/golang:1.13.4-stretch
-FROM golang:1.13.4-stretch
+# docker build . -f ./.docker/golang-stretch.Dockerfile -t registry.paas.ptcloud.t.home/paas/golang:1.13.6-stretch
+# docker push registry.paas.ptcloud.t.home/paas/golang:1.13.6-stretch
+FROM golang:1.13.6-stretch
 
 # run dependencies
 RUN apt-get update && \

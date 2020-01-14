@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-fluentd/monitor"
@@ -124,7 +123,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 				select {
 				case inChanForEachTag <- msg:
 				default:
-					utils.Logger.Warn("tagfilter's inchan is blocked", zap.String("tag", msg.Tag))
+					utils.Logger.Warn("discard msg since tagfilter's inchan is blocked", zap.String("tag", msg.Tag))
 				}
 			}
 		}()
@@ -132,18 +131,16 @@ func (d *Dispatcher) Run(ctx context.Context) {
 }
 
 func (d *Dispatcher) registerMonitor() {
-	lastT := time.Now()
 	monitor.AddMetric("dispatcher", func() map[string]interface{} {
 		metrics := map[string]interface{}{
-			"msgPerSec": utils.Round(float64(d.counter.Get())/(time.Since(lastT).Seconds()), .5, 1),
+			"msgPerSec": d.counter.GetSpeed(),
+			"msgTotal":  d.counter.Get(),
 		}
-		d.counter.Set(0)
 		d.tag2Counter.Range(func(tagi interface{}, ci interface{}) bool {
-			metrics[tagi.(string)+".MsgPerSec"] = utils.Round(float64(ci.(*utils.Counter).Get())/(time.Since(lastT).Seconds()), .5, 1)
-			ci.(*utils.Counter).Set(0)
+			metrics[tagi.(string)+".MsgPerSec"] = ci.(*utils.Counter).GetSpeed()
+			metrics[tagi.(string)+".msgTotal"] = ci.(*utils.Counter).Get()
 			return true
 		})
-		lastT = time.Now()
 
 		d.tag2Concator.Range(func(tagi interface{}, ci interface{}) bool {
 			metrics[tagi.(string)+".ChanLen"] = len(ci.(chan<- *libs.FluentMsg))

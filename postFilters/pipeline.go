@@ -3,6 +3,7 @@ package postFilters
 import (
 	"context"
 	"fmt"
+	"github.com/Laisky/go-fluentd/monitor"
 	"sync"
 
 	"github.com/Laisky/zap"
@@ -19,6 +20,7 @@ type PostPipelineCfg struct {
 
 type PostPipeline struct {
 	*PostPipelineCfg
+	counter     *utils.Counter
 	filters     []PostFilterItf
 	reEnterChan chan *libs.FluentMsg
 }
@@ -32,9 +34,11 @@ func NewPostPipeline(cfg *PostPipelineCfg, filters ...PostFilterItf) *PostPipeli
 
 	pp := &PostPipeline{
 		PostPipelineCfg: cfg,
+		counter:         utils.NewCounter(),
 		filters:         filters,
 		reEnterChan:     make(chan *libs.FluentMsg, cfg.ReEnterChanSize),
 	}
+	pp.registerMonitor()
 
 	for _, filter := range pp.filters {
 		filter.SetUpstream(pp.reEnterChan)
@@ -43,6 +47,15 @@ func NewPostPipeline(cfg *PostPipelineCfg, filters ...PostFilterItf) *PostPipeli
 	}
 
 	return pp
+}
+
+func (f *PostPipeline) registerMonitor() {
+	monitor.AddMetric("postpipeline", func() map[string]interface{} {
+		return map[string]interface{}{
+			"msgPerSec": f.counter.GetSpeed(),
+			"msgTotal":  f.counter.Get(),
+		}
+	})
 }
 
 func (f *PostPipeline) Wrap(ctx context.Context, inChan chan *libs.FluentMsg) (outChan chan *libs.FluentMsg) {
@@ -74,6 +87,7 @@ func (f *PostPipeline) Wrap(ctx context.Context, inChan chan *libs.FluentMsg) (o
 					}
 				}
 
+				f.counter.Count()
 				for _, filter = range f.filters {
 					if msg = filter.Filter(msg); msg == nil { // quit filters for this msg
 						continue NEW_MSG

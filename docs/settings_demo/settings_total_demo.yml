@@ -47,6 +47,9 @@ consts:
       - prod
 
 # settings 里保存的就是会真实生效的配置了。
+# 按照各个不同的组件进行拆分。
+# 如果键名为 plugins，说明这部分配置是可以按需求进行增／删的
+#
 # controllor 里会遍历各个插件内的租户（tenants），自动加载。
 #
 # 流水线的顺序：acceptor -> acceptpipeline -> journal -> dispatcher -> tagPipeline -> postFilter -> producer
@@ -585,6 +588,11 @@ settings:
     # journal 输入 channel 的 size
     commit_id_chan_len: 500000
 
+    # journal 内会为每一个 tag 建立一个子 journal，
+    # 所以还需要为子 journal 配置 data/ids 的 inchan buf size，
+    child_data_chan_len: 200000  # default to journal_out_chan_len
+    child_id_chan_len: 200000  # default to commit_id_chan_len
+
     # 在内存中保存 committed ids 的时间，实际存活的时间会在 1x ~ 2x 间浮动。
     # 在内存中长时间的保存 committed ids 是为了减少消息的重复率。
     # 这个值越大，占用的内存也越多，具体保存的 ids 数量可以在监控接口中查看。
@@ -722,7 +730,7 @@ settings:
   # 会启动 nfork 个小 filter 并行，将消息按 lb_key 分配到各个小 filter 中。
   tag_filters:
     # internal_chan_size 就是每个 tagFilter 中的各个下属小 filter 的 inflow channel size。
-    internal_chan_size: 10000
+    internal_chan_size: 100000
 
     plugins:
 

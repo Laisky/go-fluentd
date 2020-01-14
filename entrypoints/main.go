@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	concator "github.com/Laisky/go-fluentd"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/spf13/pflag"
+	concator "github.com/Laisky/go-fluentd"
 )
 
 // SetupSettings setup arguments restored in viper
@@ -136,7 +136,7 @@ func setupLogger(ctx context.Context) {
 			utils.Settings.GetString("settings.pateo_alert.token"),
 		)
 		if err != nil {
-			utils.Logger.Panic("create pateoAlertPusher", zap.Error(err))
+			utils.Logger.Panic("create PateoAlertPusher", zap.Error(err))
 		}
 		utils.Logger = utils.Logger.WithOptions(zap.HooksWithFields(pateoAlertPusher.GetZapHook()))
 	}

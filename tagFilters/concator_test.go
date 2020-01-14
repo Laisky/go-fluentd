@@ -61,7 +61,7 @@ import (
 // 				msg1.Tag = "app.spring.sit"
 // 				msg1.Id = 1
 // 				msg1.Message = map[string]interface{}{
-// 					"log":          "2018-11-21 17:05:22.514 | test | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: 123454321",
+// 					"log":          "2018-11-21 17:05:22.514 | test | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: 123454321",
 // 					"container_id": "docker",
 // 				}
 // 				inChan <- msg1
@@ -82,7 +82,7 @@ import (
 // }
 
 func BenchmarkRegexp(b *testing.B) {
-	log := "2018-11-21 17:05:22.514 | test | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: 123454321"
+	log := "2018-11-21 17:05:22.514 | test | INFO  | http-nio-8080-exec-1 | com.pateo.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: 123454321"
 	re := regexp.MustCompile(`(?ms)^(?P<time>.{23}) {0,}\| {0,}(?P<app>[^ ]+) {0,}\| {0,}(?P<level>[^ ]+) {0,}\| {0,}(?P<thread>[^ ]+) {0,}\| {0,}(?P<class>[^ ]+) {0,}\| {0,}(?P<line>\d+) {0,}([\|:] {0,}(?P<args>\{.*\}))?([\|:] {0,}(?P<message>.*))?`)
 
 	b.Run("regexp", func(b *testing.B) {

@@ -43,13 +43,15 @@ func NewControllor() (c *Controllor) {
 
 func (c *Controllor) initJournal(ctx context.Context) *Journal {
 	return NewJournal(ctx, &JournalCfg{
-		MsgPool:           c.msgPool,
-		BufDirPath:        utils.Settings.GetString("settings.journal.buf_dir_path"),
-		BufSizeBytes:      utils.Settings.GetInt64("settings.journal.buf_file_bytes"),
-		JournalOutChanLen: utils.Settings.GetInt("settings.journal.journal_out_chan_len"),
-		CommitIdChanLen:   utils.Settings.GetInt("settings.journal.commit_id_chan_len"),
-		CommittedIDTTL:    utils.Settings.GetDuration("settings.journal.committed_id_sec") * time.Second,
-		IsCompress:        utils.Settings.GetBool("settings.journal.is_compress"),
+		MsgPool:                   c.msgPool,
+		BufDirPath:                utils.Settings.GetString("settings.journal.buf_dir_path"),
+		BufSizeBytes:              utils.Settings.GetInt64("settings.journal.buf_file_bytes"),
+		JournalOutChanLen:         utils.Settings.GetInt("settings.journal.journal_out_chan_len"),
+		CommitIDChanLen:           utils.Settings.GetInt("settings.journal.commit_id_chan_len"),
+		ChildJournalIDInchanLen:   utils.Settings.GetInt("settings.journal.child_data_chan_len"),
+		ChildJournalDataInchanLen: utils.Settings.GetInt("settings.journal.child_id_chan_len"),
+		CommittedIDTTL:            utils.Settings.GetDuration("settings.journal.committed_id_sec") * time.Second,
+		IsCompress:                utils.Settings.GetBool("settings.journal.is_compress"),
 	})
 }
 
@@ -291,9 +293,9 @@ func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommit
 	}
 
 	return tagFilters.NewTagPipeline(ctx, &tagFilters.TagPipelineCfg{
-		MsgPool:                 c.msgPool,
-		WaitCommitChan:          waitCommitChan,
-		DefaultInternalChanSize: utils.Settings.GetInt("settings.tag_filters.internal_chan_size"),
+		MsgPool:          c.msgPool,
+		WaitCommitChan:   waitCommitChan,
+		InternalChanSize: utils.Settings.GetInt("settings.tag_filters.internal_chan_size"),
 	},
 		fs...,
 	)

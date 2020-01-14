@@ -10,14 +10,18 @@ import (
 	"github.com/Laisky/zap"
 )
 
+const (
+	defaultInternalFilterChanSize = 100000
+)
+
 type TagPipelineItf interface {
 	Spawn(context.Context, string, chan<- *libs.FluentMsg) (chan<- *libs.FluentMsg, error)
 }
 
 type TagPipelineCfg struct {
-	DefaultInternalChanSize int
-	MsgPool                 *sync.Pool
-	WaitCommitChan          chan<- *libs.FluentMsg
+	InternalChanSize int
+	MsgPool          *sync.Pool
+	WaitCommitChan   chan<- *libs.FluentMsg
 }
 
 type TagPipeline struct {
@@ -29,14 +33,14 @@ type TagPipeline struct {
 // NewTagPipeline create new TagPipeline
 func NewTagPipeline(ctx context.Context, cfg *TagPipelineCfg, itfs ...TagFilterFactoryItf) *TagPipeline {
 	utils.Logger.Info("create tag pipeline")
-	if cfg.DefaultInternalChanSize <= 0 {
-		cfg.DefaultInternalChanSize = 1000
+	if cfg.InternalChanSize <= 0 {
+		cfg.InternalChanSize = defaultInternalFilterChanSize
 	}
 
 	for _, itf := range itfs {
 		itf.SetMsgPool(cfg.MsgPool)
 		itf.SetWaitCommitChan(cfg.WaitCommitChan)
-		itf.SetDefaultIntervalChanSize(cfg.DefaultInternalChanSize)
+		itf.SetDefaultIntervalChanSize(cfg.InternalChanSize)
 	}
 
 	tp := &TagPipeline{

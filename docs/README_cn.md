@@ -304,7 +304,7 @@ type SenderItf interface {
     SetCommitChan(chan<- *libs.FluentMsg)
     SetSupportedTags([]string)
     SetDiscardChan(chan<- *libs.FluentMsg)
-    SetFailedChan(chan<- *libs.FluentMsg)
+    SetfailedChan(chan<- *libs.FluentMsg)
 }
 ```
 

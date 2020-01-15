@@ -3,6 +3,7 @@ package concator
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"sync"
 
 	"github.com/Laisky/go-fluentd/libs"
@@ -13,6 +14,7 @@ import (
 )
 
 type ProducerCfg struct {
+	DistributeKey          string
 	InChan                 chan *libs.FluentMsg
 	MsgPool                *sync.Pool
 	CommitChan             chan<- *libs.FluentMsg
@@ -224,7 +226,7 @@ func (p *Producer) Run(ctx context.Context) {
 					continue
 				}
 
-				msg.Message["msgid"] = msg.Id // set id
+				msg.Message["msgid"] = p.DistributeKey + "-" + strconv.FormatInt(msg.Id, 10) // set id
 				if _, ok = p.tag2SenderChan.Load(msg.Tag); !ok {
 					p.Lock()
 					if _, ok = p.tag2SenderChan.Load(msg.Tag); !ok { // double check

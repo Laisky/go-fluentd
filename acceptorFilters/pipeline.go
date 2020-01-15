@@ -126,6 +126,7 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 				case outChan <- msg:
 				default:
 					select {
+					case outChan <- msg:
 					case skipDumpChan <- msg: // baidu has low disk performance
 					default:
 						utils.Logger.Error("discard msg since disk & downstream are busy", zap.String("tag", msg.Tag))

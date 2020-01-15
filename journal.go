@@ -19,10 +19,10 @@ import (
 )
 
 const (
-	minimalBufSizeByte       = 10485760 // 10 MB
-	intervalToStartingLegacy = 3 * time.Second
-	defaultJournalLegacyWait = 1 * time.Second
-	intervalForceGC          = 3 * time.Minute
+	minimalBufSizeByte        = 10485760 // 10 MB
+	intervalToStartingLegacy  = 3 * time.Second
+	defaultJournalLegacyWait  = 1 * time.Second
+	defaultIntervalSecForceGC = 1 * time.Minute
 )
 
 type JournalCfg struct {
@@ -32,6 +32,7 @@ type JournalCfg struct {
 	CommitIDChanLen,
 	ChildJournalDataInchanLen,
 	ChildJournalIDInchanLen int
+	GCIntervalSec  time.Duration
 	IsCompress     bool
 	MsgPool        *sync.Pool
 	CommittedIDTTL time.Duration
@@ -65,11 +66,14 @@ func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 	if cfg.BufSizeBytes < minimalBufSizeByte {
 		utils.Logger.Warn("journal buf file size too small", zap.Int64("size", cfg.BufSizeBytes))
 	}
-	if cfg.ChildJournalIDInchanLen == 0 {
+	if cfg.ChildJournalIDInchanLen <= 0 {
 		cfg.ChildJournalIDInchanLen = cfg.JournalOutChanLen
 	}
-	if cfg.ChildJournalDataInchanLen == 0 {
+	if cfg.ChildJournalDataInchanLen <= 0 {
 		cfg.ChildJournalDataInchanLen = cfg.CommitIDChanLen
+	}
+	if cfg.GCIntervalSec <= 0 {
+		cfg.GCIntervalSec = defaultIntervalSecForceGC
 	}
 
 	jcfg := journal.NewConfig()
@@ -470,7 +474,7 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 			}
 
 			utils.ForceGC()
-			time.Sleep(intervalForceGC)
+			time.Sleep(j.GCIntervalSec)
 		}
 	}()
 
@@ -525,6 +529,7 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 			case jji.(chan *libs.FluentMsg) <- msg:
 			default:
 				select {
+				case jji.(chan *libs.FluentMsg) <- msg:
 				case j.outChan <- msg:
 					utils.Logger.Warn("skip dump since journal is busy", zap.String("tag", msg.Tag))
 				default:

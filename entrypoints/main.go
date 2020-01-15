@@ -89,6 +89,7 @@ func SetupSettings() {
 func SetupArgs() {
 	pflag.Bool("debug", false, "run in debug mode")
 	pflag.Bool("dry", false, "run in dry mode")
+	pflag.String("host", "unknown", "hostname")
 	pflag.String("config", "/etc/go-fluentd/settings", "config file directory path")
 	pflag.String("config-server", "", "config server url")
 	pflag.String("config-server-appname", "", "config server app name")
@@ -111,7 +112,7 @@ func setupLogger(ctx context.Context) {
 		return
 	}
 	utils.Logger.Info("enable alert pusher")
-	utils.Logger = utils.Logger.Named("go-fluentd-" + utils.Settings.GetString("env"))
+	utils.Logger = utils.Logger.Named("go-fluentd-" + utils.Settings.GetString("env") + "-" + utils.Settings.GetString("host"))
 
 	if utils.Settings.GetString("settings.logger.push_api") != "" {
 		// telegram alert

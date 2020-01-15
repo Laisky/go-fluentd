@@ -48,10 +48,11 @@ func (c *Controllor) initJournal(ctx context.Context) *Journal {
 		BufSizeBytes:              utils.Settings.GetInt64("settings.journal.buf_file_bytes"),
 		JournalOutChanLen:         utils.Settings.GetInt("settings.journal.journal_out_chan_len"),
 		CommitIDChanLen:           utils.Settings.GetInt("settings.journal.commit_id_chan_len"),
-		ChildJournalIDInchanLen:   utils.Settings.GetInt("settings.journal.child_data_chan_len"),
-		ChildJournalDataInchanLen: utils.Settings.GetInt("settings.journal.child_id_chan_len"),
+		ChildJournalIDInchanLen:   utils.Settings.GetInt("settings.journal.child_id_chan_len"),
+		ChildJournalDataInchanLen: utils.Settings.GetInt("settings.journal.child_data_chan_len"),
 		CommittedIDTTL:            utils.Settings.GetDuration("settings.journal.committed_id_sec") * time.Second,
 		IsCompress:                utils.Settings.GetBool("settings.journal.is_compress"),
+		GCIntervalSec:             utils.Settings.GetDuration("settings.journal.gc_inteval_sec") * time.Second,
 	})
 }
 
@@ -473,6 +474,7 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 func (c *Controllor) initProducer(env string, waitProduceChan chan *libs.FluentMsg, commitChan chan<- *libs.FluentMsg, senders []senders.SenderItf) *Producer {
 	return NewProducer(
 		&ProducerCfg{
+			DistributeKey:   utils.Settings.GetString("host") + "-" + utils.Settings.GetString("env"),
 			InChan:          waitProduceChan,
 			MsgPool:         c.msgPool,
 			CommitChan:      commitChan,

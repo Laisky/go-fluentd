@@ -2,6 +2,17 @@
 *CURRENT*
 ---
 
+
+
+*v1.12.5*
+---
+
+- 2020-01-15 (Laisky) feat: improve performance
+- 2020-01-15 (Laisky) fix
+- 2020-01-14 (Laisky) fix: add `journal.gc_inteval_sec`
+- 2020-01-14 (Laisky) fix: journal config typo
+- 2020-01-14 (Laisky) fix: dispatcher panic
+- 2020-01-14 (Laisky) docs: update readme
 - 2020-01-14 (Laisky) ci: upgrade go 1.13.6
 - 2020-01-14 (Laisky) docs: update readme
 - 2020-01-14 (Laisky) docs: update settings

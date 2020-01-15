@@ -4,7 +4,7 @@ go 1.12
 
 require (
 	github.com/Laisky/go-syslog v2.3.3+incompatible
-	github.com/Laisky/go-utils v1.10.1-0.20200107035458-4f152bb79235
+	github.com/Laisky/go-utils v1.10.1-0.20200115033733-3f1b7692aa30
 	github.com/Laisky/zap v1.12.2
 	github.com/OneOfOne/xxhash v1.2.5 // indirect
 	github.com/RoaringBitmap/roaring v0.4.21 // indirect
@@ -21,7 +21,7 @@ require (
 	github.com/mattn/go-isatty v0.0.11 // indirect
 	github.com/pelletier/go-toml v1.6.0 // indirect
 	github.com/pierrec/lz4 v2.0.5+incompatible // indirect
-	github.com/pkg/errors v0.8.1
+	github.com/pkg/errors v0.9.1
 	github.com/prometheus/procfs v0.0.8 // indirect
 	github.com/spf13/afero v1.2.2 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
@@ -31,7 +31,7 @@ require (
 	github.com/ugorji/go v1.1.7 // indirect
 	golang.org/x/crypto v0.0.0-20200109152110-61a87790db17 // indirect
 	golang.org/x/lint v0.0.0-20191125180803-fdd1cda4f05f // indirect
-	golang.org/x/sys v0.0.0-20200107162124-548cf772de50 // indirect
-	golang.org/x/tools v0.0.0-20200110042803-e2f26524b78c // indirect
+	golang.org/x/sys v0.0.0-20200113162924-86b910548bc1 // indirect
+	golang.org/x/tools v0.0.0-20200114235610-7ae403b6b589 // indirect
 	gopkg.in/ini.v1 v1.51.1 // indirect
 )

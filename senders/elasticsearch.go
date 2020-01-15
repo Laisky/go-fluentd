@@ -195,15 +195,19 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
 		return nil
 	}
 
-	if ret.Errors {
-		// ignore mapping type conflict & fileds number exceeds
-		if bytes.Contains(bb, []byte("mapper_parsing_exception")) ||
-			bytes.Contains(bb, []byte("Limit of total fields")) {
-			s.logger.Warn("rejected by es", zap.ByteString("error", bb))
-			return nil
-		}
-		return fmt.Errorf("es return error: %v", string(bb))
-	}
+	// if ret.Errors {
+	// 	// // ignore mapping type conflict & fileds number exceeds
+	// 	// if bytes.Contains(bb, []byte("mapper_parsing_exception")) ||
+	// 	// 	bytes.Contains(bb, []byte("Limit of total fields")) {
+	// 	// 	s.logger.Warn("rejected by es", zap.ByteString("error", bb))
+	// 	// 	return nil
+	// 	// }
+
+	// 	// thread pool exceeds
+	// 	if bytes.Contains(bb, []byte("EsThreadPool")) {
+	// 		return fmt.Errorf("es return error: %v", string(bb))
+	// 	}
+	// }
 
 	return nil
 }

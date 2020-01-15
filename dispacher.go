@@ -91,9 +91,11 @@ func (d *Dispatcher) Run(ctx context.Context) {
 							cancel()
 							continue
 						} else {
-							d.tag2Concator.Store(msg.Tag, inChanForEachTag)
 							d.tag2Counter.Store(msg.Tag, utils.NewCounter())
 							d.tag2Cancel.Store(msg.Tag, cancel)
+							// tag2Concator should put after tag2Counter & tag2Cancel,
+							// because the mutex only check whether tag2Concator has `msg.Tag`.
+							d.tag2Concator.Store(msg.Tag, inChanForEachTag)
 							go func(tag string) {
 								<-ctx2Tag.Done()
 								utils.Logger.Info("remove tag in dispatcher", zap.String("tag", tag))

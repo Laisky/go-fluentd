@@ -577,6 +577,9 @@ settings:
   #
   # 绝大部分情况下，journal 都可以利用页缓存，对磁盘的读写性能要求并不高。
   journal:
+    # 执行 gc 的间隔时间
+    gc_inteval_sec: 45
+
     # 文件夹地址
     buf_dir_path: /data/log/fluentd/go-concator
     # journal data 文件滚动的大小限制

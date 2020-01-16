@@ -2,7 +2,13 @@
 *CURRENT*
 ---
 
-
+- 2020-01-16 (Laisky) fix: producer sender error
+- 2020-01-16 (Laisky) fix: producer sender error
+- 2020-01-16 (Laisky) fix: fluentd child sender
+- 2020-01-16 (Laisky) fix: producer sender typo
+- 2020-01-16 (Laisky) fix: producer sender typo
+- 2020-01-16 (Laisky) fix: producer monitor typo
+- 2020-01-16 (Laisky) feat: improve producer
 
 *v1.12.5*
 ---

@@ -56,8 +56,8 @@ func (s *NullSender) GetName() string {
 }
 
 // Spawn fork
-func (s *NullSender) Spawn(ctx context.Context, tag string) chan<- *libs.FluentMsg {
-	utils.Logger.Info("spawn for tag", zap.String("tag", tag))
+func (s *NullSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
+	utils.Logger.Info("spawn for tag")
 	inChan := make(chan *libs.FluentMsg, s.InChanSize) // for each tag
 
 	for i := 0; i < s.NFork; i++ {

@@ -2,6 +2,7 @@ package concator
 
 import (
 	"context"
+	"encoding/hex"
 	"regexp"
 	"runtime"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/go-utils/kafka"
 	"github.com/Laisky/zap"
+	"github.com/cespare/xxhash"
 )
 
 // Controllor is an IoC that manage all roles
@@ -472,9 +474,10 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 }
 
 func (c *Controllor) initProducer(env string, waitProduceChan chan *libs.FluentMsg, commitChan chan<- *libs.FluentMsg, senders []senders.SenderItf) *Producer {
+	hasher := xxhash.New()
 	return NewProducer(
 		&ProducerCfg{
-			DistributeKey:   utils.Settings.GetString("host") + "-" + utils.Settings.GetString("env"),
+			DistributeKey:   hex.EncodeToString(hasher.Sum([]byte((utils.Settings.GetString("host") + "-" + utils.Settings.GetString("env"))))),
 			InChan:          waitProduceChan,
 			MsgPool:         c.msgPool,
 			CommitChan:      commitChan,

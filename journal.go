@@ -473,7 +473,7 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 			default:
 			}
 
-			utils.ForceGC()
+			utils.ForceGCBlocking()
 			time.Sleep(j.GCIntervalSec)
 		}
 	}()

@@ -212,10 +212,9 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
 	return nil
 }
 
-func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *libs.FluentMsg {
-	s.logger.Info("SpawnForTag", zap.String("tag", tag))
+func (s *ElasticSearchSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
+	s.logger.Info("spawn elasticsearch sender")
 	inChan := make(chan *libs.FluentMsg, s.InChanSize) // for each tag
-	go s.runFlusher(ctx, inChan)
 
 	for i := 0; i < s.NFork; i++ { // parallel to each tag
 		go func(i int) {
@@ -232,9 +231,10 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *lib
 				}
 				nRetry, j int
 				ok        bool
+				ticker    = time.NewTicker(s.MaxWait)
 			)
+			defer ticker.Stop()
 			defer s.logger.Info("producer exits",
-				zap.String("tag", tag),
 				zap.Int("i", i),
 				zap.String("name", s.GetName()))
 
@@ -251,14 +251,12 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *lib
 						s.logger.Info("inChan closed")
 						return
 					}
-				}
-
-				if msg != nil {
 					msgBatch[iBatch] = msg
 					iBatch++
-				} else if iBatch == 0 {
-					continue
-				} else {
+				case <-ticker.C:
+					if iBatch == 0 {
+						continue
+					}
 					msg = msgBatch[iBatch-1]
 				}
 
@@ -273,7 +271,6 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *lib
 				if utils.Settings.GetBool("dry") {
 					for j, msg = range msgBatchDelivery {
 						s.logger.Info("send message to backend",
-							zap.String("tag", tag),
 							zap.String("log", fmt.Sprint(msgBatch[j].Message)))
 						s.successedChan <- msg
 					}
@@ -286,7 +283,6 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context, tag string) chan<- *lib
 						if nRetry > maxRetry {
 							s.logger.Error("try send message got error",
 								zap.Error(err),
-								zap.String("tag", tag),
 								zap.ByteString("content", bulkCtx.cnt),
 								zap.Int("num", len(msgBatchDelivery)))
 							for _, msg = range msgBatchDelivery {

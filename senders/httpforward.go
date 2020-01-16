@@ -57,19 +57,18 @@ func (s *HTTPSender) GetName() string {
 	return s.Name
 }
 
-func (s *HTTPSender) Spawn(ctx context.Context, tag string) chan<- *libs.FluentMsg {
-	utils.Logger.Info("SpawnForTag", zap.String("tag", tag))
+func (s *HTTPSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
+	utils.Logger.Info("SpawnForTag")
 	inChan := make(chan *libs.FluentMsg, s.InChanSize) // for each tag
-	go s.runFlusher(ctx, inChan)
 
 	for i := 0; i < s.NFork; i++ { // parallel to each tag
 		go func(i int) {
 			defer utils.Logger.Info("producer exits",
-				zap.String("tag", tag),
 				zap.Int("i", i),
 				zap.String("name", s.GetName()))
 
 			var (
+				ok               bool
 				nRetry           int
 				maxRetry         = 3
 				msg              *libs.FluentMsg
@@ -77,17 +76,27 @@ func (s *HTTPSender) Spawn(ctx context.Context, tag string) chan<- *libs.FluentM
 				msgBatchDelivery []*libs.FluentMsg
 				iBatch           = 0
 				lastT            = time.Unix(0, 0)
-				ctx              = &bulkOpCtx{}
+				bulkCtx          = &bulkOpCtx{}
 				err              error
+				ticker           = time.NewTicker(s.MaxWait)
 			)
+			defer ticker.Stop()
 
-			for msg = range inChan {
-				if msg != nil {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case msg, ok = <-inChan:
+					if !ok {
+						utils.Logger.Info("inChan closed")
+						return
+					}
 					msgBatch[iBatch] = msg
 					iBatch++
-				} else if iBatch == 0 {
-					continue
-				} else {
+				case <-ticker.C:
+					if iBatch == 0 {
+						continue
+					}
 					msg = msgBatch[iBatch-1]
 				}
 
@@ -103,7 +112,6 @@ func (s *HTTPSender) Spawn(ctx context.Context, tag string) chan<- *libs.FluentM
 				if utils.Settings.GetBool("dry") {
 					utils.Logger.Info("send message to backend",
 						zap.Int("batch", len(msgBatchDelivery)),
-						zap.String("tag", tag),
 						zap.String("log", fmt.Sprint(msgBatch[0].Message)))
 					for _, msg = range msgBatchDelivery {
 						s.successedChan <- msg
@@ -112,11 +120,13 @@ func (s *HTTPSender) Spawn(ctx context.Context, tag string) chan<- *libs.FluentM
 				}
 
 			SEND_MSG:
-				if err = s.SendBulkMsgs(ctx, msgBatchDelivery); err != nil {
+				if err = s.SendBulkMsgs(bulkCtx, msgBatchDelivery); err != nil {
 					nRetry++
 					if nRetry > maxRetry {
-						utils.Logger.Error("try send message got error", zap.Error(err), zap.String("tag", tag))
-						utils.Logger.Error("discard msg since of sender err", zap.String("tag", msg.Tag), zap.Int("num", len(msgBatchDelivery)))
+						utils.Logger.Error("discard msg since of sender err",
+							zap.Error(err),
+							zap.String("tag", msg.Tag),
+							zap.Int("num", len(msgBatchDelivery)))
 						for _, msg = range msgBatchDelivery {
 							s.failedChan <- msg
 						}
@@ -140,25 +150,25 @@ func (s *HTTPSender) Spawn(ctx context.Context, tag string) chan<- *libs.FluentM
 	return inChan
 }
 
-func (s *HTTPSender) SendBulkMsgs(ctx *bulkOpCtx, msgs []*libs.FluentMsg) (err error) {
+func (s *HTTPSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*libs.FluentMsg) (err error) {
 	msgCnts := make([]map[string]interface{}, len(msgs))
 	for i, m := range msgs {
 		msgCnts[i] = m.Message
 	}
 
-	ctx.buf.Reset()
-	ctx.gzWriter.Reset(ctx.buf)
+	bulkCtx.buf.Reset()
+	bulkCtx.gzWriter.Reset(bulkCtx.buf)
 	var jb []byte
 	if jb, err = json.Marshal(msgCnts); err != nil {
 		return errors.Wrap(err, "try to marshal messages got error")
 	}
 
-	if _, err = ctx.gzWriter.Write(jb); err != nil {
+	if _, err = bulkCtx.gzWriter.Write(jb); err != nil {
 		return errors.Wrap(err, "try to compress messages got error")
 	}
 
-	ctx.gzWriter.Flush()
-	req, err := http.NewRequest("POST", s.Addr, ctx.buf)
+	bulkCtx.gzWriter.Flush()
+	req, err := http.NewRequest("POST", s.Addr, bulkCtx.buf)
 	if err != nil {
 		return errors.Wrap(err, "try to init es request got error")
 	}

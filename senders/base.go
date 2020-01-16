@@ -3,17 +3,15 @@ package senders
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/Laisky/go-fluentd/libs"
-	utils "github.com/Laisky/go-utils"
 	jsoniter "github.com/json-iterator/go"
 )
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 type SenderItf interface {
-	Spawn(context.Context, string) chan<- *libs.FluentMsg // Spawn(tag) inChan
+	Spawn(context.Context) chan<- *libs.FluentMsg // Spawn(ctx) inChan
 	IsTagSupported(string) bool
 	DiscardWhenBlocked() bool
 	GetName() string
@@ -33,19 +31,6 @@ type BaseSender struct {
 	successedChan, failedChan chan<- *libs.FluentMsg
 	tags                      []string
 	IsDiscardWhenBlocked      bool
-}
-
-func (s *BaseSender) runFlusher(ctx context.Context, inChan chan *libs.FluentMsg) {
-	defer utils.Logger.Info("flusher exit")
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-		time.Sleep(3 * time.Second)
-		inChan <- nil
-	}
 }
 
 func (s *BaseSender) SetMsgPool(msgPool *sync.Pool) {

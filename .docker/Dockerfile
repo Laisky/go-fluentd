@@ -1,5 +1,5 @@
 # docker build --build-arg http_proxy=http://172.16.4.26:17777 --build-arg https_proxy=http://172.16.4.26:17777
-FROM registry.paas.ptcloud.t.home/paas/gobase:1.13.6-alpine3.11 AS gobuild
+FROM ppcelery/gobase:1.13.6-alpine3.11 AS gobuild
 
 ENV GO111MODULE=on
 WORKDIR /go-fluentd

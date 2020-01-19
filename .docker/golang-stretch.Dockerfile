@@ -1,5 +1,5 @@
-# docker build . -f ./.docker/golang-stretch.Dockerfile -t registry.paas.ptcloud.t.home/paas/golang:1.13.6-stretch
-# docker push registry.paas.ptcloud.t.home/paas/golang:1.13.6-stretch
+# docker build . -f ./.docker/golang-stretch.Dockerfile -t ppcelery/golang:1.13.6-stretch
+# docker push ppcelery/golang:1.13.6-stretch
 FROM golang:1.13.6-stretch
 
 # run dependencies

@@ -20,8 +20,14 @@ Rewrite fluentd-server by Golang, Higher performance with less resource requirem
 
 Already running on our PRODUCION since 2018/9.
 
-When processing 1000mbps logs flood: ![cpu](https://s3.laisky.com/uploads/2020/01/go-fluentd-1000mbps.png)
+When processing 1000mbps logs flood:
 
+* dstat
+  ![dstat](https://s1.laisky.com/uploads/2020/01/dstat.png)
+* monitor
+  ![monitor](https://s2.laisky.com/uploads/2020/01/monitor.png)
+* profile
+  ![profile](https://s3.laisky.com/uploads/2020/01/profile.png)
 
 Documents:
 
@@ -97,11 +103,13 @@ run by docker:
 docker run -itd --rm --name=go-fluentd -p 24225:24225 -p 8080:8080 \
     -v /etc/configs/go-fluentd:/etc/go-fluentd \
     -v /data/log/fluentd/go-fluentd:/data/log/fluentd/go-fluentd
-    ppcelery/go-fluentd:1.7.1 \
+    ppcelery/go-fluentd:1.12.7 \
     ./go-fluentd \
-        --config=/etc/go-fluentd \
+        --config=/etc/go-fluentd/settings.yml \
         --env=perf \
         --addr=0.0.0.0:8080
+        --host=x.x.x.x
+        --enable-auto-gc
 ```
 
 

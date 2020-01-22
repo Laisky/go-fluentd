@@ -620,6 +620,11 @@ func (j *Journal) registerMonitor() {
 			result[k.(string)+".chanCap"] = cap(v.(chan *libs.FluentMsg))
 			return true
 		})
+
+		var err error
+		if result["bufSize"], err = utils.DirSize(j.BufDirPath); err != nil {
+			utils.Logger.Error("load journal dir size", zap.Error(err), zap.String("dir", j.BufDirPath))
+		}
 		return result
 	})
 }

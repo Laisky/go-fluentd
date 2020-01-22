@@ -5,14 +5,42 @@ import (
 	"fmt"
 	"time"
 
+	concator "github.com/Laisky/go-fluentd"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/spf13/pflag"
-	concator "github.com/Laisky/go-fluentd"
 )
 
-// SetupSettings setup arguments restored in viper
-func SetupSettings() {
+func main() {
+	ctx := context.Background()
+	setupArgs()
+	setupGC(ctx)
+	setupSettings()
+	setupLogger(ctx)
+	defer utils.Logger.Info("All done")
+
+	// run
+	controllor := concator.NewControllor()
+	controllor.Run(ctx)
+}
+
+func setupGC(ctx context.Context) {
+	if !utils.Settings.GetBool("enable-auto-gc") {
+		return
+	}
+	opts := []utils.GcOptFunc{}
+	ratio := utils.Settings.GetInt("gc-mem-ratio")
+	if ratio > 0 {
+		opts = append(opts, utils.WithGCMemRatio(ratio))
+	}
+
+	if err := utils.AutoGC(ctx, opts...); err != nil {
+		utils.Logger.Panic("enable auto gc", zap.Error(err))
+	}
+}
+
+// setupSettings setup arguments restored in viper
+func setupSettings() {
 	// check `--log-level`
 	switch utils.Settings.GetString("log-level") {
 	case "debug":
@@ -52,13 +80,13 @@ func SetupSettings() {
 
 	// load configuration
 	isCfgLoaded := false
-	cfgDirPath := utils.Settings.GetString("config")
-	if err := utils.Settings.Setup(cfgDirPath); err != nil {
+	cfgFilePath := utils.Settings.GetString("config")
+	if err := utils.Settings.SetupFromFile(cfgFilePath); err != nil {
 		utils.Logger.Info("can not load config from disk",
-			zap.String("dirpath", cfgDirPath))
+			zap.String("config", cfgFilePath))
 	} else {
 		utils.Logger.Info("success load configuration from dir",
-			zap.String("dirpath", cfgDirPath))
+			zap.String("config", cfgFilePath))
 		isCfgLoaded = true
 	}
 
@@ -86,11 +114,13 @@ func SetupSettings() {
 	}
 }
 
-func SetupArgs() {
+func setupArgs() {
 	pflag.Bool("debug", false, "run in debug mode")
 	pflag.Bool("dry", false, "run in dry mode")
+	pflag.Bool("enable-auto-gc", false, "enable auto gc")
+	pflag.Int("gc-mem-ratio", 85, "trigger gc when memory usage")
 	pflag.String("host", "unknown", "hostname")
-	pflag.String("config", "/etc/go-fluentd/settings", "config file directory path")
+	pflag.String("config", "/etc/go-fluentd/settings/settings.yml", "config file path")
 	pflag.String("config-server", "", "config server url")
 	pflag.String("config-server-appname", "", "config server app name")
 	pflag.String("config-server-profile", "", "config server profile name")
@@ -141,16 +171,4 @@ func setupLogger(ctx context.Context) {
 		}
 		utils.Logger = utils.Logger.WithOptions(zap.HooksWithFields(pateoAlertPusher.GetZapHook()))
 	}
-}
-
-func main() {
-	ctx := context.Background()
-	SetupArgs()
-	SetupSettings()
-	setupLogger(ctx)
-	defer utils.Logger.Info("All done")
-
-	// run
-	controllor := concator.NewControllor()
-	controllor.Run(ctx)
 }

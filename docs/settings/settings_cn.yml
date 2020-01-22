@@ -603,7 +603,7 @@ settings:
 
     # 是否启用文件压缩，根据测试，启用压缩会导致写入性能降低 80 倍左右。
     # CPU 资源紧张时不要考虑使用此项。
-    is_compress: false
+    is_compress: true
 
   # acceptorFilters，紧接着 acceptor，
   # 过滤掉一些明显不需要后续处理的消息，或者做一些非常简单的消息处理，减轻 journal 的负担。

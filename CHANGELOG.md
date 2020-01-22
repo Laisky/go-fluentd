@@ -2,6 +2,18 @@
 *CURRENT*
 ---
 
+- 2020-01-22 (Laisky) ci: upgrade go-utils
+- 2020-01-21 (Laisky) fix: auto gc ratio bug
+- 2020-01-21 (Laisky) ci: upgrade patch
+- 2020-01-21 (Laisky) fix: upgrade go-utils
+- 2020-01-21 (Laisky) feat: add `AutoGC`
+- 2020-01-21 (Laisky) ci: upgrade patch
+- 2020-01-21 (Laisky) fix: typo
+- 2020-01-21 (Laisky) fix: reduce duplicate alert
+- 2020-01-21 (Laisky) feat: add journal monitor
+- 2020-01-21 (Laisky) feat: enable gz
+- 2020-01-21 (Laisky) feat: set config file path(not dir path)
+- 2020-01-16 (Laisky) docs: update changelog
 - 2020-01-16 (Laisky) fix: producer sender error
 - 2020-01-16 (Laisky) fix: producer sender error
 - 2020-01-16 (Laisky) fix: fluentd child sender

@@ -17,8 +17,8 @@ go mod download
 go mod vendor
 
 # build base image
-docker build . -f ./.docker/gobase.Dockerfile -t ppcelery/gobase:1.13.6-alpine3.11
-docker push ppcelery/gobase:1.13.6-alpine3.11
+docker build . -f ./.docker/gobase.Dockerfile -t ppcelery/gobase:1.14.0-alpine3.11
+docker push ppcelery/gobase:1.14.0-alpine3.11
 
 # build image
 docker build . -f ./.docker/Dockerfile -t ppcelery/go-fluentd:1.12.6

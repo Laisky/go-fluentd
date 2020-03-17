@@ -1,6 +1,6 @@
 # docker build . -f ./.docker/test.Dockerfile -t ppcelery/go-fluentd-test:v1
 # docker push ppcelery/go-fluentd-test:v1
-FROM ppcelery/gobase:1.13.6-alpine3.11
+FROM ppcelery/gobase:1.14.0-alpine3.11
 ENV GO111MODULE=on
 
 WORKDIR /go-fluentd

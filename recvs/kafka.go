@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/Laisky/go-fluentd/libs"
+	"github.com/Laisky/go-kafka"
 	utils "github.com/Laisky/go-utils"
-	"github.com/Laisky/go-utils/kafka"
 	"github.com/Laisky/zap"
 	"github.com/pkg/errors"
 )

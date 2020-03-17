@@ -5,12 +5,10 @@ import (
 	"net/http"
 	"time"
 
-	middlewares "github.com/Laisky/go-utils/gin-middlewares"
-
-	"github.com/gin-contrib/pprof"
-
+	middlewares "github.com/Laisky/gin-middlewares"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
+	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
 )
 

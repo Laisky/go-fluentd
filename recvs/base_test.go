@@ -3,10 +3,9 @@ package recvs_test
 import (
 	"sync"
 
-	"github.com/Laisky/zap"
-
 	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
+	"github.com/Laisky/zap"
 )
 
 var (

@@ -9,13 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-fluentd/monitor"
+	"github.com/Laisky/go-journal"
 	utils "github.com/Laisky/go-utils"
-	"github.com/Laisky/go-utils/journal"
 	"github.com/Laisky/zap"
+	"github.com/pkg/errors"
 )
 
 const (

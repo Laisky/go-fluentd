@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/cespare/xxhash"
 	"io"
 	"net"
 	"regexp"
@@ -14,6 +13,7 @@ import (
 	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
+	"github.com/cespare/xxhash"
 	"github.com/tinylib/msgp/msgp"
 )
 

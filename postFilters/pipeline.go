@@ -3,13 +3,12 @@ package postFilters
 import (
 	"context"
 	"fmt"
-	"github.com/Laisky/go-fluentd/monitor"
 	"sync"
 
-	"github.com/Laisky/zap"
-
 	"github.com/Laisky/go-fluentd/libs"
+	"github.com/Laisky/go-fluentd/monitor"
 	"github.com/Laisky/go-utils"
+	"github.com/Laisky/zap"
 )
 
 type PostPipelineCfg struct {

@@ -15,8 +15,8 @@ import (
 	"github.com/Laisky/go-fluentd/recvs"
 	"github.com/Laisky/go-fluentd/senders"
 	"github.com/Laisky/go-fluentd/tagFilters"
+	"github.com/Laisky/go-kafka"
 	utils "github.com/Laisky/go-utils"
-	"github.com/Laisky/go-utils/kafka"
 	"github.com/Laisky/zap"
 	"github.com/cespare/xxhash"
 )

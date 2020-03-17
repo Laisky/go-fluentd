@@ -10,11 +10,10 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/gin-gonic/gin"
-
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
+	"github.com/gin-gonic/gin"
 )
 
 // HTTPRecvCfg is the configuration for HTTPRecv

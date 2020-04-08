@@ -9,7 +9,8 @@ RUN go mod download
 
 # static build
 ADD . .
-RUN CGO_ENABLED=0 go build -a -ldflags '-w -extldflags "-static"' entrypoints/main.go
+# RUN CGO_ENABLED=0 go build -a -ldflags '-w -extldflags "-static"' entrypoints/main.go
+RUN go build -a -ldflags '-w -extldflags "-static"' entrypoints/main.go
 
 
 # copy executable file and certs to a pure container

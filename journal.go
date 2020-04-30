@@ -47,7 +47,6 @@ type Journal struct {
 	commitChan chan *libs.FluentMsg
 
 	baseJournalDir string
-	baseJournalCfg *journal.JournalConfig
 	jjLock         *sync.Mutex
 	tag2JMap,      // map[string]*journal.Journal
 	tag2JJInchanMap, // map[string]chan *libs.FluentMsg
@@ -75,13 +74,6 @@ func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 		cfg.GCIntervalSec = defaultIntervalSecForceGC
 	}
 
-	jcfg := journal.NewConfig()
-	jcfg.BufDirPath = cfg.BufDirPath
-	jcfg.BufSizeBytes = cfg.BufSizeBytes
-	jcfg.IsCompress = cfg.IsCompress
-	jcfg.CommittedIDTTL = cfg.CommittedIDTTL
-	// jcfg.RotateDuration = 3 * time.Second // TODO
-
 	j := &Journal{
 		JournalCfg: cfg,
 		legacyLock: &utils.Mutex{},
@@ -90,12 +82,9 @@ func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 		outChan:    make(chan *libs.FluentMsg, cfg.JournalOutChanLen),
 
 		jjLock:              &sync.Mutex{},
-		baseJournalDir:      jcfg.BufDirPath,
-		baseJournalCfg:      jcfg,
 		tag2JMap:            &sync.Map{},
 		tag2JJInchanMap:     &sync.Map{},
 		tag2JJCommitChanMap: &sync.Map{},
-		tag2CtxCancelMap:    &sync.Map{},
 		tag2IDsCounter:      &sync.Map{},
 		tag2DataCounter:     &sync.Map{},
 	}
@@ -106,18 +95,19 @@ func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 }
 
 func (j *Journal) CloseTag(tag string) error {
-	if fi, ok := j.tag2CtxCancelMap.Load(tag); !ok {
+	j.jjLock.Lock()
+	defer j.jjLock.Unlock()
+
+	if jj, ok := j.tag2JMap.Load(tag); !ok {
 		return fmt.Errorf("tag %v not exists in tag2CtxCancelMap", tag)
 	} else {
-		j.jjLock.Lock()
-		fi.(func())()
+		jj.(*journal.Journal).Close()
 		j.tag2JMap.Delete(tag)
 		j.tag2JJInchanMap.Delete(tag)
 		j.tag2JJCommitChanMap.Delete(tag)
 		j.tag2CtxCancelMap.Delete(tag)
 		j.tag2IDsCounter.Delete(tag)
 		j.tag2DataCounter.Delete(tag)
-		j.jjLock.Unlock()
 	}
 
 	utils.Logger.Info("delete journal tag", zap.String("tag", tag))
@@ -275,16 +265,22 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 		utils.Logger.Panic("tag already exists in tag2CtxCancelMap", zap.String("tag", tag))
 	}
 
-	jcfg := journal.NewConfig()
-	jcfg.BufDirPath = j.baseJournalCfg.BufDirPath
-	jcfg.BufSizeBytes = j.baseJournalCfg.BufSizeBytes
-	jcfg.IsCompress = j.baseJournalCfg.IsCompress
-	jcfg.CommittedIDTTL = j.baseJournalCfg.CommittedIDTTL
-	jcfg.IsAggresiveGC = false
-	jcfg.BufDirPath = filepath.Join(j.baseJournalDir, tag)
-
 	utils.Logger.Info("create new journal.Journal", zap.String("tag", tag))
-	jj := journal.NewJournal(ctxForTag, jcfg)
+	jj, err := journal.NewJournal(
+		journal.WithBufDirPath(j.BufDirPath),
+		journal.WithBufSizeByte(j.BufSizeBytes),
+		journal.WithIsCompress(j.IsCompress),
+		journal.WithCommitIDTTL(j.CommittedIDTTL),
+		journal.WithIsAggresiveGC(false),
+		journal.WithBufDirPath(filepath.Join(j.baseJournalDir, tag)),
+	)
+	if err != nil {
+		utils.Logger.Panic("new journal", zap.Error(err))
+	}
+	if err = jj.Start(ctx); err != nil {
+		utils.Logger.Panic("run journal", zap.Error(err))
+	}
+
 	if _, ok = j.tag2JMap.LoadOrStore(tag, jj); ok {
 		utils.Logger.Panic("tag already exists in tag2JMap", zap.String("tag", tag))
 	}

@@ -172,5 +172,3 @@ All filters should return very fast to avoid blocking.
 ### Producer
 
 ...
-
-

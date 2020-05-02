@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/cespare/xxhash"
 	"io"
 	"net"
 	"regexp"
@@ -14,6 +13,7 @@ import (
 	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
+	"github.com/cespare/xxhash"
 	"github.com/tinylib/msgp/msgp"
 )
 
@@ -73,6 +73,7 @@ func NewFluentdRecv(cfg *FluentdRecvCfg) (r *FluentdRecv) {
 	utils.Logger.Info("create FluentdRecv",
 		zap.String("name", cfg.Name),
 		zap.String("lb_key", cfg.LBKey),
+		zap.String("listen", cfg.Addr),
 		zap.Bool("is_rewrite_tag_from_tag_key", cfg.IsRewriteTagFromTagKey),
 		zap.String("origin_rewrite_tag_key", cfg.OriginRewriteTagKey))
 
@@ -109,15 +110,20 @@ func validateConfigs(cfg *FluentdRecvCfg) {
 			utils.Logger.Panic("if IsRewriteTagFromTagKey is setted, OriginRewriteTagKey should not empty")
 		}
 	}
-	if cfg.NFork < 1 {
-		utils.Logger.Panic("NFork must greater than 0", zap.Int("NFork", cfg.NFork))
+
+	if cfg.NFork <= 1 {
+		utils.Logger.Warn("NFork must greater than 0", zap.Int("NFork", cfg.NFork))
+		cfg.NFork = 1
 	}
+
 	if cfg.ConcatorBufSize < 1 {
-		utils.Logger.Panic("ConcatorBufSize must greater than 0", zap.Int("ConcatorBufSize", cfg.ConcatorBufSize))
+		utils.Logger.Warn("ConcatorBufSize must greater than 0", zap.Int("ConcatorBufSize", cfg.ConcatorBufSize))
+		cfg.ConcatorBufSize = 1024
 
 	} else if cfg.ConcatorBufSize < 1000 {
 		utils.Logger.Warn("ConcatorBufSize better greater than 1000", zap.Int("ConcatorBufSize", cfg.ConcatorBufSize))
 	}
+
 	if cfg.ConcatorWait < 1*time.Second {
 		utils.Logger.Warn("reset ConcatorWait", zap.Duration("old", cfg.ConcatorWait), zap.Duration("new", defaultConcatorWait))
 		cfg.ConcatorWait = defaultConcatorWait
@@ -238,7 +244,7 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 					continue
 				}
 				// []interface{})[0] is
-				// "pateo.qingcloud.kube.sit.aitimer-7b6b654d8-7hpsw_ai_aitimer-f25c8bfea7b30ed7ba7c600cdb75e6aa7326ba4b67139e3338bf873bd5036921"
+				// "laisky.cloud.kube.sit.aitimer-7b6b654d8-7hpsw_ai_aitimer-f25c8bfea7b30ed7ba7c600cdb75e6aa7326ba4b67139e3338bf873bd5036921"
 				msg.Tag = tag
 				msgCnt++
 				r.ProcessMsg(msg)

@@ -4,10 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/Laisky/go-syslog/format"
-
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-syslog"
+	"github.com/Laisky/go-syslog/format"
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 )

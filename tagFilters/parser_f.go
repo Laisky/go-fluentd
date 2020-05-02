@@ -224,7 +224,8 @@ func NewParserFact(cfg *ParserFactCfg) *ParserFact {
 	utils.Logger.Info("create new connectorfactory")
 
 	if cfg.NFork < 1 {
-		utils.Logger.Panic("nfork should bigger than 1")
+		utils.Logger.Warn("nfork should bigger than 1")
+		cfg.NFork = 1
 	}
 
 	cf := &ParserFact{

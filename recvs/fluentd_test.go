@@ -2,8 +2,6 @@ package recvs_test
 
 import (
 	"context"
-	"github.com/Laisky/go-utils"
-	"github.com/cespare/xxhash"
 	"math/rand"
 	"net"
 	"testing"
@@ -11,6 +9,8 @@ import (
 
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-fluentd/recvs"
+	"github.com/Laisky/go-utils"
+	"github.com/cespare/xxhash"
 )
 
 func TestFluentdRecv(t *testing.T) {

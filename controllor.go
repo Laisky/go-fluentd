@@ -15,8 +15,8 @@ import (
 	"github.com/Laisky/go-fluentd/recvs"
 	"github.com/Laisky/go-fluentd/senders"
 	"github.com/Laisky/go-fluentd/tagFilters"
+	"github.com/Laisky/go-kafka"
 	utils "github.com/Laisky/go-utils"
-	"github.com/Laisky/go-utils/kafka"
 	"github.com/Laisky/zap"
 	"github.com/cespare/xxhash"
 )
@@ -445,7 +445,7 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 					TagIndexMap:          senders.LoadESTagIndexMap(env, utils.Settings.Get("settings.producer.plugins."+name+".indices")),
 					IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.plugins." + name + ".is_discard_when_blocked"),
 				}))
-			case "null":
+			case "stdout":
 				ss = append(ss, senders.NewNullSender(&senders.NullSenderCfg{
 					Name:                 name,
 					Tags:                 libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),

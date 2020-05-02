@@ -8,12 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gin-gonic/gin"
-
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-fluentd/recvs"
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
+	"github.com/gin-gonic/gin"
 )
 
 var (

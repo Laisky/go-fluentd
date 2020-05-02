@@ -45,9 +45,9 @@
 - 2020-01-10 (Laisky) docs: typo
 - 2020-01-10 (Laisky) style: change some vars name
 - 2020-01-07 (Laisky) fix: detect log-alert config
-- 2020-01-07 (Laisky) feat: enable pateo & telegram alert
-- 2020-01-07 (Laisky) fix: pateo alert pusher
-- 2020-01-06 (Laisky) feat: add pateo alert wechat service
+- 2020-01-07 (Laisky) feat: enable & telegram alert
+- 2020-01-07 (Laisky) fix: alert pusher
+- 2020-01-06 (Laisky) feat: add alert wechat service
 - 2020-01-03 (Laisky) fix: ignore es type conflict
 - 2020-01-03 (Laisky) fix: handle es return error
 
@@ -507,4 +507,4 @@
 - 2018-12-06 (Laisky) fix: typo
 - 2018-12-06 (Laisky) feat(paas-220): support rsyslog recv
 - 2018-12-04 (Laisky) fix(paas-208): change flatten delimiter to "__"
-- 2018-12-04 (Laisky) build: rename to `pateo.com`
+- 2018-12-04 (Laisky) build: rename to .com`

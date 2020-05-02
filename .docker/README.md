@@ -17,18 +17,18 @@ go mod download
 go mod vendor
 
 # build base image
-docker build . -f ./.docker/gobase.Dockerfile -t ppcelery/gobase:1.13.6-alpine3.11
-docker push ppcelery/gobase:1.13.6-alpine3.11
+docker build . -f ./.docker/gobase.Dockerfile -t ppcelery/gobase:1.14.0-alpine3.11
+docker push ppcelery/gobase:1.14.0-alpine3.11
 
 # build image
-docker build . -f ./.docker/Dockerfile -t ppcelery/go-fluentd:1.12.6
-docker push ppcelery/go-fluentd:1.12.6
+docker build . -f ./.docker/Dockerfile -t ppcelery/go-fluentd:1.12.7
+docker push ppcelery/go-fluentd:1.12.7
 
 docker run -it --rm \
     --net=host \
     -v /opt/configs/go-fluentd:/etc/go-fluentd \
     -v /data/log/fluentd/go-concator:/data/log/fluentd/go-concator \
-    ppcelery/go-fluentd:1.12.6 \
+    ppcelery/go-fluentd:1.12.7 \
     ./go-fluentd --config=/etc/go-fluentd --env=prod --addr=0.0.0.0:22800 --log-level=error
 ```
 

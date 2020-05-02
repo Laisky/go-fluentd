@@ -72,6 +72,7 @@ func (f *SpringFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	// retag spring to cp/bot/app.spring
 	for _, rule := range f.Rules {
 		if rule.Regexp.Match(msg.Message[f.MsgKey].([]byte)) {
+			utils.Logger.Debug("rewrite tag", zap.String("old", msg.Tag), zap.String("new", rule.NewTag))
 			msg.Tag = rule.NewTag
 			msg.Message[f.TagKey] = msg.Tag
 			f.upstreamChan <- msg

@@ -1,5 +1,5 @@
 # docker build --build-arg http_proxy=http://172.16.4.26:17777 --build-arg https_proxy=http://172.16.4.26:17777
-FROM ppcelery/gobase:1.13.6-alpine3.11 AS gobuild
+FROM ppcelery/gobase:1.14.0-alpine3.11 AS gobuild
 
 ENV GO111MODULE=on
 WORKDIR /go-fluentd
@@ -9,7 +9,8 @@ RUN go mod download
 
 # static build
 ADD . .
-RUN go build -a --ldflags '-extldflags "-static"' entrypoints/main.go
+# RUN CGO_ENABLED=0 go build -a -ldflags '-w -extldflags "-static"' entrypoints/main.go
+RUN go build -a -ldflags '-w -extldflags "-static"' entrypoints/main.go
 
 
 # copy executable file and certs to a pure container

@@ -62,7 +62,8 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) *Producer {
 	utils.Logger.Info("create Producer")
 
 	if cfg.NFork < 1 {
-		utils.Logger.Panic("nfork must > 1", zap.Int("nfork", cfg.NFork))
+		utils.Logger.Warn("nfork must > 1", zap.Int("nfork", cfg.NFork))
+		cfg.NFork = 1
 	}
 
 	p := &Producer{

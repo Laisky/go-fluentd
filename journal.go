@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -52,8 +53,7 @@ type Journal struct {
 	tag2JJInchanMap, // map[string]chan *libs.FluentMsg
 	tag2JJCommitChanMap, // map[string]chan *libs.FluentMsg
 	tag2IDsCounter,
-	tag2DataCounter,
-	tag2CtxCancelMap *sync.Map // map[string]context.CancelFunc
+	tag2DataCounter *sync.Map
 }
 
 // NewJournal create new Journal with `bufDirPath` and `BufSizeBytes`
@@ -73,6 +73,12 @@ func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 	if cfg.GCIntervalSec <= 0 {
 		cfg.GCIntervalSec = defaultIntervalSecForceGC
 	}
+	if err := os.MkdirAll(cfg.BufDirPath, os.ModePerm); err != nil {
+		utils.Logger.Panic("create directory for buf", zap.String("dir", cfg.BufDirPath), zap.Error(err))
+	}
+	// if err := fileutil.IsDirWriteable(cfg.BufDirPath); err != nil {
+	// 	utils.Logger.Panic("buf dir is not writable", zap.Error(err), zap.String("dir", cfg.BufDirPath))
+	// }
 
 	j := &Journal{
 		JournalCfg: cfg,
@@ -103,11 +109,22 @@ func (j *Journal) CloseTag(tag string) error {
 	} else {
 		jj.(*journal.Journal).Close()
 		j.tag2JMap.Delete(tag)
-		j.tag2JJInchanMap.Delete(tag)
-		j.tag2JJCommitChanMap.Delete(tag)
-		j.tag2CtxCancelMap.Delete(tag)
 		j.tag2IDsCounter.Delete(tag)
 		j.tag2DataCounter.Delete(tag)
+
+		if inchan, ok := j.tag2JJInchanMap.Load(tag); !ok {
+			utils.Logger.Panic("tag must exists", zap.String("tag", tag))
+		} else {
+			close(inchan.(chan *libs.FluentMsg))
+			j.tag2JJInchanMap.Delete(tag)
+		}
+
+		if inchan, ok := j.tag2JJCommitChanMap.Load(tag); !ok {
+			utils.Logger.Panic("tag must exists", zap.String("tag", tag))
+		} else {
+			close(inchan.(chan *libs.FluentMsg))
+			j.tag2JJCommitChanMap.Delete(tag)
+		}
 	}
 
 	utils.Logger.Info("delete journal tag", zap.String("tag", tag))
@@ -118,7 +135,9 @@ func (j *Journal) CloseTag(tag string) error {
 func (j *Journal) initLegacyJJ(ctx context.Context) {
 	files, err := ioutil.ReadDir(j.baseJournalDir)
 	if err != nil {
-		utils.Logger.Warn("try to read dir of journal got error", zap.Error(err))
+		utils.Logger.Error("try to read dir of journal",
+			zap.String("directory", j.baseJournalDir),
+			zap.Error(err))
 		return
 	}
 
@@ -260,10 +279,6 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 	if _, ok = j.tag2JMap.Load(tag); ok {
 		return // double check to prevent duplicate create jj runner
 	}
-	ctxForTag, cancel := context.WithCancel(ctx)
-	if _, ok = j.tag2CtxCancelMap.LoadOrStore(tag, cancel); ok {
-		utils.Logger.Panic("tag already exists in tag2CtxCancelMap", zap.String("tag", tag))
-	}
 
 	utils.Logger.Info("create new journal.Journal", zap.String("tag", tag))
 	jj, err := journal.NewJournal(
@@ -363,7 +378,7 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 
 			j.MsgPool.Put(msg)
 		}
-	}(ctxForTag)
+	}(ctx)
 
 	// create data writer
 	go func(ctx context.Context) {
@@ -426,7 +441,7 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 				j.MsgPool.Put(msg)
 			}
 		}
-	}(ctxForTag)
+	}(ctx)
 }
 
 func (j *Journal) GetOutChan() chan *libs.FluentMsg {

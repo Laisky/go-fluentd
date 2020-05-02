@@ -438,7 +438,7 @@ settings:
         tags: *all-tags
 
         # 指定 plugin 的类型，目前只有几种支持的类型
-        type: "null"
+        type: "stdout"
 
         # 指定该 plugin 的并行数
         forks: 5
@@ -581,7 +581,8 @@ settings:
     gc_inteval_sec: 45
 
     # 文件夹地址
-    buf_dir_path: /data/log/fluentd/go-concator
+    buf_dir_path: ./data/go-fluentd
+    # buf_dir_path: /data/log/fluentd/go-concator
     # journal data 文件滚动的大小限制
     buf_file_bytes: 209315200  # 200 MB
 

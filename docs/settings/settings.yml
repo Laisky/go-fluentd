@@ -440,7 +440,7 @@ settings:
         tags: *all-tags
 
         # 指定 plugin 的类型，目前只有几种支持的类型
-        type: "null"
+        type: "stdout"
 
         # 指定该 plugin 的并行数
         forks: 5

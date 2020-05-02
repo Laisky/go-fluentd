@@ -73,6 +73,7 @@ func NewFluentdRecv(cfg *FluentdRecvCfg) (r *FluentdRecv) {
 	utils.Logger.Info("create FluentdRecv",
 		zap.String("name", cfg.Name),
 		zap.String("lb_key", cfg.LBKey),
+		zap.String("listen", cfg.Addr),
 		zap.Bool("is_rewrite_tag_from_tag_key", cfg.IsRewriteTagFromTagKey),
 		zap.String("origin_rewrite_tag_key", cfg.OriginRewriteTagKey))
 
@@ -109,15 +110,20 @@ func validateConfigs(cfg *FluentdRecvCfg) {
 			utils.Logger.Panic("if IsRewriteTagFromTagKey is setted, OriginRewriteTagKey should not empty")
 		}
 	}
-	if cfg.NFork < 1 {
-		utils.Logger.Panic("NFork must greater than 0", zap.Int("NFork", cfg.NFork))
+
+	if cfg.NFork <= 1 {
+		utils.Logger.Warn("NFork must greater than 0", zap.Int("NFork", cfg.NFork))
+		cfg.NFork = 1
 	}
+
 	if cfg.ConcatorBufSize < 1 {
-		utils.Logger.Panic("ConcatorBufSize must greater than 0", zap.Int("ConcatorBufSize", cfg.ConcatorBufSize))
+		utils.Logger.Warn("ConcatorBufSize must greater than 0", zap.Int("ConcatorBufSize", cfg.ConcatorBufSize))
+		cfg.ConcatorBufSize = 1024
 
 	} else if cfg.ConcatorBufSize < 1000 {
 		utils.Logger.Warn("ConcatorBufSize better greater than 1000", zap.Int("ConcatorBufSize", cfg.ConcatorBufSize))
 	}
+
 	if cfg.ConcatorWait < 1*time.Second {
 		utils.Logger.Warn("reset ConcatorWait", zap.Duration("old", cfg.ConcatorWait), zap.Duration("new", defaultConcatorWait))
 		cfg.ConcatorWait = defaultConcatorWait

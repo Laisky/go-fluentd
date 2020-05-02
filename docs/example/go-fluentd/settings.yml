@@ -13,21 +13,23 @@ settings:
     sync_out_chan_size: 10000
     max_rotate_id: 372036854775807  # do not change to smaller number
     recvs:
-      plugins:
+        # 监听 DC/OS fluentd log-driver 的日志
         fluentd:
           type: fluentd
-          active_env:
-            - sit
+          active_env: *all-env
           tag_key: tag
+          lb_key: container_id
+          nfork: 1
+          internal_buf_size: 5000
           addr: 0.0.0.0:24225
           is_rewrite_tag_from_tag_key: false
-          concat_max_len: 100000
+          concat_max_len: 300000
           concat:
             test:
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.cloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
               msg_key: log
               identifier: container_id
-              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.cloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
-              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} {0,}\|
+              head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
   producer:
     discard_chan_size: 50000
     sender_inchan_size: 50000
@@ -35,7 +37,7 @@ settings:
       localtest:
         active_env: *all-env
         tags: *all-tags
-        type: "null"
+        type: "stdout"
         forks: 5
         log_level: info
         is_commit: true

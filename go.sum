@@ -1,8 +1,8 @@
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 github.com/BurntSushi/toml v0.3.1 h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
-github.com/Laisky/gin-middlewares v1.1.0 h1:Thx6UAFR5WDjdWNWR2OO5o2yCgPLBkcfYXlHi2cmePs=
-github.com/Laisky/gin-middlewares v1.1.0/go.mod h1:IJxjhBGdN+o6BfGME2qbxZl54i5jQmcnwMh6QUd89T8=
+github.com/Laisky/gin-middlewares v1.1.1 h1:EVFwX94bMVSeJ4a6TXgT6BXvhqyn6j0kKQhEyqWe1pI=
+github.com/Laisky/gin-middlewares v1.1.1/go.mod h1:IJxjhBGdN+o6BfGME2qbxZl54i5jQmcnwMh6QUd89T8=
 github.com/Laisky/go-chaining v0.0.0-20180507092046-43dcdc5a21be h1:7Rxhm6IjOtDAyj8eScOFntevwzkWhx94zi48lxo4m4w=
 github.com/Laisky/go-chaining v0.0.0-20180507092046-43dcdc5a21be/go.mod h1:1mdzaETo0kjvCQICPSePsoaatJN4l7JvEA1200lyevo=
 github.com/Laisky/go-journal v1.1.0 h1:rpS0QQAhB7c3B0JZPx6PW/12wuDI4c4AzbD0KqlOPCo=

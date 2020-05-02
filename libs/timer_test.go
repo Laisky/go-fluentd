@@ -83,7 +83,6 @@ func TestTimerSleep(t *testing.T) {
 }
 
 func init() {
-	// utils.Settings.Setup("/Users/laisky/repo/pateo/configs/go-fluentd")
 	if err := utils.Logger.ChangeLevel("debug"); err != nil {
 		utils.Logger.Panic("change level", zap.Error(err))
 	}

@@ -183,22 +183,22 @@ settings:
               identifier: pod_name
               head_regexp: ^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{6}Z *-
             spring:
-              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.cloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
               msg_key: log
               identifier: pod_name
               head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
             tsp:
-              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.cloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
               msg_key: log
               identifier: pod_name
               head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
             ai:
-              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.cloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
               msg_key: log
               identifier: pod_name
               head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
             base:
-              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.cloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
               msg_key: log
               identifier: pod_name
               head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
@@ -261,22 +261,22 @@ settings:
               identifier: container_id
               head_regexp: ^\[\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{6}Z *-
             spring:
-              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.cloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
               msg_key: log
               identifier: container_id
               head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
             tsp:
-              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.cloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
               msg_key: log
               identifier: container_id
               head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
             ai:
-              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.cloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
               msg_key: log
               identifier: container_id
               head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
             base:
-              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.qingcloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
+              # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.cloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
               msg_key: log
               identifier: container_id
               head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
@@ -759,10 +759,10 @@ settings:
         msg_key: log
 
         # 一些 msg 字符串的例子
-        # 2018-04-02 02:02:10.928 | sh-datamining | INFO | http-nio-8080-exec-80 | com.google.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74 | {"key": "value"}: xxx
-        # 2018-04-02 02:02:10.928 | sh-datamining | INFO | http-nio-8080-exec-80 | com.google.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74 | xxx
-        # 2018-03-12 02:02:10.928 | gateway | INFO | http-nio-8080-exec-80 | com.google.qingcloud.gateway.core.zuul.filters.post.LogFilter | 74: {"key": "value"}:xxx
-        # 2019-02-18 15:42:06.635 | usertracking | DEBUG | kafka-producer-network-thread | producer-1 | com.google.qingcloud.base.usertracking.service.KafkaServiceBase$ProducerCallBack | 63: onCompletion when sendMessage to topic:UserTracking,partition:0  success!!
+        # 2018-04-02 02:02:10.928 | sh-datamining | INFO | http-nio-8080-exec-80 | com.google.cloud.gateway.core.zuul.filters.post.LogFilter | 74 | {"key": "value"}: xxx
+        # 2018-04-02 02:02:10.928 | sh-datamining | INFO | http-nio-8080-exec-80 | com.google.cloud.gateway.core.zuul.filters.post.LogFilter | 74 | xxx
+        # 2018-03-12 02:02:10.928 | gateway | INFO | http-nio-8080-exec-80 | com.google.cloud.gateway.core.zuul.filters.post.LogFilter | 74: {"key": "value"}:xxx
+        # 2019-02-18 15:42:06.635 | usertracking | DEBUG | kafka-producer-network-thread | producer-1 | com.google.cloud.base.usertracking.service.KafkaServiceBase$ProducerCallBack | 63: onCompletion when sendMessage to topic:UserTracking,partition:0  success!!
 
         # 对消息字符串进行正则匹配，区分出不同的 named group，然后将各个 group 存放进 `msg.Message`
         pattern: (?ms)^(?P<time>.{23}) *\| *(?P<app>[^|]+) *\| *(?P<level>[^|]+) *\| *(?P<thread>[^|]+) *\| *(?:(?P<producer>[\w\-]+) *\| *)?(?P<class>[^|]+) *\| *(?P<line>\d+) *(?:[|:] *(?P<args>\{.*\}))? *(?:[|:] *(?P<message>.*))?

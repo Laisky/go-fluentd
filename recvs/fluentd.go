@@ -238,7 +238,7 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 					continue
 				}
 				// []interface{})[0] is
-				// "pateo.qingcloud.kube.sit.aitimer-7b6b654d8-7hpsw_ai_aitimer-f25c8bfea7b30ed7ba7c600cdb75e6aa7326ba4b67139e3338bf873bd5036921"
+				// "laisky.cloud.kube.sit.aitimer-7b6b654d8-7hpsw_ai_aitimer-f25c8bfea7b30ed7ba7c600cdb75e6aa7326ba4b67139e3338bf873bd5036921"
 				msg.Tag = tag
 				msgCnt++
 				r.ProcessMsg(msg)

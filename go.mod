@@ -3,7 +3,7 @@ module github.com/Laisky/go-fluentd
 go 1.12
 
 require (
-	github.com/Laisky/gin-middlewares v1.1.0
+	github.com/Laisky/gin-middlewares v1.1.1
 	github.com/Laisky/go-journal v1.1.0
 	github.com/Laisky/go-kafka v1.0.1
 	github.com/Laisky/go-syslog v2.3.3+incompatible

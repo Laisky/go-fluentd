@@ -47,9 +47,8 @@ type Journal struct {
 	outChan    chan *libs.FluentMsg
 	commitChan chan *libs.FluentMsg
 
-	baseJournalDir string
-	jjLock         *sync.Mutex
-	tag2JMap,      // map[string]*journal.Journal
+	jjLock    *sync.Mutex
+	tag2JMap, // map[string]*journal.Journal
 	tag2JJInchanMap, // map[string]chan *libs.FluentMsg
 	tag2JJCommitChanMap, // map[string]chan *libs.FluentMsg
 	tag2IDsCounter,
@@ -133,10 +132,10 @@ func (j *Journal) CloseTag(tag string) error {
 
 // initLegacyJJ process existed legacy data and ids
 func (j *Journal) initLegacyJJ(ctx context.Context) {
-	files, err := ioutil.ReadDir(j.baseJournalDir)
+	files, err := ioutil.ReadDir(j.BufDirPath)
 	if err != nil {
 		utils.Logger.Error("try to read dir of journal",
-			zap.String("directory", j.baseJournalDir),
+			zap.String("directory", j.BufDirPath),
 			zap.Error(err))
 		return
 	}
@@ -282,12 +281,11 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 
 	utils.Logger.Info("create new journal.Journal", zap.String("tag", tag))
 	jj, err := journal.NewJournal(
-		journal.WithBufDirPath(j.BufDirPath),
+		journal.WithBufDirPath(filepath.Join(j.BufDirPath, tag)),
 		journal.WithBufSizeByte(j.BufSizeBytes),
 		journal.WithIsCompress(j.IsCompress),
 		journal.WithCommitIDTTL(j.CommittedIDTTL),
 		journal.WithIsAggresiveGC(false),
-		journal.WithBufDirPath(filepath.Join(j.baseJournalDir, tag)),
 	)
 	if err != nil {
 		utils.Logger.Panic("new journal", zap.Error(err))

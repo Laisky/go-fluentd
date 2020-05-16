@@ -7,7 +7,7 @@ require (
 	github.com/Laisky/go-journal v1.1.0
 	github.com/Laisky/go-kafka v1.0.1
 	github.com/Laisky/go-syslog v2.3.3+incompatible
-	github.com/Laisky/go-utils v1.12.5
+	github.com/Laisky/go-utils v1.12.9
 	github.com/Laisky/zap v1.12.2
 	github.com/Shopify/sarama v1.26.1
 	github.com/cespare/xxhash v1.1.0

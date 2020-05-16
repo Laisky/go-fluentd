@@ -42,7 +42,7 @@ type ElasticSearchSender struct {
 }
 
 func NewElasticSearchSender(cfg *ElasticSearchSenderCfg) *ElasticSearchSender {
-	utils.Logger.Info("new ElasticSearch sender",
+	libs.Logger.Info("new ElasticSearch sender",
 		zap.String("addr", cfg.Addr),
 		zap.Int("batch_size", cfg.BatchSize),
 		zap.Strings("tags", cfg.Tags))
@@ -52,7 +52,7 @@ func NewElasticSearchSender(cfg *ElasticSearchSenderCfg) *ElasticSearchSender {
 	}
 
 	s := &ElasticSearchSender{
-		logger: utils.Logger.With(zap.String("name", cfg.Name)),
+		logger: libs.Logger.With(zap.String("name", cfg.Name)),
 		BaseSender: &BaseSender{
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
 		},

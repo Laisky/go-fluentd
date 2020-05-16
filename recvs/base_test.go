@@ -27,7 +27,7 @@ var (
 )
 
 func init() {
-	if err := utils.Logger.ChangeLevel("debug"); err != nil {
-		utils.Logger.Panic("change log level", zap.Error(err))
+	if err := libs.Logger.ChangeLevel("debug"); err != nil {
+		libs.Logger.Panic("change log level", zap.Error(err))
 	}
 }

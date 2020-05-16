@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/Laisky/go-fluentd/libs"
-	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 )
 
@@ -30,7 +29,7 @@ func NewFieldsFilter(cfg *FieldsFilterCfg) *FieldsFilter {
 		f.supportedTags[t] = struct{}{}
 	}
 
-	utils.Logger.Info("create new FieldsFilter",
+	libs.Logger.Info("create new FieldsFilter",
 		zap.Strings("tags", cfg.Tags),
 		zap.String("includes", fmt.Sprint(f.includeMap)),
 		zap.String("new_fields", fmt.Sprint(cfg.NewFieldTemplates)),

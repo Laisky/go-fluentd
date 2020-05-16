@@ -57,7 +57,7 @@ func TestHTTPRecv(t *testing.T) {
 	go func() {
 		for {
 			if err := httpsrv.Run(addr); err != nil {
-				utils.Logger.Error("try to run server got error", zap.Error(err))
+				libs.Logger.Error("try to run server got error", zap.Error(err))
 				port++
 				addr = fmt.Sprintf("localhost:%v", port)
 			}

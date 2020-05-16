@@ -7,11 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/Laisky/go-utils"
 )
-
-var Logger = utils.Logger.Named("go-fluentd")
 
 // var json = jsoniter.ConfigCompatibleWithStandardLibrary
 

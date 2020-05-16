@@ -70,7 +70,7 @@ type PendingMsg struct {
 
 // NewFluentdRecv create new FluentdRecv
 func NewFluentdRecv(cfg *FluentdRecvCfg) (r *FluentdRecv) {
-	utils.Logger.Info("create FluentdRecv",
+	libs.Logger.Info("create FluentdRecv",
 		zap.String("name", cfg.Name),
 		zap.String("lb_key", cfg.LBKey),
 		zap.String("listen", cfg.Addr),
@@ -87,7 +87,7 @@ func NewFluentdRecv(cfg *FluentdRecvCfg) (r *FluentdRecv) {
 			},
 		},
 		concatTagCfg: map[string]*concatCfg{},
-		logger:       utils.Logger.With(zap.String("name", cfg.Name)),
+		logger:       libs.Logger.With(zap.String("name", cfg.Name)),
 	}
 
 	tags := []string{}
@@ -107,25 +107,25 @@ func NewFluentdRecv(cfg *FluentdRecvCfg) (r *FluentdRecv) {
 func validateConfigs(cfg *FluentdRecvCfg) {
 	if cfg.IsRewriteTagFromTagKey {
 		if cfg.OriginRewriteTagKey == "" {
-			utils.Logger.Panic("if IsRewriteTagFromTagKey is setted, OriginRewriteTagKey should not empty")
+			libs.Logger.Panic("if IsRewriteTagFromTagKey is setted, OriginRewriteTagKey should not empty")
 		}
 	}
 
 	if cfg.NFork <= 1 {
-		utils.Logger.Warn("NFork must greater than 0", zap.Int("NFork", cfg.NFork))
+		libs.Logger.Warn("NFork must greater than 0", zap.Int("NFork", cfg.NFork))
 		cfg.NFork = 1
 	}
 
 	if cfg.ConcatorBufSize < 1 {
-		utils.Logger.Warn("ConcatorBufSize must greater than 0", zap.Int("ConcatorBufSize", cfg.ConcatorBufSize))
+		libs.Logger.Warn("ConcatorBufSize must greater than 0", zap.Int("ConcatorBufSize", cfg.ConcatorBufSize))
 		cfg.ConcatorBufSize = 1024
 
 	} else if cfg.ConcatorBufSize < 1000 {
-		utils.Logger.Warn("ConcatorBufSize better greater than 1000", zap.Int("ConcatorBufSize", cfg.ConcatorBufSize))
+		libs.Logger.Warn("ConcatorBufSize better greater than 1000", zap.Int("ConcatorBufSize", cfg.ConcatorBufSize))
 	}
 
 	if cfg.ConcatorWait < 1*time.Second {
-		utils.Logger.Warn("reset ConcatorWait", zap.Duration("old", cfg.ConcatorWait), zap.Duration("new", defaultConcatorWait))
+		libs.Logger.Warn("reset ConcatorWait", zap.Duration("old", cfg.ConcatorWait), zap.Duration("new", defaultConcatorWait))
 		cfg.ConcatorWait = defaultConcatorWait
 	}
 }
@@ -309,7 +309,7 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 		}
 
 		totalMsgCnt += msgCnt
-		utils.Logger.Debug("msg stats", zap.Int("total", totalMsgCnt))
+		libs.Logger.Debug("msg stats", zap.Int("total", totalMsgCnt))
 	}
 }
 

@@ -6,7 +6,6 @@ import (
 
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-fluentd/monitor"
-	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 )
 
@@ -32,7 +31,7 @@ type TagPipeline struct {
 
 // NewTagPipeline create new TagPipeline
 func NewTagPipeline(ctx context.Context, cfg *TagPipelineCfg, itfs ...TagFilterFactoryItf) *TagPipeline {
-	utils.Logger.Info("create tag pipeline")
+	libs.Logger.Info("create tag pipeline")
 	if cfg.InternalChanSize <= 0 {
 		cfg.InternalChanSize = defaultInternalFilterChanSize
 	}
@@ -54,7 +53,7 @@ func NewTagPipeline(ctx context.Context, cfg *TagPipelineCfg, itfs ...TagFilterF
 
 // Spawn create and run new Concator for new tag, return inchan
 func (p *TagPipeline) Spawn(ctx context.Context, tag string, outChan chan<- *libs.FluentMsg) (chan<- *libs.FluentMsg, error) {
-	utils.Logger.Info("spawn tagpipeline", zap.String("tag", tag))
+	libs.Logger.Info("spawn tagpipeline", zap.String("tag", tag))
 	var (
 		f              TagFilterFactoryItf
 		i              int
@@ -64,7 +63,7 @@ func (p *TagPipeline) Spawn(ctx context.Context, tag string, outChan chan<- *lib
 	for i = len(p.TagFilterFactoryItfs) - 1; i >= 0; i-- {
 		f = p.TagFilterFactoryItfs[i]
 		if f.IsTagSupported(tag) {
-			utils.Logger.Info("enable tagfilter",
+			libs.Logger.Info("enable tagfilter",
 				zap.String("name", f.GetName()),
 				zap.String("tag", tag))
 			isTagSupported = true
@@ -74,7 +73,7 @@ func (p *TagPipeline) Spawn(ctx context.Context, tag string, outChan chan<- *lib
 	}
 
 	if !isTagSupported {
-		utils.Logger.Info("skip tagPipeline", zap.String("tag", tag))
+		libs.Logger.Info("skip tagPipeline", zap.String("tag", tag))
 		return outChan, nil
 	}
 

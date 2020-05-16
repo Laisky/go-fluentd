@@ -25,7 +25,7 @@ type PostPipeline struct {
 }
 
 func NewPostPipeline(cfg *PostPipelineCfg, filters ...PostFilterItf) *PostPipeline {
-	utils.Logger.Info("NewPostPipeline")
+	libs.Logger.Info("NewPostPipeline")
 
 	if cfg.NFork < 1 {
 		panic(fmt.Errorf("NFork should greater than 1, got: %v", cfg.NFork))
@@ -67,7 +67,7 @@ func (f *PostPipeline) Wrap(ctx context.Context, inChan chan *libs.FluentMsg) (o
 				msg    *libs.FluentMsg
 				ok     bool
 			)
-			defer utils.Logger.Info("quit postPipeline", zap.Int("i", i), zap.String("msg", fmt.Sprint(msg)))
+			defer libs.Logger.Info("quit postPipeline", zap.Int("i", i), zap.String("msg", fmt.Sprint(msg)))
 
 		NEW_MSG:
 			for {
@@ -76,12 +76,12 @@ func (f *PostPipeline) Wrap(ctx context.Context, inChan chan *libs.FluentMsg) (o
 					return
 				case msg, ok = <-f.reEnterChan:
 					if !ok {
-						utils.Logger.Info("reEnterChan closed")
+						libs.Logger.Info("reEnterChan closed")
 						return
 					}
 				case msg, ok = <-inChan:
 					if !ok {
-						utils.Logger.Info("inChan closed")
+						libs.Logger.Info("inChan closed")
 						return
 					}
 				}

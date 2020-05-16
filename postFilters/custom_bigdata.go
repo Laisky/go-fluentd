@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Laisky/go-fluentd/libs"
-	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 )
 
@@ -30,7 +29,7 @@ func NewCustomBigDataFilter(cfg *CustomBigDataFilterCfg) *CustomBigDataFilter {
 		f.supportedTags[t] = struct{}{}
 	}
 
-	utils.Logger.Info("create new CustomBigDataFilter",
+	libs.Logger.Info("create new CustomBigDataFilter",
 		zap.Strings("tags", cfg.Tags),
 	)
 	return f
@@ -57,7 +56,7 @@ func (f *CustomBigDataFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	}
 
 	if t, err = time.Parse(timeFormat, msg.Message[tsKey].(string)); err != nil {
-		utils.Logger.Error("unknown format of @timestamp for bigdata",
+		libs.Logger.Error("unknown format of @timestamp for bigdata",
 			zap.String("tag", msg.Tag),
 			zap.String(tsKey, fmt.Sprint(msg.Message[tsKey])),
 			zap.Error(err),

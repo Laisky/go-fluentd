@@ -3,6 +3,8 @@ package monitor
 import (
 	"net/http"
 
+	"github.com/Laisky/go-fluentd/libs"
+
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
@@ -31,7 +33,7 @@ func BindHTTP(srv *gin.Engine) {
 			metrics[k] = getter()
 		}
 		if b, err = json.Marshal(&metrics); err != nil {
-			utils.Logger.Error("try to marshal metrics to json got error", zap.Error(err))
+			libs.Logger.Error("try to marshal metrics to json got error", zap.Error(err))
 			return
 		}
 

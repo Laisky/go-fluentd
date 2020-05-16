@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/Laisky/go-fluentd/libs"
-	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 )
 
@@ -58,7 +57,7 @@ func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 		// Kibana needs `DefaultFieldForMessage` to display and search
 		msg.Message[libs.DefaultFieldForMessage] = ""
 	default:
-		utils.Logger.Error("unknown message type", zap.String("message", fmt.Sprint(msg.Message[libs.DefaultFieldForMessage])))
+		libs.Logger.Error("unknown message type", zap.String("message", fmt.Sprint(msg.Message[libs.DefaultFieldForMessage])))
 	}
 
 	return msg

@@ -28,17 +28,16 @@ type AcceptorPipeline struct {
 }
 
 func NewAcceptorPipeline(ctx context.Context, cfg *AcceptorPipelineCfg, filters ...AcceptorFilterItf) (a *AcceptorPipeline, err error) {
-	libs.Logger.Info("NewAcceptorPipeline")
-	if cfg.NFork < 1 {
-		panic(fmt.Errorf("NFork should greater than 1, got: %v", cfg.NFork))
-	}
-
 	a = &AcceptorPipeline{
 		AcceptorPipelineCfg: cfg,
 		filters:             filters,
 		reEnterChan:         make(chan *libs.FluentMsg, cfg.ReEnterChanSize),
 		counter:             utils.NewCounter(),
 	}
+	if err := a.valid(); err != nil {
+		libs.Logger.Panic("invalid cfg for acceptor pipeline")
+	}
+
 	a.registerMonitor()
 	for _, filter := range a.filters {
 		filter.SetUpstream(a.reEnterChan)
@@ -59,7 +58,51 @@ func NewAcceptorPipeline(ctx context.Context, cfg *AcceptorPipelineCfg, filters 
 		}
 	}
 
+	libs.Logger.Info("new acceptor pipeline",
+		zap.Int("n_fork", a.NFork),
+		zap.Int("out_buf_len", a.OutChanSize),
+		zap.Int("reenter_chan_len", a.ReEnterChanSize),
+		zap.Int("throttle_max", a.ThrottleMax),
+		zap.Int("throttle_per_sec", a.ThrottleNPerSec),
+		zap.Bool("is_throttle", a.IsThrottle),
+	)
 	return a, nil
+}
+
+func (f *AcceptorPipeline) valid() error {
+	if f.NFork <= 0 {
+		f.NFork = 4
+		libs.Logger.Info("reset n_fork", zap.Int("n_fork", f.NFork))
+	}
+
+	if f.OutChanSize <= 0 {
+		f.OutChanSize = 1000
+		libs.Logger.Info("reset out_buf_len", zap.Int("out_buf_len", f.OutChanSize))
+	}
+
+	if f.ReEnterChanSize <= 0 {
+		f.ReEnterChanSize = 1000
+		libs.Logger.Info("reset reenter_chan_len", zap.Int("reenter_chan_len", f.ReEnterChanSize))
+	}
+
+	if f.NFork <= 0 {
+		f.NFork = 4
+		libs.Logger.Info("reset n_fork", zap.Int("n_fork", f.NFork))
+	}
+
+	if f.IsThrottle {
+		if f.ThrottleMax <= 0 {
+			f.ThrottleMax = 10000
+			libs.Logger.Info("reset throttle_max", zap.Int("throttle_max", f.ThrottleMax))
+		}
+
+		if f.ThrottleNPerSec <= 0 {
+			f.ThrottleNPerSec = 1000
+			libs.Logger.Info("reset throttle_per_sec", zap.Int("throttle_per_sec", f.ThrottleNPerSec))
+		}
+	}
+
+	return nil
 }
 
 func (f *AcceptorPipeline) registerMonitor() {

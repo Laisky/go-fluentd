@@ -39,13 +39,35 @@ func ParseSpringRules(env string, cfg []interface{}) []*SpringReTagRule {
 }
 
 func NewSpringFilter(cfg *SpringFilterCfg) *SpringFilter {
-	libs.Logger.Info("NewSpringFilter",
-		zap.String("tag", cfg.Tag))
-
-	return &SpringFilter{
+	f := &SpringFilter{
 		BaseFilter:      &BaseFilter{},
 		SpringFilterCfg: cfg,
 	}
+	if err := f.valid(); err != nil {
+		libs.Logger.Panic("config invalid", zap.Error(err))
+	}
+
+	libs.Logger.Info("new spring filter",
+		zap.String("tag", f.Tag),
+		zap.String("env", f.Env),
+		zap.String("msg_key", f.MsgKey),
+		zap.String("tag_key", f.TagKey),
+	)
+	return f
+}
+
+func (f *SpringFilter) valid() error {
+	if f.TagKey == "" {
+		f.TagKey = "tag"
+		libs.Logger.Info("reset tag_key", zap.String("tag_key", f.TagKey))
+	}
+
+	if f.MsgKey == "" {
+		f.MsgKey = "log"
+		libs.Logger.Info("reset msg_key", zap.String("msg_key", f.MsgKey))
+	}
+
+	return nil
 }
 
 func (f *SpringFilter) GetName() string {

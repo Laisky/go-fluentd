@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	defaultInternalFilterChanSize = 100000
+	defaultInternalFilterChanSize = 10000
 )
 
 type TagPipelineItf interface {
@@ -31,24 +31,35 @@ type TagPipeline struct {
 
 // NewTagPipeline create new TagPipeline
 func NewTagPipeline(ctx context.Context, cfg *TagPipelineCfg, itfs ...TagFilterFactoryItf) *TagPipeline {
-	libs.Logger.Info("create tag pipeline")
-	if cfg.InternalChanSize <= 0 {
-		cfg.InternalChanSize = defaultInternalFilterChanSize
-	}
-
-	for _, itf := range itfs {
-		itf.SetMsgPool(cfg.MsgPool)
-		itf.SetWaitCommitChan(cfg.WaitCommitChan)
-		itf.SetDefaultIntervalChanSize(cfg.InternalChanSize)
-	}
-
-	tp := &TagPipeline{
+	p := &TagPipeline{
 		TagPipelineCfg:       cfg,
 		TagFilterFactoryItfs: itfs,
 		monitorChans:         map[string]chan<- *libs.FluentMsg{},
 	}
-	tp.registryMonitor()
-	return tp
+	if err := p.valid(); err != nil {
+		libs.Logger.Panic("config invalid", zap.Error(err))
+	}
+
+	for _, itf := range itfs {
+		itf.SetMsgPool(p.MsgPool)
+		itf.SetWaitCommitChan(p.WaitCommitChan)
+		itf.SetDefaultIntervalChanSize(p.InternalChanSize)
+	}
+
+	p.registryMonitor()
+	libs.Logger.Info("create tag pipeline",
+		zap.Int("internal_chan_size", p.InternalChanSize),
+	)
+	return p
+}
+
+func (p *TagPipeline) valid() error {
+	if p.InternalChanSize <= 0 {
+		p.InternalChanSize = defaultInternalFilterChanSize
+		libs.Logger.Info("reset internal_chan_size", zap.Int("internal_chan_size", p.InternalChanSize))
+	}
+
+	return nil
 }
 
 // Spawn create and run new Concator for new tag, return inchan

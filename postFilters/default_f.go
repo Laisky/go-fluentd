@@ -19,9 +19,34 @@ type DefaultFilter struct {
 }
 
 func NewDefaultFilter(cfg *DefaultFilterCfg) *DefaultFilter {
-	return &DefaultFilter{
+	f := &DefaultFilter{
 		DefaultFilterCfg: cfg,
 	}
+	if err := f.valid(); err != nil {
+		libs.Logger.Panic("DefaultFilter invalid", zap.Error(err))
+	}
+
+	return f
+}
+
+func (f *DefaultFilter) valid() error {
+	if f.MaxLen != 0 {
+		libs.Logger.Info("enbale max_len")
+		if f.MaxLen < 100 {
+			libs.Logger.Warn("default_filter's max_len too short", zap.Int("max_len", f.MaxLen))
+		}
+	}
+
+	if f.MsgKey == "" {
+		f.MsgKey = "log"
+		libs.Logger.Info("reset msg_key", zap.String("msg_key", f.MsgKey))
+	}
+
+	libs.Logger.Info("new default_filter",
+		zap.Int("max_len", f.MaxLen),
+		zap.String("msg_key", f.MsgKey),
+	)
+	return nil
 }
 
 func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
@@ -42,10 +67,16 @@ func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 			msg.Message[k] = v
 		}
 
-		switch v := v.(type) {
-		case string:
-			if len(v) > f.MaxLen {
-				msg.Message[k] = v[:f.MaxLen]
+		if f.MaxLen != 0 {
+			switch v := v.(type) {
+			case string:
+				if len(v) > f.MaxLen {
+					msg.Message[k] = v[:f.MaxLen]
+				}
+			case []byte:
+				if len(v) > f.MaxLen {
+					msg.Message[k] = v[:f.MaxLen]
+				}
 			}
 		}
 	}

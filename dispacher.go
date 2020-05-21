@@ -32,11 +32,7 @@ type Dispatcher struct {
 func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 	libs.Logger.Info("create Dispatcher")
 
-	if cfg.NFork < 0 {
-		libs.Logger.Panic("nfork should bigger than 1")
-	}
-
-	return &Dispatcher{
+	d := &Dispatcher{
 		DispatcherCfg: cfg,
 		outChan:       make(chan *libs.FluentMsg, cfg.OutChanSize),
 		tag2Concator:  &sync.Map{},
@@ -44,6 +40,25 @@ func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 		tag2Cancel:    &sync.Map{},
 		counter:       utils.NewCounter(),
 	}
+	if err := d.valid(); err != nil {
+		libs.Logger.Panic("config invalid", zap.Error(err))
+	}
+
+	return d
+}
+
+func (d *Dispatcher) valid() error {
+	if d.NFork <= 0 {
+		d.NFork = 4
+		libs.Logger.Info("reset n_fork", zap.Int("n_fork", d.NFork))
+	}
+
+	if d.OutChanSize <= 0 {
+		d.OutChanSize = 1000
+		libs.Logger.Info("reset out_chan_size", zap.Int("out_chan_size", d.OutChanSize))
+	}
+
+	return nil
 }
 
 // Run dispacher to dispatch messages to different concators

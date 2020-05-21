@@ -88,6 +88,7 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 					OriginRewriteTagKey:    utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".origin_rewrite_tag_key"),
 					ConcatMaxLen:           utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".concat_max_len"),
 					NFork:                  utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".nfork"),
+					ConcatorWait:           utils.Settings.GetDuration("settings.acceptor.recvs.plugins."+name+".concat_with_sec") * time.Second,
 					ConcatorBufSize:        utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".internal_buf_size"),
 					ConcatCfg:              libs.LoadTagsMapAppendEnv(env, utils.Settings.GetStringMap("settings.acceptor.recvs.plugins."+name+".concat")),
 				}))
@@ -446,7 +447,7 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 					IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.plugins." + name + ".is_discard_when_blocked"),
 				}))
 			case "stdout":
-				ss = append(ss, senders.NewNullSender(&senders.NullSenderCfg{
+				ss = append(ss, senders.NewStdoutSender(&senders.StdoutSenderCfg{
 					Name:                 name,
 					Tags:                 libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
 					LogLevel:             utils.Settings.GetString("settings.producer.plugins." + name + ".log_level"),
@@ -475,7 +476,7 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 
 func (c *Controllor) initProducer(env string, waitProduceChan chan *libs.FluentMsg, commitChan chan<- *libs.FluentMsg, senders []senders.SenderItf) *Producer {
 	hasher := xxhash.New()
-	return NewProducer(
+	p, err := NewProducer(
 		&ProducerCfg{
 			DistributeKey:   hex.EncodeToString(hasher.Sum([]byte((utils.Settings.GetString("host") + "-" + utils.Settings.GetString("env"))))),
 			InChan:          waitProduceChan,
@@ -487,6 +488,11 @@ func (c *Controllor) initProducer(env string, waitProduceChan chan *libs.FluentM
 		// senders...
 		senders...,
 	)
+	if err != nil {
+		libs.Logger.Panic("new producer", zap.Error(err))
+	}
+
+	return p
 }
 
 func (c *Controllor) runHeartBeat(ctx context.Context) {

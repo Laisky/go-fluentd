@@ -10,58 +10,71 @@ import (
 	"github.com/Laisky/zap"
 )
 
-// NullSenderCfg configuration of NullSender
-type NullSenderCfg struct {
+// StdoutSenderCfg configuration of StdoutSender
+type StdoutSenderCfg struct {
 	Name, LogLevel                 string
 	Tags                           []string
 	NFork, InChanSize              int
 	IsCommit, IsDiscardWhenBlocked bool
 }
 
-// NullSender /dev/null, will discard all msgs
-type NullSender struct {
+// StdoutSender print or discard
+type StdoutSender struct {
 	utils.Counter
 	logger *utils.LoggerType
 
 	*BaseSender
-	*NullSenderCfg
+	*StdoutSenderCfg
 }
 
-// NewNullSender create new null sender
-func NewNullSender(cfg *NullSenderCfg) *NullSender {
-	logger := libs.Logger.Named(cfg.Name)
-	logger.Info("new null sender",
-		zap.Strings("tags", cfg.Tags),
-		zap.String("name", cfg.Name),
-	)
-	switch cfg.LogLevel {
-	case "info":
-	case "debug":
-	default:
-		logger.Info("null sender will discard msg without any log",
-			zap.String("level", cfg.LogLevel))
-	}
-	if cfg.InChanSize < 1000 {
-		logger.Warn("small inchan size could reduce performance")
-	}
-
-	s := &NullSender{
-		logger: logger,
+// NewStdoutSender create new null sender
+func NewStdoutSender(cfg *StdoutSenderCfg) *StdoutSender {
+	s := &StdoutSender{
+		logger: libs.Logger.Named(cfg.Name),
 		BaseSender: &BaseSender{
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
 		},
-		NullSenderCfg: cfg,
+		StdoutSenderCfg: cfg,
 	}
+	if err := s.valid(); err != nil {
+		s.logger.Panic("stdout sender invalid", zap.Error(err))
+	}
+
+	s.logger.Info("new stdout sender",
+		zap.String("LogLevel", s.LogLevel),
+		zap.Int("InChanSize", s.InChanSize),
+		zap.Int("NFork", s.NFork),
+	)
 	s.SetSupportedTags(cfg.Tags)
 	return s
 }
 
+func (s *StdoutSender) valid() error {
+	switch s.LogLevel {
+	case "info":
+	case "debug":
+	default:
+		s.logger.Info("will discard msg without any log",
+			zap.String("level", s.LogLevel))
+	}
+	if s.InChanSize < 1000 {
+		s.logger.Warn("small inchan size could reduce performance")
+	}
+
+	if s.NFork <= 0 {
+		s.NFork = 1
+		s.logger.Info("reset n_fork", zap.Int("n_fork", s.NFork))
+	}
+
+	return nil
+}
+
 // GetName get the name of null sender
-func (s *NullSender) GetName() string {
+func (s *StdoutSender) GetName() string {
 	return s.Name
 }
 
-func (s *NullSender) startStats(ctx context.Context) {
+func (s *StdoutSender) startStats(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Second)
 	for {
 		select {
@@ -74,7 +87,7 @@ func (s *NullSender) startStats(ctx context.Context) {
 }
 
 // Spawn fork
-func (s *NullSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
+func (s *StdoutSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 	s.logger.Info("spawn for tag")
 	go s.startStats(ctx)
 	inChan := make(chan *libs.FluentMsg, s.InChanSize) // for each tag

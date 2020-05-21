@@ -19,7 +19,8 @@ import (
 )
 
 const (
-	minimalBufSizeByte        = 10485760 // 10 MB
+	minimalBufSizeByte        = 10485760  // 10 MB
+	defaultBufSizeByte        = 104857600 // 100 MB
 	intervalToStartingLegacy  = 3 * time.Second
 	defaultJournalLegacyWait  = 1 * time.Second
 	defaultIntervalSecForceGC = 1 * time.Minute
@@ -57,34 +58,9 @@ type Journal struct {
 
 // NewJournal create new Journal with `bufDirPath` and `BufSizeBytes`
 func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
-	libs.Logger.Info("create new journal",
-		zap.String("filepath", cfg.BufDirPath),
-		zap.Int64("size", cfg.BufSizeBytes))
-	if cfg.BufSizeBytes < minimalBufSizeByte {
-		libs.Logger.Warn("journal buf file size too small", zap.Int64("size", cfg.BufSizeBytes))
-	}
-	if cfg.ChildJournalIDInchanLen <= 0 {
-		cfg.ChildJournalIDInchanLen = cfg.JournalOutChanLen
-	}
-	if cfg.ChildJournalDataInchanLen <= 0 {
-		cfg.ChildJournalDataInchanLen = cfg.CommitIDChanLen
-	}
-	if cfg.GCIntervalSec <= 0 {
-		cfg.GCIntervalSec = defaultIntervalSecForceGC
-	}
-	if err := os.MkdirAll(cfg.BufDirPath, os.ModePerm); err != nil {
-		libs.Logger.Panic("create directory for buf", zap.String("dir", cfg.BufDirPath), zap.Error(err))
-	}
-	// if err := fileutil.IsDirWriteable(cfg.BufDirPath); err != nil {
-	// 	libs.Logger.Panic("buf dir is not writable", zap.Error(err), zap.String("dir", cfg.BufDirPath))
-	// }
-
 	j := &Journal{
 		JournalCfg: cfg,
 		legacyLock: &utils.Mutex{},
-
-		commitChan: make(chan *libs.FluentMsg, cfg.CommitIDChanLen),
-		outChan:    make(chan *libs.FluentMsg, cfg.JournalOutChanLen),
 
 		jjLock:              &sync.Mutex{},
 		tag2JMap:            &sync.Map{},
@@ -93,10 +69,66 @@ func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 		tag2IDsCounter:      &sync.Map{},
 		tag2DataCounter:     &sync.Map{},
 	}
+	j.commitChan = make(chan *libs.FluentMsg, cfg.CommitIDChanLen)
+	j.outChan = make(chan *libs.FluentMsg, cfg.JournalOutChanLen)
+	if err := j.valid(); err != nil {
+		libs.Logger.Panic("invalid", zap.Error(err))
+	}
+
 	j.initLegacyJJ(ctx)
 	j.registerMonitor()
 	j.startCommitRunner(ctx)
+
+	libs.Logger.Info("new journal",
+		zap.String("buf_dir_path", j.BufDirPath),
+		zap.Int64("buf_file_bytes", j.BufSizeBytes),
+		zap.Duration("gc_inteval_sec", j.GCIntervalSec),
+		zap.Int("journal_out_chan_len", j.JournalOutChanLen),
+		zap.Int("commit_id_chan_len", j.CommitIDChanLen),
+		zap.Int("child_data_chan_len", j.ChildJournalDataInchanLen),
+		zap.Int("child_id_chan_len", j.ChildJournalIDInchanLen),
+	)
 	return j
+}
+
+func (j *Journal) valid() error {
+	if j.BufSizeBytes <= 0 {
+		j.BufSizeBytes = defaultBufSizeByte
+		libs.Logger.Info("reset buf_file_bytes", zap.Int64("buf_file_bytes", j.BufSizeBytes))
+	} else if j.BufSizeBytes < minimalBufSizeByte {
+		libs.Logger.Warn("journal buf file size too small", zap.Int64("size", j.BufSizeBytes))
+	}
+
+	if j.GCIntervalSec <= 0 {
+		j.GCIntervalSec = defaultIntervalSecForceGC
+		libs.Logger.Info("reset gc_inteval_sec", zap.Duration("gc_inteval_sec", j.GCIntervalSec))
+	}
+
+	if j.JournalOutChanLen <= 0 {
+		j.JournalOutChanLen = 10000
+		libs.Logger.Info("reset journal_out_chan_len", zap.Int("journal_out_chan_len", j.JournalOutChanLen))
+	}
+
+	if j.CommitIDChanLen <= 0 {
+		j.CommitIDChanLen = 50000
+		libs.Logger.Info("reset commit_id_chan_len", zap.Int("commit_id_chan_len", j.CommitIDChanLen))
+	}
+
+	if j.ChildJournalDataInchanLen <= 0 {
+		j.ChildJournalDataInchanLen = j.JournalOutChanLen
+		libs.Logger.Info("reset child_data_chan_len", zap.Int("child_data_chan_len", j.ChildJournalDataInchanLen))
+	}
+
+	if j.ChildJournalIDInchanLen <= 0 {
+		j.ChildJournalIDInchanLen = j.CommitIDChanLen
+		libs.Logger.Info("reset child_id_chan_len", zap.Int("child_id_chan_len", j.ChildJournalIDInchanLen))
+	}
+
+	if err := os.MkdirAll(j.BufDirPath, os.ModePerm); err != nil {
+		return errors.Wrapf(err, "create directory `%s` for buf", j.BufDirPath)
+	}
+
+	return nil
 }
 
 func (j *Journal) CloseTag(tag string) error {
@@ -281,6 +313,7 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 
 	libs.Logger.Info("create new journal.Journal", zap.String("tag", tag))
 	jj, err := journal.NewJournal(
+		journal.WithLogger(libs.Logger.Named("journal."+tag)),
 		journal.WithBufDirPath(filepath.Join(j.BufDirPath, tag)),
 		journal.WithBufSizeByte(j.BufSizeBytes),
 		journal.WithIsCompress(j.IsCompress),

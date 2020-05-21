@@ -11,6 +11,7 @@ import (
 	"github.com/Laisky/go-fluentd/senders"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
+	"github.com/pkg/errors"
 )
 
 // senderCache cache all sender instance in `p.sender2senderCache`
@@ -58,20 +59,11 @@ type pendingDiscardMsg struct {
 }
 
 // NewProducer create new producer
-func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) *Producer {
-	libs.Logger.Info("create Producer")
-
-	if cfg.NFork < 1 {
-		libs.Logger.Warn("nfork must > 1", zap.Int("nfork", cfg.NFork))
-		cfg.NFork = 1
-	}
-
+func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) (*Producer, error) {
 	p := &Producer{
-		ProducerCfg:   cfg,
-		senders:       senders,
-		successedChan: make(chan *libs.FluentMsg, cfg.DiscardChanSize),
-		failedChan:    make(chan *libs.FluentMsg, cfg.DiscardChanSize),
-		counter:       utils.NewCounter(),
+		ProducerCfg: cfg,
+		senders:     senders,
+		counter:     utils.NewCounter(),
 		pMsgPool: &sync.Pool{
 			New: func() interface{} {
 				return &pendingDiscardMsg{}
@@ -85,6 +77,12 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) *Producer {
 		tag2NSender:        &sync.Map{}, // map[tag]nSender
 		tag2Cancel:         &sync.Map{}, // map[tag]nSender
 	}
+	if err := p.valid(); err != nil {
+		return nil, errors.Wrap(err, "producer config invalid")
+	}
+
+	p.successedChan = make(chan *libs.FluentMsg, cfg.DiscardChanSize)
+	p.failedChan = make(chan *libs.FluentMsg, cfg.DiscardChanSize)
 	p.registerMonitor()
 
 	for _, s := range senders {
@@ -95,7 +93,25 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) *Producer {
 		s.SetFailedChan(p.failedChan)
 	}
 
-	return p
+	libs.Logger.Info("new producer",
+		zap.Int("nfork", 1),
+		zap.Int("discard_chan_size", p.DiscardChanSize),
+	)
+	return p, nil
+}
+
+func (p *Producer) valid() error {
+	if p.NFork <= 0 {
+		p.NFork = 1
+		libs.Logger.Info("reset nfork", zap.Int("nfork", 1))
+	}
+
+	if p.DiscardChanSize <= 0 {
+		p.DiscardChanSize = 10000
+		libs.Logger.Info("reset discard_chan_size", zap.Int("discard_chan_size", 10000))
+	}
+
+	return nil
 }
 
 // registerMonitor bind monitor for producer
@@ -295,7 +311,7 @@ func (p *Producer) Run(ctx context.Context) {
 								zap.String("tag", msg.Tag))
 						} else {
 							p.failedChan <- msg
-							// libs.Logger.Debug("skip sender and not discard msg since of its inchan is full",
+							// p.Debug("skip sender and not discard msg since of its inchan is full",
 							// 	zap.String("name", s.GetName()),
 							// 	zap.String("tag", msg.Tag))
 						}

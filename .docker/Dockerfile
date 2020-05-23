@@ -1,5 +1,5 @@
 # docker build --build-arg http_proxy=http://172.16.4.26:17777 --build-arg https_proxy=http://172.16.4.26:17777
-FROM golang:1.14.2-buster AS gobuild
+FROM golang:1.14.3-buster AS gobuild
 
 # install dependencies
 RUN apt-get update \

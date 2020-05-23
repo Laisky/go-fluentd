@@ -358,16 +358,21 @@ func (r *FluentdRecv) ProcessMsg(msg *libs.FluentMsg) {
 		msg.Message[r.TagKey] = msg.Tag
 	}
 
+	if len(r.concators) == 1 {
+		r.concators[0] <- msg
+		return
+	}
+
 	switch lbkey := msg.Message[r.LBKey].(type) {
 	case []byte:
 		r.concators[int(xxhash.Sum64(lbkey)%uint64(r.NFork))] <- msg
 	case string:
 		r.concators[int(xxhash.Sum64String(lbkey)%uint64(r.NFork))] <- msg
 	default:
-		r.logger.Warn("discard msg since unknown type of LBKey",
-			zap.String("LBKey", r.LBKey),
+		r.logger.Warn("unknown type of LBKey",
+			zap.String("lb_key", r.LBKey),
 			zap.String("val", fmt.Sprint(lbkey)))
-		r.msgPool.Put(msg)
+		r.SendMsg(msg)
 	}
 }
 

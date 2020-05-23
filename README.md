@@ -94,8 +94,10 @@ Then Producer can send logs to anywhere (depends on Senders).
 directly run:
 
 ```sh
-go run -race entrypoints/main.go --config=./docs/settings/settings_cn.yml --env=sit --log-l
-evel=debug
+go run -race entrypoints/main.go \
+  --config=./docs/settings/tiny_settings.yml \
+  --env=sit \
+  --log-level=debug
 ```
 
 run by docker:
@@ -104,7 +106,7 @@ run by docker:
 docker run -itd --rm --name=go-fluentd -p 24225:24225 -p 8080:8080 \
     -v /etc/configs/go-fluentd:/etc/go-fluentd \
     -v /data/log/fluentd/go-fluentd:/data/log/fluentd/go-fluentd
-    ppcelery/go-fluentd:1.12.7 \
+    ppcelery/go-fluentd:1.13.1 \
     ./go-fluentd \
         --config=/etc/go-fluentd/settings.yml \
         --env=perf \

@@ -19,8 +19,7 @@ services:
     command: python /app.py
 
   go-fluentd:
-    # image: ppcelery/go-fluentd:1.13
-    image: ppcelery/go-fluentd:test
+    image: ppcelery/go-fluentd:1.13.1
     restart: "on-failure"
     ports:
       - 28080:8080

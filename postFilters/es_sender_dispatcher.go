@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/Laisky/go-fluentd/libs"
-	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 )
 
@@ -33,7 +32,7 @@ func LoadReTagMap(env string, mapi interface{}) map[string]string {
 }
 
 func NewESDispatcherFilter(cfg *ESDispatcherFilterCfg) *ESDispatcherFilter {
-	utils.Logger.Info("new ESDispatcherFilter",
+	libs.Logger.Info("new ESDispatcherFilter",
 		zap.Strings("tags", cfg.Tags))
 	f := &ESDispatcherFilter{
 		ESDispatcherFilterCfg: cfg,
@@ -54,18 +53,18 @@ func (f *ESDispatcherFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	}
 
 	if msg.Message[f.TagKey].(string) == "" {
-		utils.Logger.Warn("discard log since tag is empty", zap.String("msg", fmt.Sprint(msg)))
+		libs.Logger.Warn("discard log since tag is empty", zap.String("msg", fmt.Sprint(msg)))
 		f.DiscardMsg(msg)
 		return nil
 	}
 
 	if msg.Tag, ok = f.ReTagMap[msg.Message[f.TagKey].(string)]; !ok {
-		utils.Logger.Warn("discard log since tag not exists in retagmap", zap.String("tag", msg.Message[f.TagKey].(string)))
+		libs.Logger.Warn("discard log since tag not exists in retagmap", zap.String("tag", msg.Message[f.TagKey].(string)))
 		f.DiscardMsg(msg)
 		return nil
 	}
 
-	utils.Logger.Debug("change msg tag",
+	libs.Logger.Debug("change msg tag",
 		zap.String("old_tag", msg.Message[f.TagKey].(string)),
 		zap.String("new_tag", msg.Tag))
 	return msg

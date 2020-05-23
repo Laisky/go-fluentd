@@ -28,7 +28,7 @@ type Controllor struct {
 
 // NewControllor create new Controllor
 func NewControllor() (c *Controllor) {
-	utils.Logger.Info("create Controllor")
+	libs.Logger.Info("create Controllor")
 
 	c = &Controllor{
 		msgPool: &sync.Pool{
@@ -73,7 +73,7 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 	case map[string]interface{}:
 		for name := range utils.Settings.Get("settings.acceptor.recvs.plugins").(map[string]interface{}) {
 			if !StringListContains(utils.Settings.GetStringSlice("settings.acceptor.recvs.plugins."+name+".active_env"), env) {
-				utils.Logger.Info("recv not support current env", zap.String("name", name), zap.String("env", env))
+				libs.Logger.Info("recv not support current env", zap.String("name", name), zap.String("env", env))
 				continue
 			}
 
@@ -88,6 +88,7 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 					OriginRewriteTagKey:    utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".origin_rewrite_tag_key"),
 					ConcatMaxLen:           utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".concat_max_len"),
 					NFork:                  utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".nfork"),
+					ConcatorWait:           utils.Settings.GetDuration("settings.acceptor.recvs.plugins."+name+".concat_with_sec") * time.Second,
 					ConcatorBufSize:        utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".internal_buf_size"),
 					ConcatCfg:              libs.LoadTagsMapAppendEnv(env, utils.Settings.GetStringMap("settings.acceptor.recvs.plugins."+name+".concat")),
 				}))
@@ -149,17 +150,17 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 
 				receivers = append(receivers, recvs.NewKafkaRecv(kafkaCfg))
 			default:
-				utils.Logger.Panic("unknown recv type",
+				libs.Logger.Panic("unknown recv type",
 					zap.String("recv_type", utils.Settings.GetString("settings.acceptor.recvs.plugins."+name+".type")),
 					zap.String("recv_name", name))
 			}
-			utils.Logger.Info("active recv",
+			libs.Logger.Info("active recv",
 				zap.String("name", name),
 				zap.String("type", utils.Settings.GetString("settings.acceptor.recvs.plugins."+name+".type")))
 		}
 	case nil:
 	default:
-		utils.Logger.Panic("recv plugins configuration error")
+		libs.Logger.Panic("recv plugins configuration error")
 	}
 
 	return receivers
@@ -204,17 +205,17 @@ func (c *Controllor) initAcceptorPipeline(ctx context.Context, env string) (*acc
 					Rules:  acceptorFilters.ParseSpringRules(env, utils.Settings.Get("settings.acceptor_filters.plugins."+name+".rules").([]interface{})),
 				}))
 			default:
-				utils.Logger.Panic("unknown acceptorfilter type",
+				libs.Logger.Panic("unknown acceptorfilter type",
 					zap.String("recv_type", utils.Settings.GetString("settings.acceptor_filters.plugins."+name+".type")),
 					zap.String("recv_name", name))
 			}
-			utils.Logger.Info("active acceptorfilter",
+			libs.Logger.Info("active acceptorfilter",
 				zap.String("name", name),
 				zap.String("type", utils.Settings.GetString("settings.acceptor_filters.recvs.plugins."+name+".type")))
 		}
 	case nil:
 	default:
-		utils.Logger.Panic("acceptorfilter configuration error")
+		libs.Logger.Panic("acceptorfilter configuration error")
 	}
 
 	// set the DefaultFilter as last filter
@@ -271,17 +272,17 @@ func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommit
 			case "concator":
 				isEnableConcator = true
 			default:
-				utils.Logger.Panic("unknown tagfilter type",
+				libs.Logger.Panic("unknown tagfilter type",
 					zap.String("recv_type", utils.Settings.GetString("settings.tag_filters.recvs.plugins."+name+".type")),
 					zap.String("recv_name", name))
 			}
-			utils.Logger.Info("active tagfilter",
+			libs.Logger.Info("active tagfilter",
 				zap.String("name", name),
 				zap.String("type", utils.Settings.GetString("settings.tag_filters.recvs.plugins."+name+".type")))
 		}
 	case nil:
 	default:
-		utils.Logger.Panic("tagfilter configuration error")
+		libs.Logger.Panic("tagfilter configuration error")
 	}
 
 	// PAAS-397: put concat in fluentd-recvs
@@ -356,19 +357,19 @@ func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- *libs.Fl
 					Tags: libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.post_filters.plugins."+name+".tags")),
 				}))
 			default:
-				utils.Logger.Panic("unknown post_filter type",
+				libs.Logger.Panic("unknown post_filter type",
 					zap.String("post_filter_type", utils.Settings.GetString("settings.post_filters.plugins."+name+".type")),
 					zap.String("post_filter_name", name))
 			}
 
-			utils.Logger.Info("active post_filter",
+			libs.Logger.Info("active post_filter",
 				zap.String("type", utils.Settings.GetString("settings.post_filters.plugins."+name+".type")),
 				zap.String("name", name),
 				zap.String("env", env))
 		}
 	case nil:
 	default:
-		utils.Logger.Panic("post_filter configuration error")
+		libs.Logger.Panic("post_filter configuration error")
 	}
 
 	fs = append(fs,
@@ -403,7 +404,7 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 	case map[string]interface{}:
 		for name := range utils.Settings.Get("settings.producer.plugins").(map[string]interface{}) {
 			if !StringListContains(utils.Settings.GetStringSlice("settings.producer.plugins."+name+".active_env"), env) {
-				utils.Logger.Info("sender not support current env", zap.String("name", name), zap.String("env", env))
+				libs.Logger.Info("sender not support current env", zap.String("name", name), zap.String("env", env))
 				continue
 			}
 
@@ -446,7 +447,7 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 					IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.plugins." + name + ".is_discard_when_blocked"),
 				}))
 			case "stdout":
-				ss = append(ss, senders.NewNullSender(&senders.NullSenderCfg{
+				ss = append(ss, senders.NewStdoutSender(&senders.StdoutSenderCfg{
 					Name:                 name,
 					Tags:                 libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
 					LogLevel:             utils.Settings.GetString("settings.producer.plugins." + name + ".log_level"),
@@ -456,18 +457,18 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 					IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.plugins." + name + ".is_discard_when_blocked"),
 				}))
 			default:
-				utils.Logger.Panic("unknown sender type",
+				libs.Logger.Panic("unknown sender type",
 					zap.String("sender_type", utils.Settings.GetString("settings.producer.plugins."+name+".type")),
 					zap.String("sender_name", name))
 			}
-			utils.Logger.Info("active sender",
+			libs.Logger.Info("active sender",
 				zap.String("type", utils.Settings.GetString("settings.producer.plugins."+name+".type")),
 				zap.String("name", name),
 				zap.String("env", env))
 		}
 	case nil:
 	default:
-		utils.Logger.Panic("sender configuration error")
+		libs.Logger.Panic("sender configuration error")
 	}
 
 	return ss
@@ -475,7 +476,7 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 
 func (c *Controllor) initProducer(env string, waitProduceChan chan *libs.FluentMsg, commitChan chan<- *libs.FluentMsg, senders []senders.SenderItf) *Producer {
 	hasher := xxhash.New()
-	return NewProducer(
+	p, err := NewProducer(
 		&ProducerCfg{
 			DistributeKey:   hex.EncodeToString(hasher.Sum([]byte((utils.Settings.GetString("host") + "-" + utils.Settings.GetString("env"))))),
 			InChan:          waitProduceChan,
@@ -487,10 +488,15 @@ func (c *Controllor) initProducer(env string, waitProduceChan chan *libs.FluentM
 		// senders...
 		senders...,
 	)
+	if err != nil {
+		libs.Logger.Panic("new producer", zap.Error(err))
+	}
+
+	return p
 }
 
 func (c *Controllor) runHeartBeat(ctx context.Context) {
-	defer utils.Logger.Info("heartbeat exit")
+	defer libs.Logger.Info("heartbeat exit")
 	for {
 		select {
 		case <-ctx.Done():
@@ -498,7 +504,7 @@ func (c *Controllor) runHeartBeat(ctx context.Context) {
 		default:
 		}
 
-		utils.Logger.Info("heartbeat",
+		libs.Logger.Info("heartbeat",
 			zap.Int("goroutine", runtime.NumGoroutine()),
 		)
 		time.Sleep(utils.Settings.GetDuration("heartbeat") * time.Second)
@@ -507,7 +513,7 @@ func (c *Controllor) runHeartBeat(ctx context.Context) {
 
 // Run starting all pipeline
 func (c *Controllor) Run(ctx context.Context) {
-	utils.Logger.Info("running...")
+	libs.Logger.Info("running...")
 	env := utils.Settings.GetString("env")
 
 	journal := c.initJournal(ctx)
@@ -516,7 +522,7 @@ func (c *Controllor) Run(ctx context.Context) {
 	acceptor := c.initAcceptor(ctx, journal, receivers)
 	acceptorPipeline, err := c.initAcceptorPipeline(ctx, env)
 	if err != nil {
-		utils.Logger.Panic("initAcceptorPipeline", zap.Error(err))
+		libs.Logger.Panic("initAcceptorPipeline", zap.Error(err))
 	}
 
 	waitCommitChan := journal.GetCommitChan()

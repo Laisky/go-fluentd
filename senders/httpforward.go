@@ -28,7 +28,7 @@ type HTTPSender struct {
 }
 
 func NewHTTPSender(cfg *HTTPSenderCfg) *HTTPSender {
-	utils.Logger.Info("new http sender",
+	libs.Logger.Info("new http sender",
 		zap.String("addr", cfg.Addr),
 		zap.Strings("tags", cfg.Tags))
 
@@ -58,12 +58,12 @@ func (s *HTTPSender) GetName() string {
 }
 
 func (s *HTTPSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
-	utils.Logger.Info("SpawnForTag")
+	libs.Logger.Info("SpawnForTag")
 	inChan := make(chan *libs.FluentMsg, s.InChanSize) // for each tag
 
 	for i := 0; i < s.NFork; i++ { // parallel to each tag
 		go func(i int) {
-			defer utils.Logger.Info("producer exits",
+			defer libs.Logger.Info("producer exits",
 				zap.Int("i", i),
 				zap.String("name", s.GetName()))
 
@@ -88,7 +88,7 @@ func (s *HTTPSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 					return
 				case msg, ok = <-inChan:
 					if !ok {
-						utils.Logger.Info("inChan closed")
+						libs.Logger.Info("inChan closed")
 						return
 					}
 					msgBatch[iBatch] = msg
@@ -110,7 +110,7 @@ func (s *HTTPSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 
 				nRetry = 0
 				if utils.Settings.GetBool("dry") {
-					utils.Logger.Info("send message to backend",
+					libs.Logger.Info("send message to backend",
 						zap.Int("batch", len(msgBatchDelivery)),
 						zap.String("log", fmt.Sprint(msgBatch[0].Message)))
 					for _, msg = range msgBatchDelivery {
@@ -123,7 +123,7 @@ func (s *HTTPSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 				if err = s.SendBulkMsgs(bulkCtx, msgBatchDelivery); err != nil {
 					nRetry++
 					if nRetry > maxRetry {
-						utils.Logger.Error("discard msg since of sender err",
+						libs.Logger.Error("discard msg since of sender err",
 							zap.Error(err),
 							zap.String("tag", msg.Tag),
 							zap.Int("num", len(msgBatchDelivery)))
@@ -136,7 +136,7 @@ func (s *HTTPSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 					goto SEND_MSG
 				}
 
-				utils.Logger.Debug("success sent message to backend",
+				libs.Logger.Debug("success sent message to backend",
 					zap.String("backend", s.Addr),
 					zap.Int("batch", len(msgBatchDelivery)),
 					zap.String("tag", msg.Tag))
@@ -181,6 +181,6 @@ func (s *HTTPSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*libs.FluentMsg) (e
 		return errors.Wrap(err, "request es got error")
 	}
 
-	utils.Logger.Debug("httpforward bulk all done", zap.Int("batch", len(msgs)))
+	libs.Logger.Debug("httpforward bulk all done", zap.Int("batch", len(msgs)))
 	return nil
 }

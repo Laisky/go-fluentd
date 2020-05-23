@@ -42,17 +42,8 @@ type ElasticSearchSender struct {
 }
 
 func NewElasticSearchSender(cfg *ElasticSearchSenderCfg) *ElasticSearchSender {
-	utils.Logger.Info("new ElasticSearch sender",
-		zap.String("addr", cfg.Addr),
-		zap.Int("batch_size", cfg.BatchSize),
-		zap.Strings("tags", cfg.Tags))
-
-	if cfg.Addr == "" {
-		panic(fmt.Errorf("addr should not be empty: %v", cfg.Addr))
-	}
-
 	s := &ElasticSearchSender{
-		logger: utils.Logger.With(zap.String("name", cfg.Name)),
+		logger: libs.Logger.Named(cfg.Name),
 		BaseSender: &BaseSender{
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
 		},
@@ -64,8 +55,44 @@ func NewElasticSearchSender(cfg *ElasticSearchSenderCfg) *ElasticSearchSender {
 			Timeout: 30 * time.Second,
 		},
 	}
+	if err := s.valid(); err != nil {
+		s.logger.Panic("invalid", zap.Error(err))
+	}
+
 	s.SetSupportedTags(cfg.Tags)
+
+	s.logger.Info("new elasticsearch sender",
+		zap.String("addr", s.Addr),
+		zap.Int("batch_size", s.BatchSize),
+		zap.Int("n_fork", s.NFork),
+		zap.Duration("max_wait_sec", s.MaxWait),
+		zap.Strings("tags", s.Tags),
+		zap.String("tag_key", s.TagKey),
+	)
 	return s
+}
+
+func (s *ElasticSearchSender) valid() error {
+	if s.Addr == "" {
+		s.logger.Panic("`addr` not set")
+	}
+	if s.NFork <= 0 {
+		s.NFork = 1
+		s.logger.Info("reset n_fork", zap.Int("n_fork", s.NFork))
+	}
+	if s.BatchSize <= 0 {
+		s.BatchSize = 500
+		s.logger.Info("reset msg_batch_size", zap.Int("msg_batch_size", s.BatchSize))
+	}
+	if s.MaxWait <= 0 {
+		s.MaxWait = 5
+		s.logger.Info("reset max_wait_sec", zap.Duration("max_wait_sec", s.MaxWait))
+	}
+	if s.TagKey == "" {
+		s.logger.Info("`tag_key` is missing, will load msg tag from `msg.Tag`, this tag could be modified by upstream")
+	}
+
+	return nil
 }
 
 func (s *ElasticSearchSender) GetName() string {
@@ -82,7 +109,12 @@ type bulkOpCtx struct {
 
 func (s *ElasticSearchSender) getMsgStarting(msg *libs.FluentMsg) ([]byte, error) {
 	// load origin tag from messages, because msg.Tag could modified by kafka
-	tag := msg.Message[s.TagKey].(string)
+	var tag string
+	if s.TagKey != "" {
+		tag = msg.Message[s.TagKey].(string)
+	} else {
+		tag = msg.Tag
+	}
 
 	// load elasitcsearch index name by msg tag
 	index, ok := s.TagIndexMap[tag]
@@ -102,12 +134,12 @@ func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*libs.Flue
 	var b []byte
 	for _, bulkCtx.msg = range msgs {
 		if bulkCtx.starting, err = s.getMsgStarting(bulkCtx.msg); err != nil {
-			s.logger.Warn("try to generate bulk index got error", zap.Error(err))
+			s.logger.Warn("try to generate bulk index", zap.Error(err))
 			continue
 		}
 
 		if b, err = json.Marshal(bulkCtx.msg.Message); err != nil {
-			s.logger.Warn("try to marshal messages got error", zap.Error(err))
+			s.logger.Warn("try to marshal messages", zap.Error(err))
 			continue
 		}
 
@@ -126,25 +158,25 @@ func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*libs.Flue
 	bulkCtx.buf.Reset()
 	bulkCtx.gzWriter.Reset(bulkCtx.buf)
 	if _, err = bulkCtx.gzWriter.Write(bulkCtx.cnt); err != nil {
-		return errors.Wrap(err, "try to compress messages got error")
+		return errors.Wrap(err, "try to compress messages")
 	}
 
 	bulkCtx.gzWriter.Close()
 	req, err := http.NewRequest("POST", s.Addr, bulkCtx.buf)
 	if err != nil {
-		return errors.Wrap(err, "try to init es request got error")
+		return errors.Wrap(err, "try to init es request")
 	}
 	req.Close = true
 	req.Header.Set("Content-encoding", "gzip")
 	req.Header.Set("Content-Type", "application/json;charset=UTF-8")
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return errors.Wrap(err, "try to request es got error")
+		return errors.Wrap(err, "try to request es")
 	}
 	defer resp.Body.Close()
 
 	if err = s.checkResp(resp); err != nil {
-		return errors.Wrap(err, "request es got error")
+		return errors.Wrap(err, "request es")
 	}
 
 	s.logger.Debug("elasticsearch bulk all done", zap.Int("batch", len(msgs)))
@@ -178,10 +210,10 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
 	ret := &ESResp{}
 	bb, err2 := ioutil.ReadAll(resp.Body)
 	if err2 != nil {
-		s.logger.Error("try to read es resp body got error",
+		s.logger.Error("try to read es resp body",
 			zap.Error(err2),
 			zap.Error(err))
-		return errors.Wrap(err2, "try to read es resp body got error")
+		return errors.Wrap(err2, "try to read es resp body")
 	}
 	if err != nil {
 		return errors.Wrap(err, string(bb))
@@ -189,7 +221,7 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
 	s.logger.Debug("got es response", zap.ByteString("resp", bb))
 
 	if err = json.Unmarshal(bb, ret); err != nil {
-		s.logger.Error("try to unmarshal body got error, body",
+		s.logger.Error("try to unmarshal body, body",
 			zap.Error(err),
 			zap.ByteString("body", bb))
 		return nil
@@ -281,7 +313,7 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg 
 					if err = s.SendBulkMsgs(bulkCtx, msgBatchDelivery); err != nil {
 						nRetry++
 						if nRetry > maxRetry {
-							s.logger.Error("try send message got error",
+							s.logger.Error("try send message",
 								zap.Error(err),
 								zap.ByteString("content", bulkCtx.cnt),
 								zap.Int("num", len(msgBatchDelivery)))

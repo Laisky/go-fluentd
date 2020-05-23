@@ -68,13 +68,13 @@ type KafkaRecv struct {
 
 func NewKafkaRecv(cfg *KafkaCfg) *KafkaRecv {
 	if cfg.MsgKey == "" && !cfg.IsJSONFormat {
-		utils.Logger.Panic("at least set one of MsgKey and IsJSONFormat")
+		libs.Logger.Panic("at least set one of MsgKey and IsJSONFormat")
 	}
 	if cfg.ReconnectInterval < defaultKafkaReconnectInterval {
-		utils.Logger.Warn("ReconnectInterval too small", zap.Duration("ReconnectInterval", cfg.ReconnectInterval))
+		libs.Logger.Warn("ReconnectInterval too small", zap.Duration("ReconnectInterval", cfg.ReconnectInterval))
 	}
 
-	utils.Logger.Info("create KafkaRecv",
+	libs.Logger.Info("create KafkaRecv",
 		zap.Strings("topics", cfg.Topics),
 		zap.Strings("brokers", cfg.Brokers),
 		zap.Bool("IsJSONFormat", cfg.IsJSONFormat),
@@ -92,10 +92,10 @@ func (r *KafkaRecv) GetName() string {
 }
 
 func (r *KafkaRecv) Run(ctx context.Context) {
-	utils.Logger.Info("run KafkaRecv")
+	libs.Logger.Info("run KafkaRecv")
 	for i := 0; i < r.NConsumer; i++ {
 		go func(i int) {
-			defer utils.Logger.Info("kafka reciver exit", zap.Int("n", i))
+			defer libs.Logger.Info("kafka reciver exit", zap.Int("n", i))
 			var (
 				ok           bool
 				kmsg         *kafka.KafkaMsg
@@ -127,11 +127,11 @@ func (r *KafkaRecv) Run(ctx context.Context) {
 					kafka.WithCommitFilterCheckNum(r.IntervalNum),
 				)
 				if err != nil {
-					utils.Logger.Error("try to connect to kafka got error", zap.Error(err))
+					libs.Logger.Error("try to connect to kafka got error", zap.Error(err))
 					cancel()
 					continue
 				}
-				utils.Logger.Info("connect to kafka brokers",
+				libs.Logger.Info("connect to kafka brokers",
 					zap.Strings("brokers", r.Brokers),
 					zap.Strings("topics", r.Topics),
 					zap.Int("intervalnum", r.IntervalNum),
@@ -147,19 +147,19 @@ func (r *KafkaRecv) Run(ctx context.Context) {
 						break CONSUMER_LOOP
 					case kmsg, ok = <-msgChan:
 						if !ok {
-							utils.Logger.Info("consumer break")
+							libs.Logger.Info("consumer break")
 							cancel()
 							break CONSUMER_LOOP
 						}
 					}
 
-					utils.Logger.Debug("got new message from kafka",
+					libs.Logger.Debug("got new message from kafka",
 						zap.Int("n", i),
 						zap.Int32("partition", kmsg.Partition),
 						zap.ByteString("msg", kmsg.Message),
 						zap.String("name", r.GetName()))
 					if msg, err = r.parse2Msg(kmsg); err != nil {
-						utils.Logger.Error("try to parse kafka message got error",
+						libs.Logger.Error("try to parse kafka message got error",
 							zap.String("name", r.GetName()),
 							zap.Error(err),
 							zap.ByteString("log", kmsg.Message))
@@ -206,7 +206,7 @@ func (r *KafkaRecv) parse2Msg(kmsg *kafka.KafkaMsg) (msg *libs.FluentMsg, err er
 			case string:
 				msg.Tag = msg.Message[r.JSONTagKey].(string)
 			default:
-				utils.Logger.Error("discard log since unknown JSONTagKey format", zap.String("tagkey", r.JSONTagKey))
+				libs.Logger.Error("discard log since unknown JSONTagKey format", zap.String("tagkey", r.JSONTagKey))
 				r.msgPool.Put(msg)
 				return nil, errors.New("unknown JSONTagKey format")
 			}
@@ -216,7 +216,7 @@ func (r *KafkaRecv) parse2Msg(kmsg *kafka.KafkaMsg) (msg *libs.FluentMsg, err er
 	}
 
 	msg.Message[r.TagKey] = msg.Tag
-	// utils.Logger.Debug("parse2Msg got new msg",
+	// libs.Logger.Debug("parse2Msg got new msg",
 	// 	zap.String("tag", msg.Tag),
 	// 	zap.String("rewrite_tag", r.RewriteTag),
 	// 	zap.ByteString("msg", kmsg.Message))

@@ -32,7 +32,7 @@ settings:
         log_level: info
         is_commit: true
   journal:
-    buf_dir_path: /data
+    buf_dir_path: ./data
     is_compress: true
   acceptor_filters:
     plugins:

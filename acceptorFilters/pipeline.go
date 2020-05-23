@@ -28,17 +28,16 @@ type AcceptorPipeline struct {
 }
 
 func NewAcceptorPipeline(ctx context.Context, cfg *AcceptorPipelineCfg, filters ...AcceptorFilterItf) (a *AcceptorPipeline, err error) {
-	utils.Logger.Info("NewAcceptorPipeline")
-	if cfg.NFork < 1 {
-		panic(fmt.Errorf("NFork should greater than 1, got: %v", cfg.NFork))
-	}
-
 	a = &AcceptorPipeline{
 		AcceptorPipelineCfg: cfg,
 		filters:             filters,
 		reEnterChan:         make(chan *libs.FluentMsg, cfg.ReEnterChanSize),
 		counter:             utils.NewCounter(),
 	}
+	if err := a.valid(); err != nil {
+		libs.Logger.Panic("invalid cfg for acceptor pipeline")
+	}
+
 	a.registerMonitor()
 	for _, filter := range a.filters {
 		filter.SetUpstream(a.reEnterChan)
@@ -46,7 +45,7 @@ func NewAcceptorPipeline(ctx context.Context, cfg *AcceptorPipelineCfg, filters 
 	}
 
 	if a.IsThrottle {
-		utils.Logger.Info("enable acceptor throttle",
+		libs.Logger.Info("enable acceptor throttle",
 			zap.Int("max", a.ThrottleMax),
 			zap.Int("n_perf_sec", a.ThrottleNPerSec))
 		if a.throttle, err = utils.NewThrottleWithCtx(
@@ -59,7 +58,51 @@ func NewAcceptorPipeline(ctx context.Context, cfg *AcceptorPipelineCfg, filters 
 		}
 	}
 
+	libs.Logger.Info("new acceptor pipeline",
+		zap.Int("n_fork", a.NFork),
+		zap.Int("out_buf_len", a.OutChanSize),
+		zap.Int("reenter_chan_len", a.ReEnterChanSize),
+		zap.Int("throttle_max", a.ThrottleMax),
+		zap.Int("throttle_per_sec", a.ThrottleNPerSec),
+		zap.Bool("is_throttle", a.IsThrottle),
+	)
 	return a, nil
+}
+
+func (f *AcceptorPipeline) valid() error {
+	if f.NFork <= 0 {
+		f.NFork = 4
+		libs.Logger.Info("reset n_fork", zap.Int("n_fork", f.NFork))
+	}
+
+	if f.OutChanSize <= 0 {
+		f.OutChanSize = 1000
+		libs.Logger.Info("reset out_buf_len", zap.Int("out_buf_len", f.OutChanSize))
+	}
+
+	if f.ReEnterChanSize <= 0 {
+		f.ReEnterChanSize = 1000
+		libs.Logger.Info("reset reenter_chan_len", zap.Int("reenter_chan_len", f.ReEnterChanSize))
+	}
+
+	if f.NFork <= 0 {
+		f.NFork = 4
+		libs.Logger.Info("reset n_fork", zap.Int("n_fork", f.NFork))
+	}
+
+	if f.IsThrottle {
+		if f.ThrottleMax <= 0 {
+			f.ThrottleMax = 10000
+			libs.Logger.Info("reset throttle_max", zap.Int("throttle_max", f.ThrottleMax))
+		}
+
+		if f.ThrottleNPerSec <= 0 {
+			f.ThrottleNPerSec = 1000
+			libs.Logger.Info("reset throttle_per_sec", zap.Int("throttle_per_sec", f.ThrottleNPerSec))
+		}
+	}
+
+	return nil
 }
 
 func (f *AcceptorPipeline) registerMonitor() {
@@ -88,7 +131,7 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 				msg    *libs.FluentMsg
 				ok     bool
 			)
-			defer utils.Logger.Info("quit acceptorPipeline asyncChan", zap.String("last_msg", fmt.Sprint(msg)))
+			defer libs.Logger.Info("quit acceptorPipeline asyncChan", zap.String("last_msg", fmt.Sprint(msg)))
 
 		NEXT_ASYNC_MSG:
 			for {
@@ -97,21 +140,21 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 					return
 				case msg, ok = <-f.reEnterChan: // CAUTION: do not put msg into reEnterChan forever
 					if !ok {
-						utils.Logger.Info("reEnterChan closed")
+						libs.Logger.Info("reEnterChan closed")
 						return
 					}
 				case msg, ok = <-asyncInChan:
 					if !ok {
-						utils.Logger.Info("asyncInChan closed")
+						libs.Logger.Info("asyncInChan closed")
 						return
 					}
 				}
 				f.counter.Count()
 
-				// utils.Logger.Debug("AcceptorPipeline got msg")
+				// libs.Logger.Debug("AcceptorPipeline got msg")
 
 				if f.IsThrottle && !f.throttle.Allow() {
-					utils.Logger.Warn("discard msg by throttle", zap.String("tag", msg.Tag))
+					libs.Logger.Warn("discard msg by throttle", zap.String("tag", msg.Tag))
 					f.DiscardMsg(msg)
 					continue
 				}
@@ -129,7 +172,7 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 					case outChan <- msg:
 					case skipDumpChan <- msg: // baidu has low disk performance
 					default:
-						utils.Logger.Error("discard msg since disk & downstream are busy", zap.String("tag", msg.Tag))
+						libs.Logger.Error("discard msg since disk & downstream are busy", zap.String("tag", msg.Tag))
 						f.MsgPool.Put(msg)
 					}
 				}
@@ -143,7 +186,7 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 				msg    *libs.FluentMsg
 				ok     bool
 			)
-			defer utils.Logger.Info("quit acceptorPipeline syncChan", zap.String("last_msg", fmt.Sprint(msg)))
+			defer libs.Logger.Info("quit acceptorPipeline syncChan", zap.String("last_msg", fmt.Sprint(msg)))
 
 		NEXT_SYNC_MSG:
 			for {
@@ -152,15 +195,15 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 					return
 				case msg, ok = <-syncInChan:
 					if !ok {
-						utils.Logger.Info("syncInChan closed")
+						libs.Logger.Info("syncInChan closed")
 						return
 					}
 				}
-				// utils.Logger.Debug("AcceptorPipeline got blockable msg")
+				// libs.Logger.Debug("AcceptorPipeline got blockable msg")
 				f.counter.Count()
 
 				if f.IsThrottle && !f.throttle.Allow() {
-					utils.Logger.Warn("discard msg by throttle", zap.String("tag", msg.Tag))
+					libs.Logger.Warn("discard msg by throttle", zap.String("tag", msg.Tag))
 					f.DiscardMsg(msg)
 					continue
 				}

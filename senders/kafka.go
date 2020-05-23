@@ -38,7 +38,7 @@ type KafkaSender struct {
 }
 
 func NewKafkaSender(cfg *KafkaSenderCfg) *KafkaSender {
-	utils.Logger.Info("new kafka sender",
+	libs.Logger.Info("new kafka sender",
 		zap.Strings("brokers", cfg.Brokers))
 
 	if len(cfg.Brokers) == 0 {
@@ -60,12 +60,12 @@ func (s *KafkaSender) GetName() string {
 }
 
 func (s *KafkaSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
-	utils.Logger.Info("SpawnForTag")
+	libs.Logger.Info("SpawnForTag")
 	inChan := make(chan *libs.FluentMsg, s.InChanSize)
 
 	for i := 0; i < s.NFork; i++ {
 		go func(i int) {
-			defer utils.Logger.Info("kafka sender exit",
+			defer libs.Logger.Info("kafka sender exit",
 				zap.String("name", s.GetName()),
 				zap.Int("i", i))
 			var (
@@ -92,10 +92,10 @@ func (s *KafkaSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 		RECONNECT:
 			producer, err := NewKafkaProducer(s.Brokers)
 			if err != nil {
-				utils.Logger.Error("connect to kakfa broker got error", zap.Error(err))
+				libs.Logger.Error("connect to kakfa broker got error", zap.Error(err))
 				goto RECONNECT
 			}
-			utils.Logger.Info("connect to kafka brokers",
+			libs.Logger.Info("connect to kafka brokers",
 				zap.Strings("brokers", s.Brokers))
 
 			for {
@@ -104,7 +104,7 @@ func (s *KafkaSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 					return
 				case msg, ok = <-inChan:
 					if !ok {
-						utils.Logger.Info("inChan closed")
+						libs.Logger.Info("inChan closed")
 						return
 					}
 					msgBatch[iBatch] = msg
@@ -127,7 +127,7 @@ func (s *KafkaSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 				nRetry = 0
 				for j, msg = range msgBatchDelivery {
 					if jb, err = json.Marshal(&msg.Message); err != nil {
-						utils.Logger.Error("marashal msg got error",
+						libs.Logger.Error("marashal msg got error",
 							zap.Error(err),
 							zap.String("msg", fmt.Sprint(msg)))
 						// TODO(potential bug): should remove element in msgBatchDelivery
@@ -135,7 +135,7 @@ func (s *KafkaSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 					}
 
 					if utils.Settings.GetBool("dry") {
-						utils.Logger.Info("send message to backend",
+						libs.Logger.Info("send message to backend",
 							zap.ByteString("msg", jb))
 						s.successedChan <- msg
 						continue
@@ -152,9 +152,9 @@ func (s *KafkaSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 				if err = producer.SendMessages(kmsgBatchDelivery[:len(msgBatchDelivery)]); err != nil {
 					nRetry++
 					if nRetry > maxRetry {
-						utils.Logger.Error("try send kafka message got error", zap.Error(err))
+						libs.Logger.Error("try send kafka message got error", zap.Error(err))
 
-						utils.Logger.Error("discard msg since of sender err",
+						libs.Logger.Error("discard msg since of sender err",
 							zap.String("tag", msg.Tag),
 							zap.Int("num", len(msgBatchDelivery)))
 						for _, msg = range msgBatchDelivery {
@@ -162,15 +162,15 @@ func (s *KafkaSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 						}
 
 						if err = producer.Close(); err != nil {
-							utils.Logger.Error("try to close connection got error", zap.Error(err))
+							libs.Logger.Error("try to close connection got error", zap.Error(err))
 						}
-						utils.Logger.Info("connection closed, try to reconnect...")
+						libs.Logger.Info("connection closed, try to reconnect...")
 						goto RECONNECT
 					}
 
 					goto SEND_MSG
 				}
-				utils.Logger.Debug("success sent messages to brokers",
+				libs.Logger.Debug("success sent messages to brokers",
 					zap.Int("batch", len(msgBatchDelivery)),
 					zap.String("topic", s.Topic),
 					zap.Strings("brokers", s.Brokers),

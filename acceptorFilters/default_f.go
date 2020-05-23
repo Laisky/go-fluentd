@@ -2,7 +2,6 @@ package acceptorFilters
 
 import (
 	"github.com/Laisky/go-fluentd/libs"
-	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 )
 
@@ -19,7 +18,7 @@ type DefaultFilter struct {
 }
 
 func NewDefaultFilter(cfg *DefaultFilterCfg) *DefaultFilter {
-	utils.Logger.Info("NewDefaultFilter")
+	libs.Logger.Info("NewDefaultFilter")
 
 	f := &DefaultFilter{
 		BaseFilter:       &BaseFilter{},
@@ -45,13 +44,13 @@ func (f *DefaultFilter) IsTagInConfigs(tag string) (ok bool) {
 
 func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	if f.RemoveEmptyTag && msg.Tag == "" {
-		utils.Logger.Warn("discard log since empty tag", zap.String("tag", msg.Tag))
+		libs.Logger.Warn("discard log since empty tag", zap.String("tag", msg.Tag))
 		f.DiscardMsg(msg)
 		return nil
 	}
 
 	if f.RemoveUnsupportTag && !f.IsTagInConfigs(msg.Tag) {
-		utils.Logger.Warn("discard log since unsupported tag", zap.String("tag", msg.Tag))
+		libs.Logger.Warn("discard log since unsupported tag", zap.String("tag", msg.Tag))
 		f.DiscardMsg(msg)
 		return nil
 	}

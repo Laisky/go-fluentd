@@ -30,13 +30,7 @@ type Dispatcher struct {
 
 // NewDispatcher create new Dispatcher
 func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
-	utils.Logger.Info("create Dispatcher")
-
-	if cfg.NFork < 0 {
-		utils.Logger.Panic("nfork should bigger than 1")
-	}
-
-	return &Dispatcher{
+	d := &Dispatcher{
 		DispatcherCfg: cfg,
 		outChan:       make(chan *libs.FluentMsg, cfg.OutChanSize),
 		tag2Concator:  &sync.Map{},
@@ -44,11 +38,34 @@ func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 		tag2Cancel:    &sync.Map{},
 		counter:       utils.NewCounter(),
 	}
+	if err := d.valid(); err != nil {
+		libs.Logger.Panic("config invalid", zap.Error(err))
+	}
+
+	libs.Logger.Info("create Dispatcher",
+		zap.Int("n_fork", d.NFork),
+		zap.Int("out_chan_size", d.OutChanSize),
+	)
+	return d
+}
+
+func (d *Dispatcher) valid() error {
+	if d.NFork <= 0 {
+		d.NFork = 4
+		libs.Logger.Info("reset n_fork", zap.Int("n_fork", d.NFork))
+	}
+
+	if d.OutChanSize <= 0 {
+		d.OutChanSize = 1000
+		libs.Logger.Info("reset out_chan_size", zap.Int("out_chan_size", d.OutChanSize))
+	}
+
+	return nil
 }
 
 // Run dispacher to dispatch messages to different concators
 func (d *Dispatcher) Run(ctx context.Context) {
-	utils.Logger.Info("run dispacher...")
+	libs.Logger.Info("run dispacher...")
 	d.registerMonitor()
 	lock := &sync.Mutex{}
 
@@ -62,7 +79,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 				counterI          interface{}
 				msg               *libs.FluentMsg
 			)
-			defer utils.Logger.Info("dispatcher exist with msg", zap.String("msg", fmt.Sprint(msg)))
+			defer libs.Logger.Info("dispatcher exist with msg", zap.String("msg", fmt.Sprint(msg)))
 
 			// send each message to appropriate tagfilter by `tag`
 			for {
@@ -71,7 +88,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 					return
 				case msg, ok = <-d.InChan:
 					if !ok {
-						utils.Logger.Info("inchan closed")
+						libs.Logger.Info("inchan closed")
 						return
 					}
 				}
@@ -82,10 +99,10 @@ func (d *Dispatcher) Run(ctx context.Context) {
 					lock.Lock()
 					if inChanForEachTagi, ok = d.tag2Concator.Load(msg.Tag); !ok { // double check
 						// new tag, create new tagfilter and its inchan
-						utils.Logger.Info("got new tag", zap.String("tag", msg.Tag))
+						libs.Logger.Info("got new tag", zap.String("tag", msg.Tag))
 						ctx2Tag, cancel := context.WithCancel(ctx)
 						if inChanForEachTag, err = d.TagPipeline.Spawn(ctx2Tag, msg.Tag, d.outChan); err != nil {
-							utils.Logger.Error("try to spawn new tagpipeline got error",
+							libs.Logger.Error("try to spawn new tagpipeline got error",
 								zap.Error(err),
 								zap.String("tag", msg.Tag))
 							cancel()
@@ -98,7 +115,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 							d.tag2Concator.Store(msg.Tag, inChanForEachTag)
 							go func(tag string) {
 								<-ctx2Tag.Done()
-								utils.Logger.Info("remove tag in dispatcher", zap.String("tag", tag))
+								libs.Logger.Info("remove tag in dispatcher", zap.String("tag", tag))
 								lock.Lock()
 								d.tag2Concator.Delete(tag)
 								d.tag2Counter.Delete(tag)
@@ -117,7 +134,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 
 				// count
 				if counterI, ok = d.tag2Counter.Load(msg.Tag); !ok {
-					utils.Logger.Panic("counter must exists", zap.String("tag", msg.Tag))
+					libs.Logger.Panic("counter must exists", zap.String("tag", msg.Tag))
 				}
 				counterI.(*utils.Counter).Count()
 
@@ -125,7 +142,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 				select {
 				case inChanForEachTag <- msg:
 				default:
-					utils.Logger.Warn("discard msg since tagfilter's inchan is blocked", zap.String("tag", msg.Tag))
+					libs.Logger.Warn("discard msg since tagfilter's inchan is blocked", zap.String("tag", msg.Tag))
 				}
 			}
 		}()
@@ -137,6 +154,10 @@ func (d *Dispatcher) registerMonitor() {
 		metrics := map[string]interface{}{
 			"msgPerSec": d.counter.GetSpeed(),
 			"msgTotal":  d.counter.Get(),
+			"config": map[string]interface{}{
+				"n_fork":        d.NFork,
+				"out_chan_size": d.OutChanSize,
+			},
 		}
 		d.tag2Counter.Range(func(tagi interface{}, ci interface{}) bool {
 			metrics[tagi.(string)+".MsgPerSec"] = ci.(*utils.Counter).GetSpeed()

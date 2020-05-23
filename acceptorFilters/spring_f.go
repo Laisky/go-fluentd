@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/Laisky/go-fluentd/libs"
-	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 )
 
@@ -40,13 +39,35 @@ func ParseSpringRules(env string, cfg []interface{}) []*SpringReTagRule {
 }
 
 func NewSpringFilter(cfg *SpringFilterCfg) *SpringFilter {
-	utils.Logger.Info("NewSpringFilter",
-		zap.String("tag", cfg.Tag))
-
-	return &SpringFilter{
+	f := &SpringFilter{
 		BaseFilter:      &BaseFilter{},
 		SpringFilterCfg: cfg,
 	}
+	if err := f.valid(); err != nil {
+		libs.Logger.Panic("config invalid", zap.Error(err))
+	}
+
+	libs.Logger.Info("new spring filter",
+		zap.String("tag", f.Tag),
+		zap.String("env", f.Env),
+		zap.String("msg_key", f.MsgKey),
+		zap.String("tag_key", f.TagKey),
+	)
+	return f
+}
+
+func (f *SpringFilter) valid() error {
+	if f.TagKey == "" {
+		f.TagKey = "tag"
+		libs.Logger.Info("reset tag_key", zap.String("tag_key", f.TagKey))
+	}
+
+	if f.MsgKey == "" {
+		f.MsgKey = "log"
+		libs.Logger.Info("reset msg_key", zap.String("msg_key", f.MsgKey))
+	}
+
+	return nil
 }
 
 func (f *SpringFilter) GetName() string {
@@ -63,7 +84,7 @@ func (f *SpringFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	case string:
 		msg.Message[f.MsgKey] = []byte(msg.Message[f.MsgKey].(string))
 	default:
-		utils.Logger.Warn("discard log since unknown type of msg",
+		libs.Logger.Warn("discard log since unknown type of msg",
 			zap.String("tag", msg.Tag),
 			zap.String("msg", fmt.Sprint(msg.Message[f.MsgKey])))
 		f.DiscardMsg(msg)
@@ -72,7 +93,7 @@ func (f *SpringFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	// retag spring to cp/bot/app.spring
 	for _, rule := range f.Rules {
 		if rule.Regexp.Match(msg.Message[f.MsgKey].([]byte)) {
-			utils.Logger.Debug("rewrite tag", zap.String("old", msg.Tag), zap.String("new", rule.NewTag))
+			libs.Logger.Debug("rewrite tag", zap.String("old", msg.Tag), zap.String("new", rule.NewTag))
 			msg.Tag = rule.NewTag
 			msg.Message[f.TagKey] = msg.Tag
 			f.upstreamChan <- msg

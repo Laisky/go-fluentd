@@ -55,8 +55,8 @@ type concatCfg struct {
 type FluentdRecv struct {
 	*BaseRecv
 	*FluentdRecvCfg
+	logger *utils.LoggerType
 
-	logger         *utils.LoggerType
 	concatTagCfg   map[string]*concatCfg
 	pendingMsgPool *sync.Pool
 	concators      []chan *libs.FluentMsg
@@ -70,15 +70,8 @@ type PendingMsg struct {
 
 // NewFluentdRecv create new FluentdRecv
 func NewFluentdRecv(cfg *FluentdRecvCfg) (r *FluentdRecv) {
-	utils.Logger.Info("create FluentdRecv",
-		zap.String("name", cfg.Name),
-		zap.String("lb_key", cfg.LBKey),
-		zap.String("listen", cfg.Addr),
-		zap.Bool("is_rewrite_tag_from_tag_key", cfg.IsRewriteTagFromTagKey),
-		zap.String("origin_rewrite_tag_key", cfg.OriginRewriteTagKey))
-
-	validateConfigs(cfg)
 	r = &FluentdRecv{
+		logger:         libs.Logger.Named(cfg.Name),
 		BaseRecv:       &BaseRecv{},
 		FluentdRecvCfg: cfg,
 		pendingMsgPool: &sync.Pool{
@@ -87,7 +80,9 @@ func NewFluentdRecv(cfg *FluentdRecvCfg) (r *FluentdRecv) {
 			},
 		},
 		concatTagCfg: map[string]*concatCfg{},
-		logger:       utils.Logger.With(zap.String("name", cfg.Name)),
+	}
+	if err := r.valid(); err != nil {
+		libs.Logger.Panic("config invalid", zap.Error(err))
 	}
 
 	tags := []string{}
@@ -100,34 +95,65 @@ func NewFluentdRecv(cfg *FluentdRecvCfg) (r *FluentdRecv) {
 			headRegexp:    regexp.MustCompile(cfg["head_regexp"].(string)),
 		}
 	}
-	r.logger.Info("enable concator for tags", zap.Strings("tags", tags))
+
+	r.logger.Info("create fluentd recv",
+		zap.String("lb_key", r.LBKey),
+		zap.String("tag_key", r.TagKey),
+		zap.String("addr", r.Addr),
+		zap.Strings("tags", tags),
+		zap.Int("n_fork", r.NFork),
+		zap.Bool("is_rewrite_tag_from_tag_key", r.IsRewriteTagFromTagKey),
+		zap.String("origin_rewrite_tag_key", r.OriginRewriteTagKey),
+	)
 	return r
 }
 
-func validateConfigs(cfg *FluentdRecvCfg) {
-	if cfg.IsRewriteTagFromTagKey {
-		if cfg.OriginRewriteTagKey == "" {
-			utils.Logger.Panic("if IsRewriteTagFromTagKey is setted, OriginRewriteTagKey should not empty")
+func (r *FluentdRecv) valid() error {
+	if r.IsRewriteTagFromTagKey {
+		if r.OriginRewriteTagKey == "" {
+			libs.Logger.Panic("if IsRewriteTagFromTagKey is setted, OriginRewriteTagKey should not empty")
 		}
 	}
 
-	if cfg.NFork <= 1 {
-		utils.Logger.Warn("NFork must greater than 0", zap.Int("NFork", cfg.NFork))
-		cfg.NFork = 1
+	if r.NFork <= 0 {
+		r.NFork = 1
+		libs.Logger.Info("reset n_fork", zap.Int("n_fork", r.NFork))
 	}
 
-	if cfg.ConcatorBufSize < 1 {
-		utils.Logger.Warn("ConcatorBufSize must greater than 0", zap.Int("ConcatorBufSize", cfg.ConcatorBufSize))
-		cfg.ConcatorBufSize = 1024
+	if r.ConcatorBufSize <= 0 {
+		r.ConcatorBufSize = 1024
+		libs.Logger.Info("reset internal_buf_size", zap.Int("internal_buf_size", r.ConcatorBufSize))
 
-	} else if cfg.ConcatorBufSize < 1000 {
-		utils.Logger.Warn("ConcatorBufSize better greater than 1000", zap.Int("ConcatorBufSize", cfg.ConcatorBufSize))
+	} else if r.ConcatorBufSize < 1000 {
+		libs.Logger.Warn("internal_buf_size better greater than 1000", zap.Int("internal_buf_size", r.ConcatorBufSize))
 	}
 
-	if cfg.ConcatorWait < 1*time.Second {
-		utils.Logger.Warn("reset ConcatorWait", zap.Duration("old", cfg.ConcatorWait), zap.Duration("new", defaultConcatorWait))
-		cfg.ConcatorWait = defaultConcatorWait
+	if r.ConcatorWait < 1*time.Second {
+		r.ConcatorWait = defaultConcatorWait
+		libs.Logger.Info("reset concat_with_sec", zap.Duration("concat_with_sec", r.ConcatorWait))
 	}
+
+	if r.ConcatMaxLen == 0 {
+		r.ConcatMaxLen = 300000
+		libs.Logger.Warn("reset concat_max_len", zap.Int("concat_max_len", r.ConcatMaxLen))
+	}
+
+	if r.TagKey == "" {
+		r.TagKey = "tag"
+		libs.Logger.Info("reset tag_key", zap.String("tag_key", r.TagKey))
+	}
+
+	if r.LBKey == "" {
+		r.LBKey = "container_id"
+		libs.Logger.Info("reset lb_key", zap.String("lb_key", r.LBKey))
+	}
+
+	if r.Addr == "" {
+		r.Addr = "0.0.0.0:24225"
+		libs.Logger.Info("reset addr", zap.String("addr", r.Addr))
+	}
+
+	return nil
 }
 
 // GetName return the name of this recv
@@ -309,7 +335,7 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 		}
 
 		totalMsgCnt += msgCnt
-		utils.Logger.Debug("msg stats", zap.Int("total", totalMsgCnt))
+		libs.Logger.Debug("msg stats", zap.Int("total", totalMsgCnt))
 	}
 }
 

@@ -25,18 +25,16 @@ type PostPipeline struct {
 }
 
 func NewPostPipeline(cfg *PostPipelineCfg, filters ...PostFilterItf) *PostPipeline {
-	utils.Logger.Info("NewPostPipeline")
-
-	if cfg.NFork < 1 {
-		panic(fmt.Errorf("NFork should greater than 1, got: %v", cfg.NFork))
-	}
-
 	pp := &PostPipeline{
 		PostPipelineCfg: cfg,
 		counter:         utils.NewCounter(),
 		filters:         filters,
 		reEnterChan:     make(chan *libs.FluentMsg, cfg.ReEnterChanSize),
 	}
+	if err := pp.valid(); err != nil {
+		libs.Logger.Panic("cfg invalid", zap.Error(err))
+	}
+
 	pp.registerMonitor()
 
 	for _, filter := range pp.filters {
@@ -45,7 +43,31 @@ func NewPostPipeline(cfg *PostPipelineCfg, filters ...PostFilterItf) *PostPipeli
 		filter.SetWaitCommitChan(pp.WaitCommitChan)
 	}
 
+	libs.Logger.Info("new post pipeline",
+		zap.Int("n_fork", pp.NFork),
+		zap.Int("out_buf_len", pp.OutChanSize),
+		zap.Int("reenter_chan_len", pp.ReEnterChanSize),
+	)
 	return pp
+}
+
+func (f *PostPipeline) valid() error {
+	if f.NFork < 1 {
+		f.NFork = 4
+		libs.Logger.Info("reset n_fork", zap.Int("n_fork", f.NFork))
+	}
+
+	if f.OutChanSize <= 0 {
+		f.OutChanSize = 1000
+		libs.Logger.Info("reset out_buf_len", zap.Int("out_buf_len", f.OutChanSize))
+	}
+
+	if f.ReEnterChanSize <= 0 {
+		f.ReEnterChanSize = 1000
+		libs.Logger.Info("reset reenter_chan_len", zap.Int("reenter_chan_len", f.ReEnterChanSize))
+	}
+
+	return nil
 }
 
 func (f *PostPipeline) registerMonitor() {
@@ -67,7 +89,7 @@ func (f *PostPipeline) Wrap(ctx context.Context, inChan chan *libs.FluentMsg) (o
 				msg    *libs.FluentMsg
 				ok     bool
 			)
-			defer utils.Logger.Info("quit postPipeline", zap.Int("i", i), zap.String("msg", fmt.Sprint(msg)))
+			defer libs.Logger.Info("quit postPipeline", zap.Int("i", i), zap.String("msg", fmt.Sprint(msg)))
 
 		NEW_MSG:
 			for {
@@ -76,12 +98,12 @@ func (f *PostPipeline) Wrap(ctx context.Context, inChan chan *libs.FluentMsg) (o
 					return
 				case msg, ok = <-f.reEnterChan:
 					if !ok {
-						utils.Logger.Info("reEnterChan closed")
+						libs.Logger.Info("reEnterChan closed")
 						return
 					}
 				case msg, ok = <-inChan:
 					if !ok {
-						utils.Logger.Info("inChan closed")
+						libs.Logger.Info("inChan closed")
 						return
 					}
 				}

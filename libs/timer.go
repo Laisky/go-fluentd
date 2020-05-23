@@ -2,8 +2,6 @@ package libs
 
 import (
 	"time"
-
-	utils "github.com/Laisky/go-utils"
 )
 
 type TimerConfig struct {
@@ -30,11 +28,11 @@ type Timer struct {
 
 func NewTimer(cfg *TimerConfig) *Timer {
 	if cfg.waitTs < 1*time.Millisecond {
-		utils.Logger.Panic("timer interval should not less than 1ms")
+		Logger.Panic("timer interval should not less than 1ms")
 	}
 
 	if cfg.maxWaitTs <= cfg.waitTs {
-		utils.Logger.Panic("maxWaitTs should bigger than waitTs")
+		Logger.Panic("maxWaitTs should bigger than waitTs")
 	}
 
 	return &Timer{
@@ -56,7 +54,7 @@ func (t *Timer) Sleep() {
 	if t.cfg.nWaits == t.cfg.nWaitsToDouble {
 		if t.cfg.waitTs < t.cfg.maxWaitTs-t.cfg.waitTs {
 			t.cfg.waitTs += t.cfg.waitTs
-			// utils.Logger.Debug("timer double waitTs", zap.Duration("waitTs", t.cfg.waitTs))
+			// Logger.Debug("timer double waitTs", zap.Duration("waitTs", t.cfg.waitTs))
 		} else {
 			t.cfg.waitTs = t.cfg.maxWaitTs
 			t.cfg.nWaits = t.cfg.nWaitsToDouble + 1

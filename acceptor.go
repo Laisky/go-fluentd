@@ -28,30 +28,53 @@ type Acceptor struct {
 
 // NewAcceptor create new Acceptor
 func NewAcceptor(cfg *AcceptorCfg, recvs ...recvs.AcceptorRecvItf) *Acceptor {
-	utils.Logger.Info("create Acceptor")
-
-	if cfg.MaxRotateID < 100 {
-		utils.Logger.Error("MaxRotateID should not too small", zap.Int64("rotate", cfg.MaxRotateID))
-	} else if cfg.MaxRotateID < 1000000 {
-		utils.Logger.Warn("MaxRotateID should not too small", zap.Int64("rotate", cfg.MaxRotateID))
-	}
-
-	return &Acceptor{
+	a := &Acceptor{
 		AcceptorCfg:  cfg,
 		syncOutChan:  make(chan *libs.FluentMsg, cfg.SyncOutChanSize),
 		asyncOutChan: make(chan *libs.FluentMsg, cfg.AsyncOutChanSize),
 		recvs:        recvs,
 	}
+	if err := a.valid(); err != nil {
+		libs.Logger.Panic("new acceptor", zap.Error(err))
+	}
+
+	libs.Logger.Info("create acceptor",
+		zap.Int64("max_rotate_id", a.MaxRotateID),
+		zap.Int("sync_out_chan_size", a.SyncOutChanSize),
+		zap.Int("async_out_chan_size", a.AsyncOutChanSize),
+	)
+	return a
+}
+
+func (a *Acceptor) valid() error {
+	if a.MaxRotateID == 0 {
+		a.MaxRotateID = 372036854775807
+		libs.Logger.Info("reset max_rotate_id", zap.Int64("max_rotate_id", a.MaxRotateID))
+	} else if a.MaxRotateID < 1000000 {
+		libs.Logger.Warn("max_rotate_id should not too small", zap.Int64("max_rotate_id", a.MaxRotateID))
+	}
+
+	if a.SyncOutChanSize == 0 {
+		a.SyncOutChanSize = 10000
+		libs.Logger.Info("reset sync_out_chan_size", zap.Int("sync_out_chan_size", a.SyncOutChanSize))
+	}
+
+	if a.AsyncOutChanSize == 0 {
+		a.AsyncOutChanSize = 10000
+		libs.Logger.Info("reset async_out_chan_size", zap.Int("async_out_chan_size", a.AsyncOutChanSize))
+	}
+
+	return nil
 }
 
 // Run starting acceptor to listening and receive messages,
 // you can use `acceptor.MessageChan()` to load messages`
 func (a *Acceptor) Run(ctx context.Context) {
 	// got exists max id from legacy
-	utils.Logger.Info("process legacy data...")
+	libs.Logger.Info("process legacy data...")
 	maxID, err := a.Journal.LoadMaxID()
 	if err != nil {
-		utils.Logger.Panic("try to process legacy messages got error", zap.Error(err))
+		libs.Logger.Panic("try to process legacy messages got error", zap.Error(err))
 	}
 
 	couter, err := utils.NewParallelCounterFromN((maxID+1)%a.MaxRotateID, 10000, a.MaxRotateID)
@@ -60,7 +83,7 @@ func (a *Acceptor) Run(ctx context.Context) {
 	}
 
 	for _, recv := range a.recvs {
-		utils.Logger.Info("enable recv", zap.String("name", recv.GetName()))
+		libs.Logger.Info("enable recv", zap.String("name", recv.GetName()))
 		recv.SetAsyncOutChan(a.asyncOutChan)
 		recv.SetSyncOutChan(a.syncOutChan)
 		recv.SetMsgPool(a.MsgPool)

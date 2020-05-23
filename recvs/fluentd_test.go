@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/rand"
 	"net"
+	"runtime"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 
 func TestFluentdRecv(t *testing.T) {
 	var (
+		ctx, cancel  = context.WithCancel(context.Background())
 		err          error
 		syncOutChan  = make(chan *libs.FluentMsg, 1000)
 		asyncOutChan = make(chan *libs.FluentMsg, 1000)
@@ -22,6 +24,7 @@ func TestFluentdRecv(t *testing.T) {
 		// cfg
 		tag = "test.sit"
 	)
+	defer cancel()
 
 	cfg := &recvs.FluentdRecvCfg{
 		NFork:           3,
@@ -38,8 +41,9 @@ func TestFluentdRecv(t *testing.T) {
 	recv.SetSyncOutChan(syncOutChan)
 
 	go func() {
-		recv.Run(context.Background())
+		recv.Run(ctx)
 	}()
+	runtime.Gosched()
 	time.Sleep(100 * time.Millisecond)
 	cnt := 0
 
@@ -53,7 +57,7 @@ func TestFluentdRecv(t *testing.T) {
 
 	msg := &libs.FluentMsg{
 		Tag:     tag,
-		Message: map[string]interface{}{"a": "b"},
+		Message: map[string]interface{}{"a": "b", "container_id": "lbkey"},
 		Id:      123,
 	}
 	encoder := libs.NewFluentEncoder(conn)
@@ -68,17 +72,17 @@ func TestFluentdRecv(t *testing.T) {
 	msgBatch := []*libs.FluentMsg{
 		{
 			Tag:     tag,
-			Message: map[string]interface{}{"a": "b"},
+			Message: map[string]interface{}{"a": "b", "container_id": "lbkey"},
 			Id:      123,
 		},
 		{
 			Tag:     tag,
-			Message: map[string]interface{}{"a": "b"},
+			Message: map[string]interface{}{"a": "b", "container_id": "lbkey"},
 			Id:      123,
 		},
 		{
 			Tag:     tag,
-			Message: map[string]interface{}{"a": "b"},
+			Message: map[string]interface{}{"a": "b", "container_id": "lbkey"},
 			Id:      123,
 		},
 	}
@@ -86,6 +90,7 @@ func TestFluentdRecv(t *testing.T) {
 		t.Fatalf("got error: %+v", err)
 	}
 	encoder.Flush()
+	runtime.Gosched()
 	time.Sleep(100 * time.Millisecond)
 
 	// check msg

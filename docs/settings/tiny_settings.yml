@@ -12,6 +12,7 @@ consts:
 settings:
   acceptor:
     recvs:
+      plugins:
         # 监听 DC/OS fluentd log-driver 的日志
         fluentd:
           type: fluentd
@@ -54,17 +55,12 @@ settings:
         type: parser
         tags:
           - test
-        msg_key: log
         # 2018-03-06 16:56:22.514 | mscparea | INFO  | http-nio-8080-exec-1 | com.google.cloud.cp.core.service.impl.CPBusiness.reflectAdapterRequest | 84: test
         pattern: (?ms)^(?P<time>.{23}) {0,}\| {0,}(?P<app>[^\|]+) {0,}\| {0,}(?P<level>[^\|]+) {0,}\| {0,}(?P<thread>[^\|]+) {0,}\| {0,}(?P<class>[^ ]+) {0,}\| {0,}(?P<line>\d+) {0,}([\|:] {0,}(?P<args>\{.*\}))?([\|:] {0,}(?P<message>.*))?
         is_remove_orig_log: true
         must_include: app
         # ⬇⬇ time
-        time_key: time
         time_format: "2006-01-02 15:04:05.000 -0700"
-        new_time_format: "2006-01-02T15:04:05.000000Z"
-        reserved_time_key: false
-        new_time_key: "@timestamp"
         append_time_zone:
           sit: "+0800"
           perf: "+0800"

@@ -220,16 +220,12 @@ type ParserFact struct {
 }
 
 func NewParserFact(cfg *ParserFactCfg) *ParserFact {
-	libs.Logger.Info("create new connectorfactory")
-
-	if cfg.NFork < 1 {
-		libs.Logger.Warn("nfork should bigger than 1")
-		cfg.NFork = 1
-	}
-
 	cf := &ParserFact{
 		BaseTagFilterFactory: &BaseTagFilterFactory{},
 		ParserFactCfg:        cfg,
+	}
+	if err := cf.valid(); err != nil {
+		libs.Logger.Panic("new parser", zap.Error(err))
 	}
 
 	cf.tagsset = map[string]struct{}{}
@@ -238,7 +234,49 @@ func NewParserFact(cfg *ParserFactCfg) *ParserFact {
 		cf.tagsset[tag+"."+cf.Env] = struct{}{}
 	}
 
+	libs.Logger.Info("new parser",
+		zap.Int("n_fork", cf.NFork),
+		zap.String("msg_key", cf.MsgKey),
+		zap.String("time_key", cf.TimeKey),
+		zap.String("new_time_format", cf.NewTimeFormat),
+		zap.String("new_time_key", cf.NewTimeKey),
+		zap.String("msg_key", cf.MsgKey),
+	)
 	return cf
+}
+
+func (cf *ParserFact) valid() error {
+	if cf.NFork < 1 {
+		cf.NFork = 4
+		libs.Logger.Info("reset n_fork", zap.Int("n_fork", cf.NFork))
+	}
+
+	if cf.MsgKey == "" {
+		cf.MsgKey = "log"
+		libs.Logger.Info("reset msg_key", zap.String("msg_key", cf.MsgKey))
+	}
+
+	if cf.TimeKey == "" {
+		cf.TimeKey = "time"
+		libs.Logger.Info("reset time_key", zap.String("time_key", cf.TimeKey))
+	}
+
+	if cf.NewTimeFormat == "" {
+		cf.NewTimeFormat = "2006-01-02T15:04:05.000000Z"
+		libs.Logger.Info("reset new_time_format", zap.String("new_time_format", cf.NewTimeFormat))
+	}
+
+	if cf.NewTimeKey == "" {
+		cf.NewTimeKey = "@timestamp"
+		libs.Logger.Info("reset new_time_key", zap.String("new_time_key", cf.NewTimeKey))
+	}
+
+	if cf.MsgKey == "" {
+		cf.MsgKey = "log"
+		libs.Logger.Info("reset msg_key", zap.String("msg_key", cf.MsgKey))
+	}
+
+	return nil
 }
 
 func (cf *ParserFact) GetName() string {

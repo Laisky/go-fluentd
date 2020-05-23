@@ -28,31 +28,43 @@ type Acceptor struct {
 
 // NewAcceptor create new Acceptor
 func NewAcceptor(cfg *AcceptorCfg, recvs ...recvs.AcceptorRecvItf) *Acceptor {
-	libs.Logger.Info("create Acceptor")
-
-	if cfg.MaxRotateID == 0 {
-		cfg.MaxRotateID = 372036854775807
-		libs.Logger.Info("reset MaxRotateID", zap.Int("MaxRotateID", 372036854775807))
-	} else if cfg.MaxRotateID < 100 {
-		libs.Logger.Error("MaxRotateID should not too small", zap.Int64("rotate", cfg.MaxRotateID))
-	} else if cfg.MaxRotateID < 1000000 {
-		libs.Logger.Warn("MaxRotateID should not too small", zap.Int64("rotate", cfg.MaxRotateID))
-	}
-	if cfg.SyncOutChanSize == 0 {
-		cfg.SyncOutChanSize = 10000
-		libs.Logger.Info("reset SyncOutChanSize", zap.Int("SyncOutChanSize", 10000))
-	}
-	if cfg.AsyncOutChanSize == 0 {
-		cfg.AsyncOutChanSize = 10000
-		libs.Logger.Info("reset AsyncOutChanSize", zap.Int("AsyncOutChanSize", 10000))
-	}
-
-	return &Acceptor{
+	a := &Acceptor{
 		AcceptorCfg:  cfg,
 		syncOutChan:  make(chan *libs.FluentMsg, cfg.SyncOutChanSize),
 		asyncOutChan: make(chan *libs.FluentMsg, cfg.AsyncOutChanSize),
 		recvs:        recvs,
 	}
+	if err := a.valid(); err != nil {
+		libs.Logger.Panic("new acceptor", zap.Error(err))
+	}
+
+	libs.Logger.Info("create acceptor",
+		zap.Int64("max_rotate_id", a.MaxRotateID),
+		zap.Int("sync_out_chan_size", a.SyncOutChanSize),
+		zap.Int("async_out_chan_size", a.AsyncOutChanSize),
+	)
+	return a
+}
+
+func (a *Acceptor) valid() error {
+	if a.MaxRotateID == 0 {
+		a.MaxRotateID = 372036854775807
+		libs.Logger.Info("reset max_rotate_id", zap.Int64("max_rotate_id", a.MaxRotateID))
+	} else if a.MaxRotateID < 1000000 {
+		libs.Logger.Warn("max_rotate_id should not too small", zap.Int64("max_rotate_id", a.MaxRotateID))
+	}
+
+	if a.SyncOutChanSize == 0 {
+		a.SyncOutChanSize = 10000
+		libs.Logger.Info("reset sync_out_chan_size", zap.Int("sync_out_chan_size", a.SyncOutChanSize))
+	}
+
+	if a.AsyncOutChanSize == 0 {
+		a.AsyncOutChanSize = 10000
+		libs.Logger.Info("reset async_out_chan_size", zap.Int("async_out_chan_size", a.AsyncOutChanSize))
+	}
+
+	return nil
 }
 
 // Run starting acceptor to listening and receive messages,

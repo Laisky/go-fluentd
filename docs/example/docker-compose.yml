@@ -10,7 +10,7 @@ services:
       driver: "fluentd"
       options:
         tag: test.sit
-        fluentd-address: "127.0.0.1:24225"
+        fluentd-address: "127.0.0.1:25225"
         fluentd-async-connect: "true"
         mode: non-blocking
         max-buffer-size: 1m
@@ -23,10 +23,11 @@ services:
     image: ppcelery/go-fluentd:test
     restart: "on-failure"
     ports:
-      - 8080:8080
-      - 24225:24225
+      - 28080:8080
+      - 25225:24225
     volumes:
       - ./go-fluentd/settings.yml:/etc/go-fluentd/settings.yml:ro
+      - ./data:/data
     command: --config=/etc/go-fluentd/settings.yml
       --env=sit
       --addr=0.0.0.0:8080

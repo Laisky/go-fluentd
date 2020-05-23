@@ -571,14 +571,17 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 			default:
 				select {
 				case jji.(chan *libs.FluentMsg) <- msg:
-				case j.outChan <- msg:
-					libs.Logger.Warn("skip dump since journal is busy", zap.String("tag", msg.Tag))
 				default:
-					libs.Logger.Error("discard log since of journal & downstream busy",
-						zap.String("tag", msg.Tag),
-						zap.String("msg", fmt.Sprint(msg)),
-					)
-					j.MsgPool.Put(msg)
+					select {
+					case j.outChan <- msg:
+						libs.Logger.Warn("skip dump since journal is busy", zap.String("tag", msg.Tag))
+					default:
+						libs.Logger.Error("discard log since of journal & downstream busy",
+							zap.String("tag", msg.Tag),
+							zap.String("msg", fmt.Sprint(msg)),
+						)
+						j.MsgPool.Put(msg)
+					}
 				}
 			}
 		}
@@ -641,7 +644,18 @@ func (j *Journal) startCommitRunner(ctx context.Context) {
 
 func (j *Journal) registerMonitor() {
 	monitor.AddMetric("journal", func() map[string]interface{} {
-		result := map[string]interface{}{}
+		result := map[string]interface{}{
+			"config": map[string]interface{}{
+				"compress":             j.IsCompress,
+				"buf_dir_path":         j.BufDirPath,
+				"buf_file_bytes":       j.BufSizeBytes,
+				"gc_inteval_sec":       j.GCIntervalSec / time.Second,
+				"journal_out_chan_len": j.JournalOutChanLen,
+				"commit_id_chan_len":   j.CommitIDChanLen,
+				"child_data_chan_len":  j.ChildJournalDataInchanLen,
+				"child_id_chan_len":    j.ChildJournalIDInchanLen,
+			},
+		}
 		j.tag2JMap.Range(func(k, v interface{}) bool {
 			result[k.(string)+".journal"] = v.(*journal.Journal).GetMetric()
 			return true

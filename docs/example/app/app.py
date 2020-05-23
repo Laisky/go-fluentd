@@ -44,7 +44,7 @@ def main():
     while 1:
         cnt += 1
         print(produce_log())
-        time.sleep(0.01)
+        time.sleep(0.1)
         if time.time() - t > 10:
             t = time.time()
             print(produce_log() + f"speed: {cnt/10}/s")

@@ -94,7 +94,7 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) (*Producer, err
 	}
 
 	libs.Logger.Info("new producer",
-		zap.Int("nfork", 1),
+		zap.Int("nfork", p.NFork),
 		zap.Int("discard_chan_size", p.DiscardChanSize),
 	)
 	return p, nil
@@ -102,7 +102,7 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) (*Producer, err
 
 func (p *Producer) valid() error {
 	if p.NFork <= 0 {
-		p.NFork = 1
+		p.NFork = 4
 		libs.Logger.Info("reset nfork", zap.Int("nfork", 1))
 	}
 
@@ -118,6 +118,10 @@ func (p *Producer) valid() error {
 func (p *Producer) registerMonitor() {
 	monitor.AddMetric("producer", func() map[string]interface{} {
 		metrics := map[string]interface{}{
+			"config": map[string]interface{}{
+				"nfork":             p.NFork,
+				"discard_chan_size": p.DiscardChanSize,
+			},
 			"msgPerSec": p.counter.GetSpeed(),
 			"msgTotal":  p.counter.Get(),
 		}

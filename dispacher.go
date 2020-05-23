@@ -30,8 +30,6 @@ type Dispatcher struct {
 
 // NewDispatcher create new Dispatcher
 func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
-	libs.Logger.Info("create Dispatcher")
-
 	d := &Dispatcher{
 		DispatcherCfg: cfg,
 		outChan:       make(chan *libs.FluentMsg, cfg.OutChanSize),
@@ -44,6 +42,10 @@ func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 		libs.Logger.Panic("config invalid", zap.Error(err))
 	}
 
+	libs.Logger.Info("create Dispatcher",
+		zap.Int("n_fork", d.NFork),
+		zap.Int("out_chan_size", d.OutChanSize),
+	)
 	return d
 }
 
@@ -152,6 +154,10 @@ func (d *Dispatcher) registerMonitor() {
 		metrics := map[string]interface{}{
 			"msgPerSec": d.counter.GetSpeed(),
 			"msgTotal":  d.counter.Get(),
+			"config": map[string]interface{}{
+				"n_fork":        d.NFork,
+				"out_chan_size": d.OutChanSize,
+			},
 		}
 		d.tag2Counter.Range(func(tagi interface{}, ci interface{}) bool {
 			metrics[tagi.(string)+".MsgPerSec"] = ci.(*utils.Counter).GetSpeed()

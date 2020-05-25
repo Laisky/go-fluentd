@@ -180,28 +180,28 @@ func (j *Journal) initLegacyJJ(ctx context.Context) {
 }
 
 // LoadMaxID load the max committed id from journal
-func (j *Journal) LoadMaxID() (id int64, err error) {
+func (j *Journal) LoadMaxID() (maxID int64, err error) {
 	var (
-		nid  int64
-		tag  string
-		jj   *journal.Journal
-		err2 error
+		tag string
+		jj  *journal.Journal
+		id  int64
 	)
 	j.tag2JMap.Range(func(k, v interface{}) bool {
 		tag = k.(string)
 		jj = v.(*journal.Journal)
-		if nid, err2 = jj.LoadMaxId(); err2 != nil {
-			if nid > id {
-				id = nid
-			}
-		} else {
-			err = errors.Wrapf(err2, "try to load max id with tag `%v` got error", tag)
+		if id, err = jj.LoadMaxId(); err != nil {
+			err = errors.Wrapf(err, "load max id with tag `%s`;", tag)
+			return false
+		}
+
+		if id > maxID {
+			maxID = id
 		}
 
 		return true
 	})
 
-	return nid, err
+	return maxID, err
 }
 
 func (j *Journal) ProcessLegacyMsg(dumpChan chan *libs.FluentMsg) (maxID int64, err2 error) {
@@ -344,7 +344,7 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 	}
 
 	// create ids writer
-	go func(ctx context.Context) {
+	go func() {
 		var (
 			mid             int64
 			err             error
@@ -409,10 +409,10 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 
 			j.MsgPool.Put(msg)
 		}
-	}(ctx)
+	}()
 
 	// create data writer
-	go func(ctx context.Context) {
+	go func() {
 		var (
 			data            = &journal.Data{Data: map[string]interface{}{}}
 			err             error
@@ -457,6 +457,7 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 				}
 				break
 			}
+
 			if err != nil && nRetry == maxRetry {
 				libs.Logger.Error("try to write msg to journal got error",
 					zap.Error(err),
@@ -472,7 +473,7 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 				j.MsgPool.Put(msg)
 			}
 		}
-	}(ctx)
+	}()
 }
 
 func (j *Journal) GetOutChan() chan *libs.FluentMsg {
@@ -495,12 +496,11 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 			case <-ctx.Done():
 				return
 			default:
+				if _, err = j.ProcessLegacyMsg(dumpChan); err != nil {
+					libs.Logger.Error("process legacy got error", zap.Error(err))
+				}
+				time.Sleep(intervalToStartingLegacy)
 			}
-
-			if _, err = j.ProcessLegacyMsg(dumpChan); err != nil {
-				libs.Logger.Error("process legacy got error", zap.Error(err))
-			}
-			time.Sleep(intervalToStartingLegacy)
 		}
 	}()
 
@@ -512,10 +512,9 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 			case <-ctx.Done():
 				return
 			default:
+				utils.ForceGCBlocking()
+				time.Sleep(j.GCIntervalSec)
 			}
-
-			utils.ForceGCBlocking()
-			time.Sleep(j.GCIntervalSec)
 		}
 	}()
 
@@ -535,9 +534,9 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 					libs.Logger.Info("skipDumpChan closed")
 					return
 				}
-			}
 
-			j.outChan <- msg
+				j.outChan <- msg
+			}
 		}
 	}()
 

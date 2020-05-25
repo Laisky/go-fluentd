@@ -100,7 +100,8 @@ func (s *FluentSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 }
 
 func (s *FluentSender) spawnChildSenderForTag(ctx context.Context, tag string, inChan chan *libs.FluentMsg) {
-	libs.Logger.Info("spawn fluentd child sender", zap.String("tag", tag))
+	logger := libs.Logger.With(zap.String("tag", tag), zap.String("addr", s.Addr))
+	logger.Info("spawn fluentd child sender")
 	var (
 		nRetry           int
 		maxRetry         = 3
@@ -113,88 +114,94 @@ func (s *FluentSender) spawnChildSenderForTag(ctx context.Context, tag string, i
 		conn             net.Conn
 		err              error
 		ok               bool
-		ticker           = time.NewTicker(s.MaxWait)
 	)
+	ticker := time.NewTicker(s.MaxWait)
 	defer ticker.Stop()
 
 RECONNECT: // reconnect to downstream
-	conn, err = net.DialTimeout("tcp", s.Addr, 10*time.Second)
-	if err != nil {
-		libs.Logger.Error("try to connect to backend got error", zap.Error(err), zap.String("tag", tag))
-		goto RECONNECT
-	}
-	libs.Logger.Info("connected to backend",
-		zap.String("backend", conn.RemoteAddr().String()),
-		zap.String("tag", tag))
-
-	encoder = libs.NewFluentEncoder(conn) // one encoder for each connection
 	for {
-		select {
-		case <-ctx.Done():
-			return
-		case msg, ok = <-inChan:
-			if !ok {
-				libs.Logger.Info("inChan closed")
+		if conn, err = net.DialTimeout("tcp", s.Addr, 10*time.Second); err != nil {
+			logger.Error("connect to fluentd server",
+				zap.Error(err), zap.String("tag", tag))
+			time.Sleep(time.Second)
+			continue RECONNECT
+		}
+
+		logger.Info("connected to backend",
+			zap.String("backend", conn.RemoteAddr().String()),
+			zap.String("tag", tag))
+
+		encoder = libs.NewFluentEncoder(conn) // one encoder for each connection
+	NEW_MSG:
+		for {
+			select {
+			case <-ctx.Done():
 				return
-			}
-			msgBatch[iBatch] = msg
-			iBatch++
-		case <-ticker.C:
-			if iBatch == 0 {
-				continue
-			}
-			msg = msgBatch[iBatch-1]
-		}
+			case msg, ok = <-inChan:
+				if !ok {
+					logger.Info("inchan closed")
+					return
+				}
 
-		if iBatch < s.BatchSize &&
-			utils.Clock.GetUTCNow().Sub(lastT) < s.MaxWait {
-			continue
-		}
+				msgBatch[iBatch] = msg
+				iBatch++
+			case <-ticker.C:
+				if iBatch == 0 {
+					continue NEW_MSG
+				}
+			}
 
-		lastT = utils.Clock.GetUTCNow()
-		msgBatchDelivery = msgBatch[:iBatch]
-		iBatch = 0
-		nRetry = 0
-		if utils.Settings.GetBool("dry") {
-			libs.Logger.Info("send message to backend",
-				zap.String("tag", tag),
-				zap.String("log", fmt.Sprint(msgBatch[0].Message)))
+			if iBatch < s.BatchSize &&
+				utils.Clock.GetUTCNow().Sub(lastT) < s.MaxWait {
+				continue NEW_MSG
+			}
+
+			lastT = utils.Clock.GetUTCNow()
+			msgBatchDelivery = msgBatch[:iBatch]
+			iBatch = 0
+			if utils.Settings.GetBool("dry") {
+				logger.Info("send message to backend",
+					zap.String("log", fmt.Sprint(msgBatch[0].Message)))
+				for _, msg = range msgBatchDelivery {
+					s.successedChan <- msg
+				}
+
+				continue NEW_MSG
+			}
+
+			nRetry = 0
+			for {
+				if err = encoder.EncodeBatch(tag, msgBatchDelivery); err != nil {
+					logger.Error("encode msg batch", zap.Error(err))
+					nRetry++
+					// resend too many times, try reconnect
+					if nRetry >= maxRetry {
+						logger.Error("discard msg since of sender err",
+							zap.Int("num", len(msgBatchDelivery)))
+						for _, msg = range msgBatchDelivery {
+							s.failedChan <- msg
+						}
+
+						if err = conn.Close(); err != nil {
+							logger.Error("try to close connection got error", zap.Error(err))
+						}
+
+						logger.Info("connection closed, try to reconnect...")
+						continue RECONNECT
+					}
+
+					continue
+				}
+
+				break
+			}
+
+			encoder.Flush()
+			logger.Debug("successed send message to backend",
+				zap.Int("batch", len(msgBatchDelivery)))
 			for _, msg = range msgBatchDelivery {
 				s.successedChan <- msg
 			}
-			continue
-		}
-
-		for nRetry < maxRetry {
-			nRetry++
-			if err = encoder.EncodeBatch(tag, msgBatchDelivery); err != nil {
-				libs.Logger.Debug("encode msg batch", zap.Error(err))
-				continue
-			}
-			break
-		}
-
-		if nRetry >= maxRetry {
-			libs.Logger.Error("try send message got error", zap.Error(err), zap.String("tag", tag))
-			libs.Logger.Error("discard msg since of sender err", zap.String("tag", msg.Tag), zap.Int("num", len(msgBatchDelivery)))
-			for _, msg = range msgBatchDelivery {
-				s.failedChan <- msg
-			}
-
-			if err = conn.Close(); err != nil {
-				libs.Logger.Error("try to close connection got error", zap.Error(err))
-			}
-			libs.Logger.Info("connection closed, try to reconnect...")
-			goto RECONNECT
-		}
-
-		encoder.Flush()
-		libs.Logger.Debug("success sent message to backend",
-			zap.Int("batch", len(msgBatchDelivery)),
-			zap.String("backend", s.Addr),
-			zap.String("tag", tag))
-		for _, msg = range msgBatchDelivery {
-			s.successedChan <- msg
 		}
 	}
 }

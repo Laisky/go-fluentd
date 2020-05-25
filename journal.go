@@ -234,8 +234,10 @@ func (j *Journal) ProcessLegacyMsg(dumpChan chan *libs.FluentMsg) (maxID int64, 
 			startTs := utils.Clock.GetUTCNow()
 		NEXT_LEGACY_MSG:
 			for {
+				// msgp will overwrite new data to old map without
+				// create new map to avoid old data contaminate
 				msg = j.MsgPool.Get().(*libs.FluentMsg)
-				data.Data["message"] = nil // alloc new map to avoid old data contaminate
+				data.Data["message"] = nil
 				if err = jj.LoadLegacyBuf(data); err == io.EOF {
 					libs.Logger.Debug("load legacy buf done",
 						zap.Float64("sec", utils.Clock.GetUTCNow().Sub(startTs).Seconds()),
@@ -286,7 +288,8 @@ func (j *Journal) ProcessLegacyMsg(dumpChan chan *libs.FluentMsg) (maxID int64, 
 					case dumpChan <- msg:
 						continue NEXT_LEGACY_MSG
 					default:
-						time.Sleep(defaultJournalLegacyWait) // do not block dumpchan
+						// do not block dumpchan
+						time.Sleep(defaultJournalLegacyWait)
 					}
 				}
 			}

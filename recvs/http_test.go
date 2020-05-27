@@ -75,11 +75,11 @@ func TestHTTPRecv(t *testing.T) {
 	if vi, ok := resp["msgid"]; !ok {
 		t.Fatalf("should contains msgid")
 	} else {
-		switch v := vi.(type) {
+		switch vi := vi.(type) {
 		case int:
-			t.Logf("got id: %v", v)
+			t.Logf("got id: %v", vi)
 		case float64:
-			t.Logf("got id: %v", v)
+			t.Logf("got id: %v", vi)
 		default:
 			t.Fatalf("msgid should be int")
 		}

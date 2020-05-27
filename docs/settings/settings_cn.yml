@@ -784,13 +784,13 @@ settings:
         # 增加新字段，格式为 tag: key:val。
         add:  # optional
           # 为 ai.<env> 的消息加上新的 {"datasource": "ai"}
-          ai:
+          ai.{env}:
             datasource: ai
-          tsp:
+          tsp.{env}:
             datasource: tsp
-          base:
+          base.{env}:
             datasource: base
-          bot:
+          bot.{env}:
             datasource: bot
-          app.spring:
+          app.spring.{env}:
             datasource: spring

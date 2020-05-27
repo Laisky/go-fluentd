@@ -12,20 +12,51 @@ import (
 	"github.com/Laisky/zap"
 )
 
-func ParseAddCfg(env string, cfg interface{}) map[string]map[string]string {
-	ret := map[string]map[string]string{}
+var keyReplaceRegexp = regexp.MustCompile(`\%\{([\w\-_]+)\}`)
+
+func replaceByKey(msg *libs.FluentMsg, v string) string {
+	var (
+		keys = map[string]struct{}{}
+		key  string
+		ok   bool
+		vi   interface{}
+	)
+	for _, grp := range keyReplaceRegexp.FindAllStringSubmatch(v, -1) {
+		if len(grp) < 2 || grp[1] == "" {
+			continue
+		}
+
+		key = grp[1]
+		// already replaced this key
+		if _, ok = keys[key]; ok {
+			continue
+		}
+
+		if vi, ok = msg.Message[key]; !ok {
+			vi = ""
+		}
+
+		keys[key] = struct{}{}
+		v = strings.ReplaceAll(v, "%{"+key+"}", fmt.Sprint(vi))
+	}
+
+	return v
+}
+
+func ParseAddCfg(env string, cfg interface{}) map[string]map[string]interface{} {
+	ret := map[string]map[string]interface{}{}
 	if cfg == nil {
 		return ret
 	}
 
 	for tag, vi := range cfg.(map[string]interface{}) {
-		tag = tag + "." + env
+		tag = strings.ReplaceAll(tag, "{env}", env)
 		if _, ok := ret[tag]; !ok {
-			ret[tag] = map[string]string{}
+			ret[tag] = map[string]interface{}{}
 		}
 
 		for nk, nvi := range vi.(map[string]interface{}) {
-			ret[tag][nk] = nvi.(string)
+			ret[tag][nk] = nvi
 		}
 	}
 
@@ -35,10 +66,10 @@ func ParseAddCfg(env string, cfg interface{}) map[string]map[string]string {
 func (f *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.FluentMsg, inChan <-chan *libs.FluentMsg) {
 	defer libs.Logger.Info("parser runner exit")
 	var (
-		err error
-		ok  bool
-		msg *libs.FluentMsg
-		// vi   interface{}
+		err  error
+		ok   bool
+		msg  *libs.FluentMsg
+		vi   interface{}
 		k, v string
 		t    time.Time
 	)
@@ -138,8 +169,18 @@ func (f *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.Fl
 
 		// add
 		if _, ok = f.Add[msg.Tag]; ok {
-			for k, v = range f.Add[msg.Tag] {
-				msg.Message[k] = v
+			for k, vi = range f.Add[msg.Tag] {
+				switch vi := vi.(type) {
+				case nil:
+					delete(msg.Message, k)
+					continue
+				case string:
+					msg.Message[k] = replaceByKey(msg, vi)
+				case []byte:
+					msg.Message[k] = replaceByKey(msg, string(vi))
+				default:
+					msg.Message[k] = vi
+				}
 			}
 		}
 
@@ -202,7 +243,7 @@ type ParserFactCfg struct {
 	Regexp          *regexp.Regexp
 	MsgPool         *sync.Pool
 	IsRemoveOrigLog bool
-	Add             map[string]map[string]string
+	Add             map[string]map[string]interface{}
 	ParseJsonKey,
 	MustInclude string
 	TimeKey,
@@ -250,17 +291,6 @@ func (cf *ParserFact) valid() error {
 		cf.NFork = 4
 		libs.Logger.Info("reset n_fork", zap.Int("n_fork", cf.NFork))
 	}
-
-	// DO NOT SET MsgKey & TimeKey
-	// if cf.MsgKey == "" {
-	// 	cf.MsgKey = "log"
-	// 	libs.Logger.Info("reset msg_key", zap.String("msg_key", cf.MsgKey))
-	// }
-
-	// if cf.TimeKey == "" {
-	// 	cf.TimeKey = "time"
-	// 	libs.Logger.Info("reset time_key", zap.String("time_key", cf.TimeKey))
-	// }
 
 	if cf.NewTimeFormat == "" {
 		cf.NewTimeFormat = "2006-01-02T15:04:05.000000Z"

@@ -60,7 +60,7 @@ settings:
         is_remove_orig_log: true
         must_include: app
         # ⬇⬇ time
-        time_format: "2006-01-02 15:04:05.000 -0700"
+        time_format: "2006-01-02 15:04:05.000-0700"
         append_time_zone:
           sit: "+0800"
           perf: "+0800"

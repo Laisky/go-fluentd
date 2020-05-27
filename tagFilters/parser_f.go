@@ -148,7 +148,7 @@ func (f *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.Fl
 			switch ts := msg.Message[f.TimeKey].(type) {
 			case []byte:
 				if f.AppendTimeZone != "" {
-					v = string(ts) + " " + f.AppendTimeZone
+					v = string(ts) + f.AppendTimeZone
 				} else {
 					v = string(ts)
 				}
@@ -251,15 +251,16 @@ func (cf *ParserFact) valid() error {
 		libs.Logger.Info("reset n_fork", zap.Int("n_fork", cf.NFork))
 	}
 
-	if cf.MsgKey == "" {
-		cf.MsgKey = "log"
-		libs.Logger.Info("reset msg_key", zap.String("msg_key", cf.MsgKey))
-	}
+	// DO NOT SET MsgKey & TimeKey
+	// if cf.MsgKey == "" {
+	// 	cf.MsgKey = "log"
+	// 	libs.Logger.Info("reset msg_key", zap.String("msg_key", cf.MsgKey))
+	// }
 
-	if cf.TimeKey == "" {
-		cf.TimeKey = "time"
-		libs.Logger.Info("reset time_key", zap.String("time_key", cf.TimeKey))
-	}
+	// if cf.TimeKey == "" {
+	// 	cf.TimeKey = "time"
+	// 	libs.Logger.Info("reset time_key", zap.String("time_key", cf.TimeKey))
+	// }
 
 	if cf.NewTimeFormat == "" {
 		cf.NewTimeFormat = "2006-01-02T15:04:05.000000Z"
@@ -269,11 +270,6 @@ func (cf *ParserFact) valid() error {
 	if cf.NewTimeKey == "" {
 		cf.NewTimeKey = "@timestamp"
 		libs.Logger.Info("reset new_time_key", zap.String("new_time_key", cf.NewTimeKey))
-	}
-
-	if cf.MsgKey == "" {
-		cf.MsgKey = "log"
-		libs.Logger.Info("reset msg_key", zap.String("msg_key", cf.MsgKey))
 	}
 
 	return nil

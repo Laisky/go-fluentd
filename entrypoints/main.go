@@ -53,14 +53,14 @@ func setupSettings() {
 	}
 
 	// check `--env`
-	switch utils.Settings.GetString("env") {
-	case "sit":
-	case "perf":
-	case "uat":
-	case "prod":
-	default:
-		panic(fmt.Sprintf("unknown value `--env=%v`", utils.Settings.GetString("env")))
-	}
+	// switch utils.Settings.GetString("env") {
+	// case "sit":
+	// case "perf":
+	// case "uat":
+	// case "prod":
+	// default:
+	// 	panic(fmt.Sprintf("unknown value `--env=%v`", utils.Settings.GetString("env")))
+	// }
 
 	// mode
 	if utils.Settings.GetBool("debug") {

@@ -789,7 +789,7 @@ settings:
         # new_time_format 是用来生成新的时间字符串的格式。
         # reserved_time_key 设置是否要保留原时间 field。
         time_key: time
-        time_format: "2006-01-02 15:04:05.000 -0700"
+        time_format: "2006-01-02 15:04:05.000-0700"
         new_time_format: "2006-01-02T15:04:05.000000Z"
         reserved_time_key: false
         new_time_key: "@timestamp"

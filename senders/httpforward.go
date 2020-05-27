@@ -159,7 +159,7 @@ func (s *HTTPSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*libs.FluentMsg) (e
 	bulkCtx.buf.Reset()
 	bulkCtx.gzWriter.Reset(bulkCtx.buf)
 	var jb []byte
-	if jb, err = json.Marshal(msgCnts); err != nil {
+	if jb, err = utils.JSON.Marshal(msgCnts); err != nil {
 		return errors.Wrap(err, "try to marshal messages got error")
 	}
 

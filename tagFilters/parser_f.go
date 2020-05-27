@@ -198,7 +198,7 @@ type ParserFactCfg struct {
 	NFork           int
 	Name, LBKey     string
 	Tags            []string
-	Env, MsgKey     string
+	MsgKey          string
 	Regexp          *regexp.Regexp
 	MsgPool         *sync.Pool
 	IsRemoveOrigLog bool
@@ -223,19 +223,19 @@ func NewParserFact(cfg *ParserFactCfg) *ParserFact {
 	cf := &ParserFact{
 		BaseTagFilterFactory: &BaseTagFilterFactory{},
 		ParserFactCfg:        cfg,
+		tagsset:              map[string]struct{}{},
 	}
 	if err := cf.valid(); err != nil {
 		libs.Logger.Panic("new parser", zap.Error(err))
 	}
 
-	cf.tagsset = map[string]struct{}{}
 	for _, tag := range cf.Tags {
-		libs.Logger.Info("Parser factory add tag", zap.String("tag", tag+"."+cf.Env))
-		cf.tagsset[tag+"."+cf.Env] = struct{}{}
+		cf.tagsset[tag] = struct{}{}
 	}
 
 	libs.Logger.Info("new parser",
 		zap.Int("n_fork", cf.NFork),
+		zap.Strings("tags", cf.Tags),
 		zap.String("msg_key", cf.MsgKey),
 		zap.String("time_key", cf.TimeKey),
 		zap.String("new_time_format", cf.NewTimeFormat),

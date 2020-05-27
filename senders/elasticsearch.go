@@ -60,7 +60,6 @@ func NewElasticSearchSender(cfg *ElasticSearchSenderCfg) *ElasticSearchSender {
 	}
 
 	s.SetSupportedTags(cfg.Tags)
-
 	s.logger.Info("new elasticsearch sender",
 		zap.String("addr", s.Addr),
 		zap.Int("batch_size", s.BatchSize),
@@ -77,7 +76,7 @@ func (s *ElasticSearchSender) valid() error {
 		s.logger.Panic("`addr` not set")
 	}
 	if s.NFork <= 0 {
-		s.NFork = 1
+		s.NFork = 3
 		s.logger.Info("reset n_fork", zap.Int("n_fork", s.NFork))
 	}
 	if s.BatchSize <= 0 {
@@ -85,7 +84,7 @@ func (s *ElasticSearchSender) valid() error {
 		s.logger.Info("reset msg_batch_size", zap.Int("msg_batch_size", s.BatchSize))
 	}
 	if s.MaxWait <= 0 {
-		s.MaxWait = 5
+		s.MaxWait = 5 * time.Second
 		s.logger.Info("reset max_wait_sec", zap.Duration("max_wait_sec", s.MaxWait))
 	}
 	if s.TagKey == "" {
@@ -138,7 +137,7 @@ func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*libs.Flue
 			continue
 		}
 
-		if b, err = json.Marshal(bulkCtx.msg.Message); err != nil {
+		if b, err = utils.JSON.Marshal(bulkCtx.msg.Message); err != nil {
 			s.logger.Warn("try to marshal messages", zap.Error(err))
 			continue
 		}
@@ -220,7 +219,7 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
 	}
 	s.logger.Debug("got es response", zap.ByteString("resp", bb))
 
-	if err = json.Unmarshal(bb, ret); err != nil {
+	if err = utils.JSON.Unmarshal(bb, ret); err != nil {
 		s.logger.Error("try to unmarshal body, body",
 			zap.Error(err),
 			zap.ByteString("body", bb))

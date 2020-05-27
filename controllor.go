@@ -253,7 +253,7 @@ func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommit
 					Env:             env,
 					NFork:           utils.Settings.GetInt("settings.tag_filters.plugins." + name + ".nfork"),
 					LBKey:           utils.Settings.GetString("settings.tag_filters.plugins." + name + ".lb_key"),
-					Tags:            utils.Settings.GetStringSlice("settings.tag_filters.plugins." + name + ".tags"),
+					Tags:            libs.LoadTagsReplaceEnv(env, "settings.tag_filters.plugins."+name+".tags"),
 					MsgKey:          utils.Settings.GetString("settings.tag_filters.plugins." + name + ".msg_key"),
 					Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.plugins." + name + ".pattern")),
 					IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.plugins." + name + ".is_remove_orig_log"),
@@ -441,7 +441,7 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 					InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
 					NFork:                utils.Settings.GetInt("settings.producer.plugins." + name + ".forks"),
 					TagKey:               utils.Settings.GetString("settings.producer.plugins." + name + ".tag_key"),
-					Tags:                 libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
+					Tags:                 libs.LoadTagsReplaceEnv(env, utils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
 					TagIndexMap:          senders.LoadESTagIndexMap(env, utils.Settings.Get("settings.producer.plugins."+name+".indices")),
 					IsDiscardWhenBlocked: utils.Settings.GetBool("settings.producer.plugins." + name + ".is_discard_when_blocked"),
 				}))

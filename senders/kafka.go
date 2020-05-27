@@ -126,7 +126,7 @@ func (s *KafkaSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 				iBatch = 0
 				nRetry = 0
 				for j, msg = range msgBatchDelivery {
-					if jb, err = json.Marshal(&msg.Message); err != nil {
+					if jb, err = utils.JSON.Marshal(&msg.Message); err != nil {
 						libs.Logger.Error("marashal msg got error",
 							zap.Error(err),
 							zap.String("msg", fmt.Sprint(msg)))

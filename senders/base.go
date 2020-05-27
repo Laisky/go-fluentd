@@ -5,10 +5,7 @@ import (
 	"sync"
 
 	"github.com/Laisky/go-fluentd/libs"
-	jsoniter "github.com/json-iterator/go"
 )
-
-var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 type SenderItf interface {
 	Spawn(context.Context) chan<- *libs.FluentMsg // Spawn(ctx) inChan
@@ -29,7 +26,7 @@ type BaseSender struct {
 	msgPool                   *sync.Pool
 	commitChan                chan<- *libs.FluentMsg
 	successedChan, failedChan chan<- *libs.FluentMsg
-	tags                      []string
+	tags                      map[string]struct{}
 	IsDiscardWhenBlocked      bool
 }
 
@@ -50,19 +47,16 @@ func (s *BaseSender) SetFailedChan(failedChan chan<- *libs.FluentMsg) {
 }
 
 func (s *BaseSender) SetSupportedTags(tags []string) {
-	s.tags = tags
+	for _, t := range tags {
+		s.tags[t] = struct{}{}
+	}
 }
 
 func (s *BaseSender) DiscardWhenBlocked() bool {
 	return s.IsDiscardWhenBlocked
 }
 
-func (s *BaseSender) IsTagSupported(tag string) bool {
-	for _, t := range s.tags {
-		if t == tag {
-			return true
-		}
-	}
-
-	return false
+func (s *BaseSender) IsTagSupported(tag string) (ok bool) {
+	_, ok = s.tags[tag]
+	return ok
 }

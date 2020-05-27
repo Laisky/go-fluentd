@@ -15,30 +15,30 @@ consts:
       - 2.2.2.2:9092
   tags:
     all-tags: &all-tags
-      - test
-      - app.spring
-      - gateway
-      - connector
-      - qingai
-      - cp
-      - ptdeployer
-      - httpguard
-      - ramjet
-      - tsp
-      - ai
-      - base
-      - geely
-      - bot
-      - spark
-      - emqtt
-      - speech
-      - kafkabuf
-      - wechat
-      - forward-wechat
-      - fluentd-forward
-      - usertracking
-      - bigdata-wuling
-      - kube-nginx
+      - test.{env}
+      - app.spring.{env}
+      - gateway.{env}
+      - connector.{env}
+      - qingai.{env}
+      - cp.{env}
+      - ptdeployer.{env}
+      - httpguard.{env}
+      - ramjet.{env}
+      - tsp.{env}
+      - ai.{env}
+      - base.{env}
+      - geely.{env}
+      - bot.{env}
+      - spark.{env}
+      - emqtt.{env}
+      - speech.{env}
+      - kafkabuf.{env}
+      - wechat.{env}
+      - forward-wechat.{env}
+      - fluentd-forward.{env}
+      - usertracking.{env}
+      - bigdata-wuling.{env}
+      - kube-nginx.{env}
   envs:
     all-env: &all-env
       - sit
@@ -461,28 +461,11 @@ settings:
         type: es
         active_env: *all-env
         tags:
-          # - es-general
-          # - test
-          - app.spring
-          - gateway
-          - connector
-          - qingai
-          - cp
-          - ptdeployer
-          - fluentd-forward
-          - httpguard
-          - ramjet
-          - tsp
-          - ai
-          - base
-          - bot
-          - spark
-          - emqtt
-          - speech
-          # - kafkabuf
-          - wechat
-          - usertracking
-          - bigdata-wuling
+          - app.spring.{env}
+          - gateway.{env}
+          - connector.{env}
+          - qingai.{env}
+          - cp.{env}
         forks: 3
 
         # elasticsearch 的 HTTP API，如果有 username/passwrd 验证可以直接写在 URL 里
@@ -751,8 +734,8 @@ settings:
         nfork: 4
 
         tags:
-          - connector
-          - gateway
+          - connector.{env}
+          - gateway.{env}
 
         # 需要解析的字符串存放的位置，`msg.Message[<msg_key>]`
         msg_key: log

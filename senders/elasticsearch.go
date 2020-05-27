@@ -75,20 +75,20 @@ func (s *ElasticSearchSender) valid() error {
 	if s.Addr == "" {
 		s.logger.Panic("`addr` not set")
 	}
+
 	if s.NFork <= 0 {
 		s.NFork = 3
 		s.logger.Info("reset n_fork", zap.Int("n_fork", s.NFork))
 	}
+
 	if s.BatchSize <= 0 {
 		s.BatchSize = 500
 		s.logger.Info("reset msg_batch_size", zap.Int("msg_batch_size", s.BatchSize))
 	}
+
 	if s.MaxWait <= 0 {
 		s.MaxWait = 5 * time.Second
 		s.logger.Info("reset max_wait_sec", zap.Duration("max_wait_sec", s.MaxWait))
-	}
-	if s.TagKey == "" {
-		s.logger.Info("`tag_key` is missing, will load msg tag from `msg.Tag`, this tag could be modified by upstream")
 	}
 
 	return nil
@@ -108,9 +108,14 @@ type bulkOpCtx struct {
 
 func (s *ElasticSearchSender) getMsgStarting(msg *libs.FluentMsg) ([]byte, error) {
 	// load origin tag from messages, because msg.Tag could modified by kafka
-	var tag string
+	var (
+		tag string
+		ok  bool
+	)
 	if s.TagKey != "" {
-		tag = msg.Message[s.TagKey].(string)
+		if tag, ok = msg.Message[s.TagKey].(string); !ok {
+			return nil, fmt.Errorf("empty tag load by key `%s`", s.TagKey)
+		}
 	} else {
 		tag = msg.Tag
 	}
@@ -314,7 +319,7 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg 
 						if nRetry > maxRetry {
 							s.logger.Error("try send message",
 								zap.Error(err),
-								zap.ByteString("content", bulkCtx.cnt),
+								// zap.ByteString("content", bulkCtx.cnt),
 								zap.Int("num", len(msgBatchDelivery)))
 							for _, msg = range msgBatchDelivery {
 								s.failedChan <- msg

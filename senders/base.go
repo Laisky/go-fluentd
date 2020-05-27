@@ -47,6 +47,7 @@ func (s *BaseSender) SetFailedChan(failedChan chan<- *libs.FluentMsg) {
 }
 
 func (s *BaseSender) SetSupportedTags(tags []string) {
+	s.tags = map[string]struct{}{}
 	for _, t := range tags {
 		s.tags[t] = struct{}{}
 	}

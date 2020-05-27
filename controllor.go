@@ -77,7 +77,8 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 				continue
 			}
 
-			switch utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".type") {
+			t := utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".type")
+			switch t {
 			case "fluentd":
 				receivers = append(receivers, recvs.NewFluentdRecv(&recvs.FluentdRecvCfg{
 					Name:                   name,
@@ -149,13 +150,13 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 				receivers = append(receivers, recvs.NewKafkaRecv(kafkaCfg))
 			default:
 				libs.Logger.Panic("unknown recv type",
-					zap.String("recv_type", utils.Settings.GetString("settings.acceptor.recvs.plugins."+name+".type")),
-					zap.String("recv_name", name))
+					zap.String("type", t),
+					zap.String("name", name))
 			}
 
 			libs.Logger.Info("active recv",
 				zap.String("name", name),
-				zap.String("type", utils.Settings.GetString("settings.acceptor.recvs.plugins."+name+".type")))
+				zap.String("type", t))
 		}
 	case nil:
 	default:
@@ -185,7 +186,8 @@ func (c *Controllor) initAcceptorPipeline(ctx context.Context, env string) (*acc
 	switch utils.Settings.Get("settings.acceptor_filters.plugins").(type) {
 	case map[string]interface{}:
 		for name := range utils.Settings.Get("settings.acceptor_filters.plugins").(map[string]interface{}) {
-			switch utils.Settings.GetString("settings.acceptor_filters.plugins." + name + ".type") {
+			t := utils.Settings.GetString("settings.acceptor_filters.plugins." + name + ".type")
+			switch t {
 			case "spark":
 				afs = append(afs, acceptorFilters.NewSparkFilter(&acceptorFilters.SparkFilterCfg{
 					Tag:         "spark." + env,
@@ -205,12 +207,12 @@ func (c *Controllor) initAcceptorPipeline(ctx context.Context, env string) (*acc
 				}))
 			default:
 				libs.Logger.Panic("unknown acceptorfilter type",
-					zap.String("recv_type", utils.Settings.GetString("settings.acceptor_filters.plugins."+name+".type")),
-					zap.String("recv_name", name))
+					zap.String("type", t),
+					zap.String("name", name))
 			}
 			libs.Logger.Info("active acceptorfilter",
 				zap.String("name", name),
-				zap.String("type", utils.Settings.GetString("settings.acceptor_filters.recvs.plugins."+name+".type")))
+				zap.String("type", t))
 		}
 	case nil:
 	default:
@@ -222,8 +224,7 @@ func (c *Controllor) initAcceptorPipeline(ctx context.Context, env string) (*acc
 		Name:               "default",
 		RemoveEmptyTag:     true,
 		RemoveUnsupportTag: true,
-		Env:                env,
-		SupportedTags:      utils.Settings.GetStringSlice("consts.tags.all-tags"),
+		SupportedTags:      libs.LoadTagsReplaceEnv(env, utils.Settings.GetStringSlice("consts.tags.all-tags")),
 	}))
 
 	return acceptorFilters.NewAcceptorPipeline(ctx, &acceptorFilters.AcceptorPipelineCfg{
@@ -246,14 +247,14 @@ func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommit
 	switch utils.Settings.Get("settings.tag_filters.plugins").(type) {
 	case map[string]interface{}:
 		for name := range utils.Settings.Get("settings.tag_filters.plugins").(map[string]interface{}) {
-			switch utils.Settings.GetString("settings.tag_filters.plugins." + name + ".type") {
+			t := utils.Settings.GetString("settings.tag_filters.plugins." + name + ".type")
+			switch t {
 			case "parser":
 				fs = append(fs, tagFilters.NewParserFact(&tagFilters.ParserFactCfg{
 					Name:            name,
-					Env:             env,
 					NFork:           utils.Settings.GetInt("settings.tag_filters.plugins." + name + ".nfork"),
 					LBKey:           utils.Settings.GetString("settings.tag_filters.plugins." + name + ".lb_key"),
-					Tags:            libs.LoadTagsReplaceEnv(env, "settings.tag_filters.plugins."+name+".tags"),
+					Tags:            libs.LoadTagsReplaceEnv(env, utils.Settings.GetStringSlice("settings.tag_filters.plugins."+name+".tags")),
 					MsgKey:          utils.Settings.GetString("settings.tag_filters.plugins." + name + ".msg_key"),
 					Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.plugins." + name + ".pattern")),
 					IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.plugins." + name + ".is_remove_orig_log"),
@@ -272,12 +273,12 @@ func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommit
 				isEnableConcator = true
 			default:
 				libs.Logger.Panic("unknown tagfilter type",
-					zap.String("recv_type", utils.Settings.GetString("settings.tag_filters.recvs.plugins."+name+".type")),
-					zap.String("recv_name", name))
+					zap.String("type", t),
+					zap.String("name", name))
 			}
 			libs.Logger.Info("active tagfilter",
 				zap.String("name", name),
-				zap.String("type", utils.Settings.GetString("settings.tag_filters.recvs.plugins."+name+".type")))
+				zap.String("type", t))
 		}
 	case nil:
 	default:
@@ -332,7 +333,8 @@ func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- *libs.Fl
 				continue
 			}
 
-			switch utils.Settings.GetString("settings.post_filters.plugins." + name + ".type") {
+			t := utils.Settings.GetString("settings.post_filters.plugins." + name + ".type")
+			switch t {
 			case "es-dispatcher":
 				fs = append(fs, postFilters.NewESDispatcherFilter(&postFilters.ESDispatcherFilterCfg{
 					Tags:     libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.post_filters.plugins."+name+".tags")),
@@ -357,12 +359,12 @@ func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- *libs.Fl
 				}))
 			default:
 				libs.Logger.Panic("unknown post_filter type",
-					zap.String("post_filter_type", utils.Settings.GetString("settings.post_filters.plugins."+name+".type")),
+					zap.String("post_filter_type", t),
 					zap.String("post_filter_name", name))
 			}
 
 			libs.Logger.Info("active post_filter",
-				zap.String("type", utils.Settings.GetString("settings.post_filters.plugins."+name+".type")),
+				zap.String("type", t),
 				zap.String("name", name),
 				zap.String("env", env))
 		}
@@ -407,7 +409,8 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 				continue
 			}
 
-			switch utils.Settings.GetString("settings.producer.plugins." + name + ".type") {
+			t := utils.Settings.GetString("settings.producer.plugins." + name + ".type")
+			switch t {
 			case "fluentd":
 				ss = append(ss, senders.NewFluentSender(&senders.FluentSenderCfg{
 					Name:                 name,
@@ -457,11 +460,11 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 				}))
 			default:
 				libs.Logger.Panic("unknown sender type",
-					zap.String("sender_type", utils.Settings.GetString("settings.producer.plugins."+name+".type")),
-					zap.String("sender_name", name))
+					zap.String("type", t),
+					zap.String("name", name))
 			}
 			libs.Logger.Info("active sender",
-				zap.String("type", utils.Settings.GetString("settings.producer.plugins."+name+".type")),
+				zap.String("type", t),
 				zap.String("name", name),
 				zap.String("env", env))
 		}

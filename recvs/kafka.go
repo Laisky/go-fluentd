@@ -214,11 +214,20 @@ func (r *KafkaRecv) parse2Msg(kmsg *kafka.KafkaMsg) (msg *libs.FluentMsg, err er
 	msg.Message = map[string]interface{}{}
 
 	for metaK, metaV := range r.Meta {
-		if metaV.(string) == RandomValOperator {
-			msg.Message[metaK] = utils.RandomStringWithLength(10)
-			continue
+		switch v := metaV.(type) {
+		case string:
+			if v == RandomValOperator {
+				msg.Message[metaK] = utils.RandomStringWithLength(10)
+				continue
+			}
+
+			msg.Message[metaK] = metaV
+		case nil:
+			// libs.Logger.Debug("remove field", zap.String("key", metaK))
+			delete(msg.Message, metaK)
+		default:
+			msg.Message[metaK] = metaV
 		}
-		msg.Message[metaK] = []byte(metaV.(string))
 	}
 
 	if r.IsJSONFormat {

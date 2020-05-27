@@ -29,12 +29,6 @@ type KafkaCommitCfg struct {
 	IntervalDuration time.Duration
 }
 
-func NewKafkaCfg() *KafkaCfg {
-	return &KafkaCfg{
-		ReconnectInterval: defaultKafkaReconnectInterval,
-	}
-}
-
 /*KafkaCfg kafka client configuration
 
 Args:
@@ -49,7 +43,7 @@ Args:
 	ReconnectInterval: restart consumer periodically
 */
 type KafkaCfg struct {
-	*KafkaCommitCfg
+	KafkaCommitCfg
 	Topics, Brokers                  []string
 	Group, Tag, MsgKey, TagKey, Name string
 	NConsumer                        int
@@ -62,29 +56,63 @@ type KafkaCfg struct {
 }
 
 type KafkaRecv struct {
-	*BaseRecv
+	BaseRecv
 	*KafkaCfg
 }
 
 func NewKafkaRecv(cfg *KafkaCfg) *KafkaRecv {
-	if cfg.MsgKey == "" && !cfg.IsJSONFormat {
-		libs.Logger.Panic("at least set one of MsgKey and IsJSONFormat")
-	}
-	if cfg.ReconnectInterval < defaultKafkaReconnectInterval {
-		libs.Logger.Warn("ReconnectInterval too small", zap.Duration("ReconnectInterval", cfg.ReconnectInterval))
-	}
-
-	libs.Logger.Info("create KafkaRecv",
-		zap.Strings("topics", cfg.Topics),
-		zap.Strings("brokers", cfg.Brokers),
-		zap.Bool("IsJSONFormat", cfg.IsJSONFormat),
-		zap.String("TagKey", cfg.TagKey),
-		zap.String("JSONTagKey", cfg.JSONTagKey))
-
-	return &KafkaRecv{
-		BaseRecv: &BaseRecv{},
+	k := &KafkaRecv{
 		KafkaCfg: cfg,
 	}
+	if err := k.valid(); err != nil {
+		libs.Logger.Panic("new kafka recv", zap.Error(err))
+	}
+
+	libs.Logger.Info("new kafka recv",
+		zap.Strings("topics", cfg.Topics),
+		zap.Strings("brokers", cfg.Brokers),
+		zap.Bool("is_json_format", cfg.IsJSONFormat),
+		zap.String("tag_key", cfg.TagKey),
+		zap.String("tag", cfg.Tag),
+		zap.Int("nconsumer", cfg.NConsumer),
+		zap.Int("interval_num", cfg.IntervalNum),
+		zap.Duration("interval_sec", cfg.IntervalDuration),
+		zap.String("msg_key", cfg.MsgKey),
+		zap.Duration("reconnect_sec", cfg.ReconnectInterval),
+		zap.String("json_tag_key", cfg.JSONTagKey),
+	)
+	return k
+}
+
+func (r *KafkaRecv) valid() error {
+	if !r.IsJSONFormat {
+		if r.MsgKey == "" {
+			r.MsgKey = "log"
+			libs.Logger.Info("reset msg_key", zap.String("msg_key", r.MsgKey))
+		}
+	}
+
+	if r.ReconnectInterval <= 0 {
+		r.ReconnectInterval = defaultKafkaReconnectInterval
+		libs.Logger.Info("reset reconnect_sec", zap.Duration("reconnect_sec", r.ReconnectInterval))
+	}
+
+	if r.NConsumer <= 0 {
+		r.NConsumer = 1
+		libs.Logger.Info("reset nconsumer", zap.Int("nconsumer", r.NConsumer))
+	}
+
+	if r.IntervalNum <= 0 {
+		r.IntervalNum = 1000
+		libs.Logger.Info("reset interval_num", zap.Int("interval_num", r.IntervalNum))
+	}
+
+	if r.IntervalDuration <= 0 {
+		r.IntervalDuration = 3 * time.Second
+		libs.Logger.Info("reset interval_sec", zap.Duration("interval_sec", r.IntervalDuration))
+	}
+
+	return nil
 }
 
 func (r *KafkaRecv) GetName() string {

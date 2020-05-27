@@ -125,35 +125,34 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 					MaxAllowedAheadSec: utils.Settings.GetDuration("settings.acceptor.recvs.plugins."+name+".max_allowed_ahead_sec") * time.Second,
 				}))
 			case "kafka":
-				kafkaCfg := recvs.NewKafkaCfg()
-				kafkaCfg.KMsgPool = sharingKMsgPool
-				kafkaCfg.Meta = utils.FallBack(
-					func() interface{} {
-						return utils.Settings.Get("settings.acceptor.recvs.plugins." + name + ".meta").(map[string]interface{})
-					}, map[string]interface{}{}).(map[string]interface{})
-				kafkaCfg.Name = name
-				kafkaCfg.MsgKey = utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".msg_key")
-				kafkaCfg.Brokers = utils.Settings.GetStringSlice("settings.acceptor.recvs.plugins." + name + ".brokers." + env)
-				kafkaCfg.Topics = []string{utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".topics." + env)}
-				kafkaCfg.Group = utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".groups." + env)
-				kafkaCfg.Tag = utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tags." + env)
-				kafkaCfg.IsJSONFormat = utils.Settings.GetBool("settings.acceptor.recvs.plugins." + name + ".is_json_format")
-				kafkaCfg.TagKey = utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tag_key")
-				kafkaCfg.JSONTagKey = utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".json_tag_key")
-				kafkaCfg.RewriteTag = recvs.GetKafkaRewriteTag(utils.Settings.GetString("settings.acceptor.recvs.plugins."+name+".rewrite_tag"), env)
-				kafkaCfg.NConsumer = utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".nconsumer")
-				kafkaCfg.KafkaCommitCfg = &recvs.KafkaCommitCfg{
-					IntervalNum:      utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".interval_num"),
-					IntervalDuration: utils.Settings.GetDuration("settings.acceptor.recvs.plugins."+name+".interval_sec") * time.Second,
+				kafkaCfg := &recvs.KafkaCfg{
+					KMsgPool: sharingKMsgPool,
+					Meta: utils.FallBack(
+						func() interface{} {
+							return utils.Settings.Get("settings.acceptor.recvs.plugins." + name + ".meta").(map[string]interface{})
+						}, map[string]interface{}{}).(map[string]interface{}),
+					Name:              name,
+					MsgKey:            utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".msg_key"),
+					Brokers:           utils.Settings.GetStringSlice("settings.acceptor.recvs.plugins." + name + ".brokers." + env),
+					Topics:            []string{utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".topics." + env)},
+					Group:             utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".groups." + env),
+					Tag:               utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tags." + env),
+					IsJSONFormat:      utils.Settings.GetBool("settings.acceptor.recvs.plugins." + name + ".is_json_format"),
+					TagKey:            utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tag_key"),
+					JSONTagKey:        utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".json_tag_key"),
+					RewriteTag:        recvs.GetKafkaRewriteTag(utils.Settings.GetString("settings.acceptor.recvs.plugins."+name+".rewrite_tag"), env),
+					NConsumer:         utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".nconsumer"),
+					ReconnectInterval: utils.Settings.GetDuration("settings.acceptor.recvs.plugins."+name+".reconnect_sec") * time.Second,
 				}
-				// kafkaCfg.ReconnectInterval = 10 * time.Second  // TEST
-
+				kafkaCfg.IntervalNum = utils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".interval_num")
+				kafkaCfg.IntervalDuration = utils.Settings.GetDuration("settings.acceptor.recvs.plugins."+name+".interval_sec") * time.Second
 				receivers = append(receivers, recvs.NewKafkaRecv(kafkaCfg))
 			default:
 				libs.Logger.Panic("unknown recv type",
 					zap.String("recv_type", utils.Settings.GetString("settings.acceptor.recvs.plugins."+name+".type")),
 					zap.String("recv_name", name))
 			}
+
 			libs.Logger.Info("active recv",
 				zap.String("name", name),
 				zap.String("type", utils.Settings.GetString("settings.acceptor.recvs.plugins."+name+".type")))

@@ -9,6 +9,7 @@ type DefaultFilterCfg struct {
 	RemoveEmptyTag, RemoveUnsupportTag bool
 	SupportedTags                      []string
 	Name                               string
+	libs.AddCfg
 }
 
 type DefaultFilter struct {
@@ -55,5 +56,6 @@ func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 		return nil
 	}
 
+	libs.ProcessAdd(f.AddCfg, msg)
 	return msg
 }

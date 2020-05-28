@@ -127,11 +127,7 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 				}))
 			case "kafka":
 				kafkaCfg := &recvs.KafkaCfg{
-					KMsgPool: sharingKMsgPool,
-					Meta: utils.FallBack(
-						func() interface{} {
-							return utils.Settings.Get("settings.acceptor.recvs.plugins." + name + ".meta").(map[string]interface{})
-						}, map[string]interface{}{}).(map[string]interface{}),
+					KMsgPool:          sharingKMsgPool,
 					Name:              name,
 					MsgKey:            utils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".msg_key"),
 					Brokers:           utils.Settings.GetStringSlice("settings.acceptor.recvs.plugins." + name + ".brokers." + env),
@@ -260,7 +256,7 @@ func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommit
 					IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.plugins." + name + ".is_remove_orig_log"),
 					MsgPool:         c.msgPool,
 					ParseJsonKey:    utils.Settings.GetString("settings.tag_filters.plugins." + name + ".parse_json_key"),
-					Add:             tagFilters.ParseAddCfg(env, utils.Settings.Get("settings.tag_filters.plugins."+name+".add")),
+					AddCfg:          libs.ParseAddCfg(env, utils.Settings.Get("settings.tag_filters.plugins."+name+".add")),
 					MustInclude:     utils.Settings.GetString("settings.tag_filters.plugins." + name + ".must_include"),
 					TimeKey:         utils.Settings.GetString("settings.tag_filters.plugins." + name + ".time_key"),
 					TimeFormat:      utils.Settings.GetString("settings.tag_filters.plugins." + name + ".time_format"),

@@ -388,11 +388,6 @@ settings:
           # msg_key: log
           is_json_format: true
 
-
-          # meta 用来添加自定义的 key:val
-          meta:
-            container_id: "@RANDOM_STRING"
-
           # 为不同环境设置不同的 msg.Tag 和 msg.Message["tag"]
           tag_key: tag
           tags:
@@ -781,7 +776,9 @@ settings:
           uat: "+0800"
           prod: "+0800"
 
-        # 增加新字段，格式为 tag: key:val。
+        # 调整字段，格式为 tag: key:val
+        # 支持 新增/重命名/删除/引用其他字段/引用内建变量等多种方式
+        # add 运行于 parser 的最终阶段
         add:  # optional
           # 为 ai.<env> 的消息加上新的 {"datasource": "ai"}
           ai.{env}:

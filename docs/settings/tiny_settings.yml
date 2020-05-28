@@ -66,7 +66,3 @@ settings:
           perf: "+0800"
           uat: "+0800"
           prod: "+0800"
-        # ⬇⬇ fields
-        add:  # optional
-          test:
-            datasource: test

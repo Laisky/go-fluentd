@@ -11,6 +11,7 @@ import (
 type DefaultFilterCfg struct {
 	MsgKey string
 	MaxLen int
+	libs.AddCfg
 }
 
 type DefaultFilter struct {
@@ -91,5 +92,6 @@ func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 		libs.Logger.Error("unknown message type", zap.String("message", fmt.Sprint(msg.Message[libs.DefaultFieldForMessage])))
 	}
 
+	libs.ProcessAdd(f.AddCfg, msg)
 	return msg
 }

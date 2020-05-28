@@ -7,7 +7,6 @@ import (
 
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-kafka"
-	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/pkg/errors"
 )
@@ -48,7 +47,6 @@ type KafkaCfg struct {
 	Group, Tag, MsgKey, TagKey, Name string
 	NConsumer                        int
 	KMsgPool                         *sync.Pool
-	Meta                             map[string]interface{}
 	IsJSONFormat                     bool
 	JSONTagKey                       string
 	RewriteTag                       string
@@ -212,23 +210,6 @@ func (r *KafkaRecv) parse2Msg(kmsg *kafka.KafkaMsg) (msg *libs.FluentMsg, err er
 
 	// remove old messages log
 	msg.Message = map[string]interface{}{}
-
-	for metaK, metaV := range r.Meta {
-		switch v := metaV.(type) {
-		case string:
-			if v == RandomValOperator {
-				msg.Message[metaK] = utils.RandomStringWithLength(10)
-				continue
-			}
-
-			msg.Message[metaK] = metaV
-		case nil:
-			// libs.Logger.Debug("remove field", zap.String("key", metaK))
-			delete(msg.Message, metaK)
-		default:
-			msg.Message[metaK] = metaV
-		}
-	}
 
 	if r.IsJSONFormat {
 		if err = json.Unmarshal(kmsg.Message, &msg.Message); err != nil {

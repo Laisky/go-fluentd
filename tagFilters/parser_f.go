@@ -12,66 +12,14 @@ import (
 	"github.com/Laisky/zap"
 )
 
-var keyReplaceRegexp = regexp.MustCompile(`\%\{([\w\-_]+)\}`)
-
-func replaceByKey(msg *libs.FluentMsg, v string) string {
-	var (
-		keys = map[string]struct{}{}
-		key  string
-		ok   bool
-		vi   interface{}
-	)
-	for _, grp := range keyReplaceRegexp.FindAllStringSubmatch(v, -1) {
-		if len(grp) < 2 || grp[1] == "" {
-			continue
-		}
-
-		key = grp[1]
-		// already replaced this key
-		if _, ok = keys[key]; ok {
-			continue
-		}
-
-		if vi, ok = msg.Message[key]; !ok {
-			vi = ""
-		}
-
-		keys[key] = struct{}{}
-		v = strings.ReplaceAll(v, "%{"+key+"}", fmt.Sprint(vi))
-	}
-
-	return v
-}
-
-func ParseAddCfg(env string, cfg interface{}) map[string]map[string]interface{} {
-	ret := map[string]map[string]interface{}{}
-	if cfg == nil {
-		return ret
-	}
-
-	for tag, vi := range cfg.(map[string]interface{}) {
-		tag = strings.ReplaceAll(tag, "{env}", env)
-		if _, ok := ret[tag]; !ok {
-			ret[tag] = map[string]interface{}{}
-		}
-
-		for nk, nvi := range vi.(map[string]interface{}) {
-			ret[tag][nk] = nvi
-		}
-	}
-
-	return ret
-}
-
 func (f *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.FluentMsg, inChan <-chan *libs.FluentMsg) {
 	defer libs.Logger.Info("parser runner exit")
 	var (
-		err  error
-		ok   bool
-		msg  *libs.FluentMsg
-		vi   interface{}
-		k, v string
-		t    time.Time
+		err error
+		ok  bool
+		msg *libs.FluentMsg
+		v   string
+		t   time.Time
 	)
 	for {
 		select {
@@ -167,23 +115,6 @@ func (f *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.Fl
 			}
 		}
 
-		// add
-		if _, ok = f.Add[msg.Tag]; ok {
-			for k, vi = range f.Add[msg.Tag] {
-				switch vi := vi.(type) {
-				case nil:
-					delete(msg.Message, k)
-					continue
-				case string:
-					msg.Message[k] = replaceByKey(msg, vi)
-				case []byte:
-					msg.Message[k] = replaceByKey(msg, string(vi))
-				default:
-					msg.Message[k] = vi
-				}
-			}
-		}
-
 		// parse time
 		if f.TimeKey != "" {
 			switch ts := msg.Message[f.TimeKey].(type) {
@@ -229,6 +160,9 @@ func (f *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.Fl
 			}
 
 			msg.Message[f.NewTimeKey] = t.UTC().Format(f.NewTimeFormat)
+
+			// process `add` at the end of parser
+			libs.ProcessAdd(f.AddCfg, msg)
 		}
 
 		outChan <- msg
@@ -243,7 +177,7 @@ type ParserFactCfg struct {
 	Regexp          *regexp.Regexp
 	MsgPool         *sync.Pool
 	IsRemoveOrigLog bool
-	Add             map[string]map[string]interface{}
+	AddCfg          libs.AddCfg
 	ParseJsonKey,
 	MustInclude string
 	TimeKey,

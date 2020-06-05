@@ -24,6 +24,7 @@ func GetKafkaRewriteTag(rewriteTag, env string) string {
 }
 
 type KafkaCommitCfg struct {
+	libs.AddCfg
 	IntervalNum      int
 	IntervalDuration time.Duration
 }
@@ -233,7 +234,9 @@ func (r *KafkaRecv) parse2Msg(kmsg *kafka.KafkaMsg) (msg *libs.FluentMsg, err er
 		msg.Message[r.MsgKey] = kmsg.Message
 	}
 
-	msg.Message[r.TagKey] = msg.Tag
+	if r.TagKey != "" {
+		msg.Message[r.TagKey] = msg.Tag
+	}
 	// libs.Logger.Debug("parse2Msg got new msg",
 	// 	zap.String("tag", msg.Tag),
 	// 	zap.String("rewrite_tag", r.RewriteTag),
@@ -241,5 +244,7 @@ func (r *KafkaRecv) parse2Msg(kmsg *kafka.KafkaMsg) (msg *libs.FluentMsg, err er
 	if r.RewriteTag != "" {
 		msg.Tag = r.RewriteTag
 	}
+
+	libs.ProcessAdd(r.AddCfg, msg)
 	return msg, nil
 }

@@ -13,7 +13,6 @@ settings:
   acceptor:
     recvs:
       plugins:
-        # 监听 DC/OS fluentd log-driver 的日志
         fluentd:
           type: fluentd
           active_env: *all-env
@@ -23,6 +22,12 @@ settings:
               msg_key: log
               identifier: container_id
               head_regexp: ^\d{4}-\d{2}-\d{2} +\d{2}:\d{2}:\d{2}\.\d{3} *\|
+  acceptor_filters:
+    plugins:
+      default:
+        accept_tags: &all-tags
+        remove_empty_tag: true
+        remove_unknown_tag: true
   producer:
     plugins:
       localtest:
@@ -34,17 +39,6 @@ settings:
   journal:
     buf_dir_path: ./data
     is_compress: true
-  acceptor_filters:
-    plugins:
-      spring:
-        type: spring
-        rules:
-          - new_tag: cp.{env}
-            regexp: ms:cp
-          - new_tag: bot.{env}
-            regexp: ms_\w+\ {0,}\|
-          - new_tag: app.spring.{env}
-            regexp: .*
   post_filters:
     plugins:
       default:
@@ -59,10 +53,6 @@ settings:
         pattern: (?ms)^(?P<time>.{23}) {0,}\| {0,}(?P<app>[^\|]+) {0,}\| {0,}(?P<level>[^\|]+) {0,}\| {0,}(?P<thread>[^\|]+) {0,}\| {0,}(?P<class>[^ ]+) {0,}\| {0,}(?P<line>\d+) {0,}([\|:] {0,}(?P<args>\{.*\}))?([\|:] {0,}(?P<message>.*))?
         is_remove_orig_log: true
         must_include: app
-        # ⬇⬇ time
         time_format: "2006-01-02 15:04:05.000-0700"
         append_time_zone:
           sit: "+0800"
-          perf: "+0800"
-          uat: "+0800"
-          prod: "+0800"

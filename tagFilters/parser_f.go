@@ -42,7 +42,7 @@ func (f *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.Fl
 			case string:
 				msg.Message[f.MsgKey] = []byte(msg.Message[f.MsgKey].(string))
 			default:
-				libs.Logger.Warn("msg key not exists or unknown type",
+				libs.Logger.Warn("unknon msg_key",
 					zap.String("tag", msg.Tag),
 					zap.String("msg", fmt.Sprint(msg.Message)),
 					zap.String("msg_key", f.MsgKey))
@@ -234,6 +234,11 @@ func (cf *ParserFact) valid() error {
 	if cf.NewTimeKey == "" {
 		cf.NewTimeKey = "@timestamp"
 		libs.Logger.Info("reset new_time_key", zap.String("new_time_key", cf.NewTimeKey))
+	}
+
+	if cf.MsgKey == "" {
+		cf.MsgKey = "log"
+		libs.Logger.Info("reset msg_key", zap.String("msg_key", cf.MsgKey))
 	}
 
 	return nil

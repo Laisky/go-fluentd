@@ -182,6 +182,10 @@ func (c *Controllor) initAcceptorPipeline(ctx context.Context, env string) (*acc
 	switch utils.Settings.Get("settings.acceptor_filters.plugins").(type) {
 	case map[string]interface{}:
 		for name := range utils.Settings.Get("settings.acceptor_filters.plugins").(map[string]interface{}) {
+			if name == "default" {
+				continue
+			}
+
 			t := utils.Settings.GetString("settings.acceptor_filters.plugins." + name + ".type")
 			switch t {
 			case "spark":
@@ -218,9 +222,10 @@ func (c *Controllor) initAcceptorPipeline(ctx context.Context, env string) (*acc
 	// set the DefaultFilter as last filter
 	afs = append(afs, acceptorFilters.NewDefaultFilter(&acceptorFilters.DefaultFilterCfg{
 		Name:               "default",
-		RemoveEmptyTag:     true,
-		RemoveUnsupportTag: true,
-		SupportedTags:      libs.LoadTagsReplaceEnv(env, utils.Settings.GetStringSlice("consts.tags.all-tags")),
+		RemoveEmptyTag:     utils.Settings.GetBool("settings.acceptor_filters.plugins.default.remove_empty_tag"),
+		RemoveUnsupportTag: utils.Settings.GetBool("settings.acceptor_filters.plugins.default.remove_unknown_tag"),
+		AddCfg:             libs.ParseAddCfg(env, utils.Settings.Get("settings.acceptor_filters.plugins.default.add")),
+		AcceptTags:         libs.LoadTagsReplaceEnv(env, utils.Settings.GetStringSlice("settings.acceptor_filters.plugins.default.accept_tags")),
 	}))
 
 	return acceptorFilters.NewAcceptorPipeline(ctx, &acceptorFilters.AcceptorPipelineCfg{
@@ -369,13 +374,6 @@ func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- *libs.Fl
 		libs.Logger.Panic("post_filter configuration error")
 	}
 
-	fs = append(fs,
-		postFilters.NewDefaultFilter(&postFilters.DefaultFilterCfg{
-			MsgKey: utils.Settings.GetString("settings.post_filters.plugins.default.msg_key"),
-			MaxLen: utils.Settings.GetInt("settings.post_filters.plugins.default.max_len"),
-		}),
-	)
-
 	return postFilters.NewPostPipeline(&postFilters.PostPipelineCfg{
 		MsgPool:         c.msgPool,
 		WaitCommitChan:  waitCommitChan,
@@ -447,7 +445,7 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 			case "stdout":
 				ss = append(ss, senders.NewStdoutSender(&senders.StdoutSenderCfg{
 					Name:                 name,
-					Tags:                 libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
+					Tags:                 libs.LoadTagsReplaceEnv(env, utils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
 					LogLevel:             utils.Settings.GetString("settings.producer.plugins." + name + ".log_level"),
 					InChanSize:           utils.Settings.GetInt("settings.producer.sender_inchan_size"),
 					NFork:                utils.Settings.GetInt("settings.producer.plugins." + name + ".forks"),

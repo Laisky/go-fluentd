@@ -14,6 +14,8 @@ import (
 // LoadTagsAppendEnv append env to tags slice
 //
 // []string{"spring"} -> []string{"spring.sit"}
+//
+// Deprecated: should not auto append env, use LoadTagsReplaceEnv replaced
 func LoadTagsAppendEnv(env string, tags []string) []string {
 	ret := []string{}
 	for _, t := range tags {
@@ -44,6 +46,8 @@ func LoadTagsReplaceEnv(env string, tags []string) []string {
 // LoadTagsMapAppendEnv append env to tags map
 //
 // map[string]interface{}{"spring": "xxx"} -> map[string]interface{}{"spring.sit": "xxx"}
+//
+// // Deprecated: should not auto append env
 func LoadTagsMapAppendEnv(env string, tags map[string]interface{}) map[string]interface{} {
 	ret := map[string]interface{}{}
 	for t, v := range tags {

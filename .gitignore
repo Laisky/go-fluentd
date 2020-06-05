@@ -64,6 +64,7 @@ koala-config.json
 
 # test
 /data
+/docs/example/data
 /notebook
 .tox
 

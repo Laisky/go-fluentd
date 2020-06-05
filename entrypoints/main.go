@@ -121,7 +121,7 @@ func setupArgs() {
 	pflag.Bool("enable-auto-gc", false, "enable auto gc")
 	pflag.Int("gc-mem-ratio", 85, "trigger gc when memory usage")
 	pflag.String("host", "unknown", "hostname")
-	pflag.String("config", "/etc/go-fluentd/settings/settings.yml", "config file path")
+	pflag.StringP("config", "c", "/etc/go-fluentd/settings/settings.yml", "config file path")
 	pflag.String("config-server", "", "config server url")
 	pflag.String("config-server-appname", "", "config server app name")
 	pflag.String("config-server-profile", "", "config server profile name")

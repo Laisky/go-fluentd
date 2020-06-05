@@ -1,7 +1,6 @@
 package postFilters
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/Laisky/go-fluentd/libs"
@@ -80,16 +79,6 @@ func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 				}
 			}
 		}
-	}
-
-	// DefaultSearchField must exists, let kibana can display this msg
-	switch msg.Message[libs.DefaultFieldForMessage].(type) {
-	case string:
-	case nil:
-		// Kibana needs `DefaultFieldForMessage` to display and search
-		msg.Message[libs.DefaultFieldForMessage] = ""
-	default:
-		libs.Logger.Error("unknown message type", zap.String("message", fmt.Sprint(msg.Message[libs.DefaultFieldForMessage])))
 	}
 
 	libs.ProcessAdd(f.AddCfg, msg)

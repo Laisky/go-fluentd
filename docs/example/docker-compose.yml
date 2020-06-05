@@ -3,7 +3,7 @@ services:
 
   log-generator:
     image: python:3.6-alpine3.7
-    restart: "on-failure"
+    restart: "no"
     depends_on:
       - go-fluentd
     logging:
@@ -19,8 +19,8 @@ services:
     command: python /app.py
 
   go-fluentd:
-    image: ppcelery/go-fluentd:1.13.1
-    restart: "on-failure"
+    image: ppcelery/go-fluentd:test
+    restart: "no"
     ports:
       - 28080:8080
       - 25225:24225

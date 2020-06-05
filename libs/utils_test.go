@@ -1,12 +1,11 @@
-package libs_test
+package libs
 
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"regexp"
 	"testing"
-
-	"github.com/Laisky/go-fluentd/libs"
 )
 
 func TestFlattenMap(t *testing.T) {
@@ -18,7 +17,7 @@ func TestFlattenMap(t *testing.T) {
 	}
 
 	// delimiter = "."
-	libs.FlattenMap(data, delimiter)
+	FlattenMap(data, delimiter)
 	if data["a"].(string) != "1" {
 		t.Fatalf("expect %v, got %v", "1", data["a"])
 	}
@@ -37,7 +36,7 @@ func TestFlattenMap(t *testing.T) {
 		t.Fatalf("got error: %+v", err)
 	}
 	delimiter = "_"
-	libs.FlattenMap(data, delimiter)
+	FlattenMap(data, delimiter)
 	fmt.Println(data)
 	if data["a"].(string) != "1" {
 		t.Fatalf("expect %v, got %v", "1", data["a"])
@@ -59,7 +58,7 @@ func TestRegexNamedSubMatch(t *testing.T) {
 	rawRe := regexp.MustCompile(`(?ms)^(?P<time>.{23}) {0,}\| {0,}(?P<project>[^\|]+) {0,}\| {0,}(?P<level>[^\|]+) {0,}\| {0,}(?P<thread>[^\|]+) {0,}\| {0,}(?P<class>[^\:]+)\:(?P<line>\d+) {0,}- {0,}(?P<message>.+)`)
 	result := map[string]interface{}{}
 
-	if err := libs.RegexNamedSubMatch(rawRe, raw, result); err != nil {
+	if err := RegexNamedSubMatch(rawRe, raw, result); err != nil {
 		t.Fatalf("got error: %+v", err)
 	}
 
@@ -80,7 +79,7 @@ func BenchmarkRegexNamedSubMatch(b *testing.B) {
 
 	b.Run("RegexNamedSubMatch", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			if err := libs.RegexNamedSubMatch(rawRe, raw, result); err != nil {
+			if err := RegexNamedSubMatch(rawRe, raw, result); err != nil {
 				b.Fatalf("got error: %+v", err)
 			}
 		}
@@ -104,8 +103,33 @@ func TestTemplateWithMap(t *testing.T) {
 		"k-3": 213.11,
 	}
 	want := `12341 + abc:213.11 22`
-	got := libs.TemplateWithMap(tpl, data)
+	got := TemplateWithMap(tpl, data)
 	if got != want {
 		t.Fatalf("want `%v`, got `%v`", want, got)
+	}
+}
+
+func TestLoadTagsReplaceEnv(t *testing.T) {
+	type args struct {
+		env  string
+		tags []string
+	}
+	tests := []struct {
+		name string
+		args args
+		want []string
+	}{
+		// TODO: Add test cases.
+		{"0", args{"sit", []string{"a.{env}", "b.{env}"}}, []string{"a.sit", "b.sit"}},
+		{"1", args{"sit", []string{"a", "b.{env}"}}, []string{"a", "b.sit"}},
+		{"2", args{"sit", []string{"a", "b"}}, []string{"a", "b"}},
+		{"2", args{"sit", []string{"a.", "b"}}, []string{"a.", "b"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := LoadTagsReplaceEnv(tt.args.env, tt.args.tags); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("LoadTagsReplaceEnv() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

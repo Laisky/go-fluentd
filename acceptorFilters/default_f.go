@@ -1,6 +1,8 @@
 package acceptorFilters
 
 import (
+	"fmt"
+
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/zap"
 )
@@ -24,6 +26,9 @@ func NewDefaultFilter(cfg *DefaultFilterCfg) *DefaultFilter {
 		DefaultFilterCfg: cfg,
 		tags:             map[string]struct{}{},
 	}
+	if err := f.valid(); err != nil {
+		libs.Logger.Panic("new default filter", zap.Error(err))
+	}
 
 	for _, tag := range cfg.AcceptTags {
 		f.tags[tag] = struct{}{}
@@ -35,6 +40,14 @@ func NewDefaultFilter(cfg *DefaultFilterCfg) *DefaultFilter {
 		zap.Bool("remove_unknown_tag", f.RemoveUnsupportTag),
 	)
 	return f
+}
+
+func (f *DefaultFilter) valid() error {
+	if f.RemoveUnsupportTag && len(f.AcceptTags) == 0 {
+		return fmt.Errorf("if set `remove_unknown_tag=true`, `accept_tags` cannot be empty")
+	}
+
+	return nil
 }
 
 func (f *DefaultFilter) GetName() string {

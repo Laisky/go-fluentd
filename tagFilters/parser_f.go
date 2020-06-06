@@ -236,11 +236,6 @@ func (cf *ParserFact) valid() error {
 		libs.Logger.Info("reset new_time_key", zap.String("new_time_key", cf.NewTimeKey))
 	}
 
-	if cf.MsgKey == "" {
-		cf.MsgKey = "log"
-		libs.Logger.Info("reset msg_key", zap.String("msg_key", cf.MsgKey))
-	}
-
 	return nil
 }
 

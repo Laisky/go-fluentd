@@ -13,7 +13,6 @@ github.com/Laisky/go-syslog v2.3.3+incompatible h1:TSHhP3iadAPDzC5efyYLPnGkv2pvU
 github.com/Laisky/go-syslog v2.3.3+incompatible/go.mod h1:PPmESkLU3DEbJ3fRXam2hqJTNQVFMggsDXBnOtu2ITk=
 github.com/Laisky/go-utils v1.11.2/go.mod h1:UtSl7Qru+oi1yMRYDJyYyBlAP6mxLHfR3uVZLPrHwMs=
 github.com/Laisky/go-utils v1.12.4/go.mod h1:QgBaajXMcsU/XPCZj/XY8d1/F4kvT9w6esd4eifKGwE=
-github.com/Laisky/go-utils v1.12.9 h1:AHcajt4TT5iwKBokU7lrAKVQMSEY6K1ABJwWEzKKdfE=
 github.com/Laisky/go-utils v1.12.9/go.mod h1:uG5zW/+WQqfCWX+UonUtVmb+mGZYQJ4Slhe1jQpe/P4=
 github.com/Laisky/go-utils v1.12.10 h1:8y+dLcEqdCFpzHuqhjKv3TPgmc279RXjTvX+ds6E+5k=
 github.com/Laisky/go-utils v1.12.10/go.mod h1:uG5zW/+WQqfCWX+UonUtVmb+mGZYQJ4Slhe1jQpe/P4=
@@ -305,7 +304,6 @@ golang.org/x/lint v0.0.0-20200302205851-738671d3881b h1:Wh+f8QHJXR411sJR8/vRBTZ7
 golang.org/x/lint v0.0.0-20200302205851-738671d3881b/go.mod h1:3xt1FjdF8hUf6vQPIChWIBhFzV8gjjsPE/fR3IyQdNY=
 golang.org/x/mod v0.0.0-20190513183733-4bf6d317e70e/go.mod h1:mXi4GBBbnImb6dmsKGUJ2LatrhH/nqhxcFungHvyanc=
 golang.org/x/mod v0.1.1-0.20191105210325-c90efee705ee/go.mod h1:QqPTAvyqsEbceGzBzNggFXnrqF1CaUcvgkdR5Ot7KZg=
-golang.org/x/mod v0.2.0 h1:KU7oHjnv3XNWfa5COkzUifxZmxp1TyI7ImMXqFxLwvQ=
 golang.org/x/mod v0.2.0/go.mod h1:s0Qsj1ACt9ePp/hMypM3fl4fZqREWJwdYDEqhRiZZUA=
 golang.org/x/net v0.0.0-20180826012351-8a410e7b638d/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
 golang.org/x/net v0.0.0-20180906233101-161cd47e91fd/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=

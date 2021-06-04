@@ -20,7 +20,7 @@ var (
 		New: func() interface{} {
 			return &libs.FluentMsg{
 				// Message: map[string]interface{}{},
-				Id: -1,
+				ID: -1,
 			}
 		},
 	}

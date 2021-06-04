@@ -58,7 +58,7 @@ func TestFluentdRecv(t *testing.T) {
 	msg := &libs.FluentMsg{
 		Tag:     tag,
 		Message: map[string]interface{}{"a": "b", "container_id": "lbkey"},
-		Id:      123,
+		ID:      123,
 	}
 	encoder := libs.NewFluentEncoder(conn)
 	if err = encoder.Encode(msg); err != nil {
@@ -73,17 +73,17 @@ func TestFluentdRecv(t *testing.T) {
 		{
 			Tag:     tag,
 			Message: map[string]interface{}{"a": "b", "container_id": "lbkey"},
-			Id:      123,
+			ID:      123,
 		},
 		{
 			Tag:     tag,
 			Message: map[string]interface{}{"a": "b", "container_id": "lbkey"},
-			Id:      123,
+			ID:      123,
 		},
 		{
 			Tag:     tag,
 			Message: map[string]interface{}{"a": "b", "container_id": "lbkey"},
-			Id:      123,
+			ID:      123,
 		},
 	}
 	if err = encoder.EncodeBatch(tag, msgBatch); err != nil {

@@ -197,7 +197,7 @@ type ESOpResp struct {
 }
 
 type ESIndexResp struct {
-	Id     string `json:"_id"`
+	ID     string `json:"_id"`
 	Index  string `json:"_index"`
 	Status int    `json:"status"`
 }

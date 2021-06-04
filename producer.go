@@ -252,7 +252,7 @@ func (p *Producer) Run(ctx context.Context) {
 					continue
 				}
 
-				msg.Message["msgid"] = p.DistributeKey + "-" + strconv.FormatInt(msg.Id, 10) // set id
+				msg.Message["msgid"] = p.DistributeKey + "-" + strconv.FormatInt(msg.ID, 10) // set id
 				if itf, ok = p.tag2SenderCaches.Load(msg.Tag); !ok {
 					p.Lock()
 					if itf, ok = p.tag2SenderCaches.Load(msg.Tag); !ok { // double check

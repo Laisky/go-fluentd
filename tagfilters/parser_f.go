@@ -1,4 +1,4 @@
-package tagFilters
+package tagfilters
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"github.com/Laisky/zap"
 )
 
-func (f *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.FluentMsg, inChan <-chan *libs.FluentMsg) {
+func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.FluentMsg, inChan <-chan *libs.FluentMsg) {
 	defer libs.Logger.Info("parser runner exit")
 	var (
 		err error
@@ -32,52 +32,52 @@ func (f *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.Fl
 			}
 		}
 
-		if !f.IsTagSupported(msg.Tag) {
+		if !cf.IsTagSupported(msg.Tag) {
 			outChan <- msg
 		}
 
-		if f.MsgKey != "" {
-			switch msg.Message[f.MsgKey].(type) {
+		if cf.MsgKey != "" {
+			switch msg.Message[cf.MsgKey].(type) {
 			case []byte:
 			case string:
-				msg.Message[f.MsgKey] = []byte(msg.Message[f.MsgKey].(string))
+				msg.Message[cf.MsgKey] = []byte(msg.Message[cf.MsgKey].(string))
 			default:
 				libs.Logger.Warn("unknon msg_key",
 					zap.String("tag", msg.Tag),
 					zap.String("msg", fmt.Sprint(msg.Message)),
-					zap.String("msg_key", f.MsgKey))
+					zap.String("msg_key", cf.MsgKey))
 				outChan <- msg
 				continue
 			}
 
 			// parse log string
-			if f.Regexp != nil {
-				if err = libs.RegexNamedSubMatch(f.Regexp, msg.Message[f.MsgKey].([]byte), msg.Message); err != nil {
+			if cf.Regexp != nil {
+				if err = libs.RegexNamedSubMatch(cf.Regexp, msg.Message[cf.MsgKey].([]byte), msg.Message); err != nil {
 					libs.Logger.Warn("discard message since format not matched",
 						zap.String("tag", msg.Tag),
-						zap.ByteString("log", msg.Message[f.MsgKey].([]byte)))
-					f.DiscardMsg(msg)
+						zap.ByteString("log", msg.Message[cf.MsgKey].([]byte)))
+					cf.DiscardMsg(msg)
 					continue
 				}
 			}
 
 			// remove origin log
-			if f.IsRemoveOrigLog {
-				delete(msg.Message, f.MsgKey)
+			if cf.IsRemoveOrigLog {
+				delete(msg.Message, cf.MsgKey)
 			}
 		}
 
 		// parse json
 		ok = false
-		if f.ParseJsonKey != "" {
-			switch log := msg.Message[f.ParseJsonKey].(type) {
+		if cf.ParseJSONKey != "" {
+			switch log := msg.Message[cf.ParseJSONKey].(type) {
 			case string:
 				if err = json.UnmarshalFromString(log, &msg.Message); err != nil {
 					libs.Logger.Warn("json unmarshal JSON args got error",
 						zap.String("tag", msg.Tag),
 						zap.Error(err),
 						zap.Int64s("ext-ids", msg.ExtIds),
-						zap.Int64("id", msg.Id),
+						zap.Int64("id", msg.ID),
 						zap.String("args", log))
 				} else {
 					ok = true
@@ -88,7 +88,7 @@ func (f *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.Fl
 						zap.String("tag", msg.Tag),
 						zap.Error(err),
 						zap.Int64s("ext-ids", msg.ExtIds),
-						zap.Int64("id", msg.Id),
+						zap.Int64("id", msg.ID),
 						zap.ByteString("args", log))
 				} else {
 					ok = true
@@ -100,69 +100,69 @@ func (f *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.Fl
 			}
 
 			if ok { // if failed to parse json, reserve origin args
-				delete(msg.Message, f.ParseJsonKey)
+				delete(msg.Message, cf.ParseJSONKey)
 			}
 		}
 		// flatten messages
 		libs.FlattenMap(msg.Message, "__") // do not use `.` as delimiter!
 
 		// MustInclude
-		if f.MustInclude != "" {
-			if _, ok = msg.Message[f.MustInclude]; !ok {
-				libs.Logger.Warn("dicard since of missing key", zap.String("key", f.MustInclude))
-				f.DiscardMsg(msg)
+		if cf.MustInclude != "" {
+			if _, ok = msg.Message[cf.MustInclude]; !ok {
+				libs.Logger.Warn("dicard since of missing key", zap.String("key", cf.MustInclude))
+				cf.DiscardMsg(msg)
 				continue
 			}
 		}
 
 		// parse time
-		if f.TimeKey != "" {
-			switch ts := msg.Message[f.TimeKey].(type) {
+		if cf.TimeKey != "" {
+			switch ts := msg.Message[cf.TimeKey].(type) {
 			case []byte:
-				if f.AppendTimeZone != "" {
-					v = string(ts) + f.AppendTimeZone
+				if cf.AppendTimeZone != "" {
+					v = string(ts) + cf.AppendTimeZone
 				} else {
 					v = string(ts)
 				}
 			case string:
-				if f.AppendTimeZone != "" {
-					v = ts + " " + f.AppendTimeZone
+				if cf.AppendTimeZone != "" {
+					v = ts + " " + cf.AppendTimeZone
 				} else {
 					v = ts
 				}
 			default:
 				libs.Logger.Warn("discard since unknown time format",
 					zap.Error(err),
-					zap.String("ts", fmt.Sprint(msg.Message[f.TimeKey])),
+					zap.String("ts", fmt.Sprint(msg.Message[cf.TimeKey])),
 					zap.String("tag", msg.Tag),
-					zap.String("time_key", f.TimeKey),
-					zap.String("time_format", f.TimeFormat),
-					zap.String("append_time_zone", f.AppendTimeZone))
-				f.DiscardMsg(msg)
+					zap.String("time_key", cf.TimeKey),
+					zap.String("time_format", cf.TimeFormat),
+					zap.String("append_time_zone", cf.AppendTimeZone))
+				cf.DiscardMsg(msg)
 				continue
 			}
 
 			v = strings.Replace(v, ",", ".", -1)
-			if t, err = time.Parse(f.TimeFormat, v); err != nil {
+			if t, err = time.Parse(cf.TimeFormat, v); err != nil {
 				libs.Logger.Warn("discard since parse time got error",
 					zap.Error(err),
 					zap.String("ts", v),
 					zap.String("tag", msg.Tag),
-					zap.String("time_key", f.TimeKey),
-					zap.String("time_format", f.TimeFormat),
-					zap.String("append_time_zone", f.AppendTimeZone))
-				f.DiscardMsg(msg)
+					zap.String("time_key", cf.TimeKey),
+					zap.String("time_format", cf.TimeFormat),
+					zap.String("append_time_zone", cf.AppendTimeZone))
+				cf.DiscardMsg(msg)
 				continue
 			}
 
-			if !f.ReservedTimeKey {
-				delete(msg.Message, f.TimeKey)
+			if !cf.ReservedTimeKey {
+				delete(msg.Message, cf.TimeKey)
 			}
 
-			msg.Message[f.NewTimeKey] = t.UTC().Format(f.NewTimeFormat)
+			msg.Message[cf.NewTimeKey] = t.UTC().Format(cf.NewTimeFormat)
 
 			// process `add` at the end of parser
-			libs.ProcessAdd(f.AddCfg, msg)
+			libs.ProcessAdd(cf.AddCfg, msg)
 		}
 
 		outChan <- msg
@@ -178,7 +178,7 @@ type ParserFactCfg struct {
 	MsgPool         *sync.Pool
 	IsRemoveOrigLog bool
 	AddCfg          libs.AddCfg
-	ParseJsonKey,
+	ParseJSONKey,
 	MustInclude string
 	TimeKey,
 	TimeFormat,

@@ -135,27 +135,28 @@ func (j *Journal) CloseTag(tag string) error {
 	j.jjLock.Lock()
 	defer j.jjLock.Unlock()
 
-	if jj, ok := j.tag2JMap.Load(tag); !ok {
+	jj, ok := j.tag2JMap.Load(tag)
+	if !ok {
 		return fmt.Errorf("tag %v not exists in tag2CtxCancelMap", tag)
+	}
+
+	jj.(*journal.Journal).Close()
+	j.tag2JMap.Delete(tag)
+	j.tag2IDsCounter.Delete(tag)
+	j.tag2DataCounter.Delete(tag)
+
+	if inchan, ok := j.tag2JJInchanMap.Load(tag); !ok {
+		libs.Logger.Panic("tag must exists", zap.String("tag", tag))
 	} else {
-		jj.(*journal.Journal).Close()
-		j.tag2JMap.Delete(tag)
-		j.tag2IDsCounter.Delete(tag)
-		j.tag2DataCounter.Delete(tag)
+		close(inchan.(chan *libs.FluentMsg))
+		j.tag2JJInchanMap.Delete(tag)
+	}
 
-		if inchan, ok := j.tag2JJInchanMap.Load(tag); !ok {
-			libs.Logger.Panic("tag must exists", zap.String("tag", tag))
-		} else {
-			close(inchan.(chan *libs.FluentMsg))
-			j.tag2JJInchanMap.Delete(tag)
-		}
-
-		if inchan, ok := j.tag2JJCommitChanMap.Load(tag); !ok {
-			libs.Logger.Panic("tag must exists", zap.String("tag", tag))
-		} else {
-			close(inchan.(chan *libs.FluentMsg))
-			j.tag2JJCommitChanMap.Delete(tag)
-		}
+	if inchan, ok := j.tag2JJCommitChanMap.Load(tag); !ok {
+		libs.Logger.Panic("tag must exists", zap.String("tag", tag))
+	} else {
+		close(inchan.(chan *libs.FluentMsg))
+		j.tag2JJCommitChanMap.Delete(tag)
 	}
 
 	libs.Logger.Info("delete journal tag", zap.String("tag", tag))
@@ -271,15 +272,15 @@ func (j *Journal) ProcessLegacyMsg(dumpChan chan *libs.FluentMsg) (maxID int64, 
 					continue
 				}
 
-				msg.Id = data.ID
+				msg.ID = data.ID
 				msg.Tag = string(data.Data["tag"].(string))
 				msg.Message = data.Data["message"].(map[string]interface{})
-				if msg.Id > innerMaxID {
-					innerMaxID = msg.Id
+				if msg.ID > innerMaxID {
+					innerMaxID = msg.ID
 				}
 				libs.Logger.Debug("load msg from legacy",
 					zap.String("tag", msg.Tag),
-					zap.Int64("id", msg.Id))
+					zap.Int64("id", msg.ID))
 
 				// rewrite data into journal
 				// only committed id can really remove a msg
@@ -384,7 +385,7 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 			counter.Count()
 			nRetry = 0
 			for nRetry < maxRetry {
-				if err = jj.WriteId(msg.Id); err != nil {
+				if err = jj.WriteId(msg.ID); err != nil {
 					nRetry++
 				}
 				break
@@ -448,7 +449,7 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 				}
 			}
 
-			data.ID = msg.Id
+			data.ID = msg.ID
 			data.Data["message"] = msg.Message
 			data.Data["tag"] = msg.Tag
 			nRetry = 0
@@ -484,7 +485,7 @@ func (j *Journal) GetOutChan() chan *libs.FluentMsg {
 }
 
 func (j *Journal) ConvertMsg2Buf(msg *libs.FluentMsg, data *map[string]interface{}) {
-	(*data)["id"] = msg.Id
+	(*data)["id"] = msg.ID
 	(*data)["tag"] = msg.Tag
 	(*data)["message"] = msg.Message
 }
@@ -617,7 +618,7 @@ func (j *Journal) startCommitRunner(ctx context.Context) {
 
 			libs.Logger.Debug("try to commit msg",
 				zap.String("tag", msg.Tag),
-				zap.Int64("id", msg.Id))
+				zap.Int64("id", msg.ID))
 			if chani, ok = j.tag2JJCommitChanMap.Load(msg.Tag); !ok {
 				j.createJournalRunner(ctx, msg.Tag)
 				chani, _ = j.tag2JJCommitChanMap.Load(msg.Tag)
@@ -630,12 +631,12 @@ func (j *Journal) startCommitRunner(ctx context.Context) {
 				case j.commitChan <- msg:
 					libs.Logger.Warn("reset committed msg",
 						zap.String("tag", msg.Tag),
-						zap.Int64("id", msg.Id),
+						zap.Int64("id", msg.ID),
 					)
 				default:
 					libs.Logger.Error("discard committed msg because commitChan is busy",
 						zap.String("tag", msg.Tag),
-						zap.Int64("id", msg.Id),
+						zap.Int64("id", msg.ID),
 					)
 					j.MsgPool.Put(msg)
 				}

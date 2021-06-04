@@ -5,7 +5,7 @@ Rewrite fluentd-server by Golang, Higher performance with less resource requirem
 * At-Least-Once guarantee(disk WAL)
 * log concatenation by head regexp expression
 * log parsing by regexp expression(support embedded json)
-* log filter by custom plugins(acceptorFilters & tagFilters)
+* log filter by custom plugins(acceptorfilters & tagfilters)
 * multiple receivers(support multiple protocols: msgpack, http, syslog, kafka, ...)
 * multiple senders(support multiple backend: elasticsearch, fluentd, ...)
 * multiple environments deployment(`--env`: sit, perf, uat, prod)

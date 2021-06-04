@@ -8,13 +8,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Laisky/go-fluentd/acceptorFilters"
+	"github.com/Laisky/go-fluentd/acceptorfilters"
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-fluentd/monitor"
-	"github.com/Laisky/go-fluentd/postFilters"
+	"github.com/Laisky/go-fluentd/postfilters"
 	"github.com/Laisky/go-fluentd/recvs"
 	"github.com/Laisky/go-fluentd/senders"
-	"github.com/Laisky/go-fluentd/tagFilters"
+	"github.com/Laisky/go-fluentd/tagfilters"
 	"github.com/Laisky/go-kafka"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
@@ -40,6 +40,7 @@ func NewControllor() (c *Controllor) {
 			},
 		},
 	}
+
 	return c
 }
 
@@ -177,8 +178,8 @@ func (c *Controllor) initAcceptor(ctx context.Context, journal *Journal, receive
 	return acceptor
 }
 
-func (c *Controllor) initAcceptorPipeline(ctx context.Context, env string) (*acceptorFilters.AcceptorPipeline, error) {
-	afs := []acceptorFilters.AcceptorFilterItf{}
+func (c *Controllor) initAcceptorPipeline(ctx context.Context, env string) (*acceptorfilters.AcceptorPipeline, error) {
+	afs := []acceptorfilters.AcceptorFilterItf{}
 	switch utils.Settings.Get("settings.acceptor_filters.plugins").(type) {
 	case map[string]interface{}:
 		for name := range utils.Settings.Get("settings.acceptor_filters.plugins").(map[string]interface{}) {
@@ -189,7 +190,7 @@ func (c *Controllor) initAcceptorPipeline(ctx context.Context, env string) (*acc
 			t := utils.Settings.GetString("settings.acceptor_filters.plugins." + name + ".type")
 			switch t {
 			case "spark":
-				afs = append(afs, acceptorFilters.NewSparkFilter(&acceptorFilters.SparkFilterCfg{
+				afs = append(afs, acceptorfilters.NewSparkFilter(&acceptorfilters.SparkFilterCfg{
 					Tag:         "spark." + env,
 					Name:        name,
 					MsgKey:      utils.Settings.GetString("settings.acceptor_filters.plugins." + name + ".msg_key"),
@@ -197,13 +198,13 @@ func (c *Controllor) initAcceptorPipeline(ctx context.Context, env string) (*acc
 					IgnoreRegex: regexp.MustCompile(utils.Settings.GetString("settings.acceptor_filters.plugins." + name + ".ignore_regex")),
 				}))
 			case "spring":
-				afs = append(afs, acceptorFilters.NewSpringFilter(&acceptorFilters.SpringFilterCfg{
+				afs = append(afs, acceptorfilters.NewSpringFilter(&acceptorfilters.SpringFilterCfg{
 					Tag:    "spring." + env,
 					Name:   name,
 					Env:    env,
 					MsgKey: utils.Settings.GetString("settings.acceptor_filters.plugins." + name + ".msg_key"),
 					TagKey: utils.Settings.GetString("settings.acceptor_filters.plugins." + name + ".tag_key"),
-					Rules:  acceptorFilters.ParseSpringRules(env, utils.Settings.Get("settings.acceptor_filters.plugins."+name+".rules").([]interface{})),
+					Rules:  acceptorfilters.ParseSpringRules(env, utils.Settings.Get("settings.acceptor_filters.plugins."+name+".rules").([]interface{})),
 				}))
 			default:
 				libs.Logger.Panic("unknown acceptorfilter type",
@@ -220,7 +221,7 @@ func (c *Controllor) initAcceptorPipeline(ctx context.Context, env string) (*acc
 	}
 
 	// set the DefaultFilter as last filter
-	afs = append(afs, acceptorFilters.NewDefaultFilter(&acceptorFilters.DefaultFilterCfg{
+	afs = append(afs, acceptorfilters.NewDefaultFilter(&acceptorfilters.DefaultFilterCfg{
 		Name:               "default",
 		RemoveEmptyTag:     utils.Settings.GetBool("settings.acceptor_filters.plugins.default.remove_empty_tag"),
 		RemoveUnsupportTag: utils.Settings.GetBool("settings.acceptor_filters.plugins.default.remove_unknown_tag"),
@@ -228,7 +229,7 @@ func (c *Controllor) initAcceptorPipeline(ctx context.Context, env string) (*acc
 		AcceptTags:         libs.LoadTagsReplaceEnv(env, utils.Settings.GetStringSlice("settings.acceptor_filters.plugins.default.accept_tags")),
 	}))
 
-	return acceptorFilters.NewAcceptorPipeline(ctx, &acceptorFilters.AcceptorPipelineCfg{
+	return acceptorfilters.NewAcceptorPipeline(ctx, &acceptorfilters.AcceptorPipelineCfg{
 		OutChanSize:     utils.Settings.GetInt("settings.acceptor_filters.out_buf_len"),
 		MsgPool:         c.msgPool,
 		ReEnterChanSize: utils.Settings.GetInt("settings.acceptor_filters.reenter_chan_len"),
@@ -241,8 +242,8 @@ func (c *Controllor) initAcceptorPipeline(ctx context.Context, env string) (*acc
 	)
 }
 
-func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommitChan chan<- *libs.FluentMsg) *tagFilters.TagPipeline {
-	fs := []tagFilters.TagFilterFactoryItf{}
+func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommitChan chan<- *libs.FluentMsg) *tagfilters.TagPipeline {
+	fs := []tagfilters.TagFilterFactoryItf{}
 	isEnableConcator := false
 
 	switch utils.Settings.Get("settings.tag_filters.plugins").(type) {
@@ -251,7 +252,7 @@ func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommit
 			t := utils.Settings.GetString("settings.tag_filters.plugins." + name + ".type")
 			switch t {
 			case "parser":
-				fs = append(fs, tagFilters.NewParserFact(&tagFilters.ParserFactCfg{
+				fs = append(fs, tagfilters.NewParserFact(&tagfilters.ParserFactCfg{
 					Name:            name,
 					NFork:           utils.Settings.GetInt("settings.tag_filters.plugins." + name + ".nfork"),
 					LBKey:           utils.Settings.GetString("settings.tag_filters.plugins." + name + ".lb_key"),
@@ -260,7 +261,7 @@ func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommit
 					Regexp:          regexp.MustCompile(utils.Settings.GetString("settings.tag_filters.plugins." + name + ".pattern")),
 					IsRemoveOrigLog: utils.Settings.GetBool("settings.tag_filters.plugins." + name + ".is_remove_orig_log"),
 					MsgPool:         c.msgPool,
-					ParseJsonKey:    utils.Settings.GetString("settings.tag_filters.plugins." + name + ".parse_json_key"),
+					ParseJSONKey:    utils.Settings.GetString("settings.tag_filters.plugins." + name + ".parse_json_key"),
 					AddCfg:          libs.ParseAddCfg(env, utils.Settings.Get("settings.tag_filters.plugins."+name+".add")),
 					MustInclude:     utils.Settings.GetString("settings.tag_filters.plugins." + name + ".must_include"),
 					TimeKey:         utils.Settings.GetString("settings.tag_filters.plugins." + name + ".time_key"),
@@ -289,15 +290,15 @@ func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommit
 	// PAAS-397: put concat in fluentd-recvs
 	// concatorFilter must in the front
 	if isEnableConcator {
-		fs = append([]tagFilters.TagFilterFactoryItf{tagFilters.NewConcatorFact(&tagFilters.ConcatorFactCfg{
+		fs = append([]tagfilters.TagFilterFactoryItf{tagfilters.NewConcatorFact(&tagfilters.ConcatorFactCfg{
 			NFork:   utils.Settings.GetInt("settings.tag_filters.plugins.concator.config.nfork"),
 			LBKey:   utils.Settings.GetString("settings.tag_filters.plugins.concator.config.lb_key"),
 			MaxLen:  utils.Settings.GetInt("settings.tag_filters.plugins.concator.config.max_length"),
-			Plugins: tagFilters.LoadConcatorTagConfigs(env, utils.Settings.Get("settings.tag_filters.plugins.concator.plugins").(map[string]interface{})),
+			Plugins: tagfilters.LoadConcatorTagConfigs(env, utils.Settings.Get("settings.tag_filters.plugins.concator.plugins").(map[string]interface{})),
 		})}, fs...)
 	}
 
-	return tagFilters.NewTagPipeline(ctx, &tagFilters.TagPipelineCfg{
+	return tagfilters.NewTagPipeline(ctx, &tagfilters.TagPipelineCfg{
 		MsgPool:          c.msgPool,
 		WaitCommitChan:   waitCommitChan,
 		InternalChanSize: utils.Settings.GetInt("settings.tag_filters.internal_chan_size"),
@@ -306,7 +307,7 @@ func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommit
 	)
 }
 
-func (c *Controllor) initDispatcher(ctx context.Context, waitDispatchChan chan *libs.FluentMsg, tagPipeline *tagFilters.TagPipeline) *Dispatcher {
+func (c *Controllor) initDispatcher(ctx context.Context, waitDispatchChan chan *libs.FluentMsg, tagPipeline *tagfilters.TagPipeline) *Dispatcher {
 	dispatcher := NewDispatcher(&DispatcherCfg{
 		InChan:      waitDispatchChan,
 		TagPipeline: tagPipeline,
@@ -318,10 +319,10 @@ func (c *Controllor) initDispatcher(ctx context.Context, waitDispatchChan chan *
 	return dispatcher
 }
 
-func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- *libs.FluentMsg) *postFilters.PostPipeline {
-	fs := []postFilters.PostFilterItf{
+func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- *libs.FluentMsg) *postfilters.PostPipeline {
+	fs := []postfilters.PostFilterItf{
 		// set the DefaultFilter as first filter
-		postFilters.NewDefaultFilter(&postFilters.DefaultFilterCfg{
+		postfilters.NewDefaultFilter(&postfilters.DefaultFilterCfg{
 			MsgKey: utils.Settings.GetString("settings.post_filters.plugins.default.msg_key"),
 			MaxLen: utils.Settings.GetInt("settings.post_filters.plugins.default.max_len"),
 		}),
@@ -337,25 +338,25 @@ func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- *libs.Fl
 			t := utils.Settings.GetString("settings.post_filters.plugins." + name + ".type")
 			switch t {
 			case "es-dispatcher":
-				fs = append(fs, postFilters.NewESDispatcherFilter(&postFilters.ESDispatcherFilterCfg{
+				fs = append(fs, postfilters.NewESDispatcherFilter(&postfilters.ESDispatcherFilterCfg{
 					Tags:     libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.post_filters.plugins."+name+".tags")),
 					TagKey:   utils.Settings.GetString("settings.post_filters.plugins." + name + ".tag_key"),
-					ReTagMap: postFilters.LoadReTagMap(env, utils.Settings.Get("settings.post_filters.plugins."+name+".rewrite_tag_map")),
+					ReTagMap: postfilters.LoadReTagMap(env, utils.Settings.Get("settings.post_filters.plugins."+name+".rewrite_tag_map")),
 				}))
 			case "tag-rewriter":
-				fs = append(fs, postFilters.NewForwardTagRewriterFilter(&postFilters.ForwardTagRewriterFilterCfg{ // wechat mini program
+				fs = append(fs, postfilters.NewForwardTagRewriterFilter(&postfilters.ForwardTagRewriterFilterCfg{ // wechat mini program
 					Tag:    utils.Settings.GetString("settings.post_filters.plugins."+name+".tag") + "." + env,
 					TagKey: utils.Settings.GetString("settings.post_filters.plugins." + name + ".tag_key"),
 				}))
 			case "fields":
-				fs = append(fs, postFilters.NewFieldsFilter(&postFilters.FieldsFilterCfg{
+				fs = append(fs, postfilters.NewFieldsFilter(&postfilters.FieldsFilterCfg{
 					Tags:              libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.post_filters.plugins."+name+".tags")),
 					IncludeFields:     utils.Settings.GetStringSlice("settings.post_filters.plugins." + name + ".include_fields"),
 					ExcludeFields:     utils.Settings.GetStringSlice("settings.post_filters.plugins." + name + ".exclude_fields"),
 					NewFieldTemplates: utils.Settings.GetStringMapString("settings.post_filters.plugins." + name + ".new_fields"),
 				}))
 			case "custom-bigdata":
-				fs = append(fs, postFilters.NewCustomBigDataFilter(&postFilters.CustomBigDataFilterCfg{
+				fs = append(fs, postfilters.NewCustomBigDataFilter(&postfilters.CustomBigDataFilterCfg{
 					Tags: libs.LoadTagsAppendEnv(env, utils.Settings.GetStringSlice("settings.post_filters.plugins."+name+".tags")),
 				}))
 			default:
@@ -374,7 +375,7 @@ func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- *libs.Fl
 		libs.Logger.Panic("post_filter configuration error")
 	}
 
-	return postFilters.NewPostPipeline(&postFilters.PostPipelineCfg{
+	return postfilters.NewPostPipeline(&postfilters.PostPipelineCfg{
 		MsgPool:         c.msgPool,
 		WaitCommitChan:  waitCommitChan,
 		NFork:           utils.Settings.GetInt("settings.post_filters.fork"),

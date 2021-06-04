@@ -89,7 +89,7 @@ func ReplaceStrByMsg(msg *FluentMsg, v string) string {
 		case variableMsgTag:
 			newVal = msg.Tag
 		case variableMsgID:
-			newVal = msg.Id
+			newVal = msg.ID
 		case variableNow:
 			newVal = utils.Clock.GetUTCNow().Format(time.RFC3339)
 		case variableNowUnix:
@@ -122,18 +122,18 @@ func ReplaceStrByMsg(msg *FluentMsg, v string) string {
 		// fmt.Println("isUpper", isUpper)
 		// fmt.Println("newVal", newVal)
 
-		switch newVal.(type) {
+		switch v := newVal.(type) {
 		case string:
 			if isLower {
-				newVal = strings.ToLower(newVal.(string))
+				newVal = strings.ToLower(v)
 			} else if isUpper {
-				newVal = strings.ToUpper(newVal.(string))
+				newVal = strings.ToUpper(v)
 			}
 		case []byte:
 			if isLower {
-				newVal = bytes.ToLower(newVal.([]byte))
+				newVal = bytes.ToLower(v)
 			} else if isUpper {
-				newVal = bytes.ToUpper(newVal.([]byte))
+				newVal = bytes.ToUpper(v)
 			}
 		case nil:
 			newVal = ""

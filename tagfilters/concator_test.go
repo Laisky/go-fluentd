@@ -1,4 +1,4 @@
-package tagFilters_test
+package tagfilters
 
 import (
 	"regexp"
@@ -8,11 +8,11 @@ import (
 // func BenchmarkConcator(b *testing.B) {
 // 	// utils.SetupLogger("debug")
 // 	cf := &Factory{
-// 		BaseTagFilterFactory: &tagFilters.BaseTagFilterFactory{},
+// 		BaseTagFilterFactory: &tagfilters.BaseTagFilterFactory{},
 // 	}
 // 	pMsgPool := &sync.Pool{
 // 		New: func() interface{} {
-// 			return &tagFilters.PendingMsg{}
+// 			return &tagfilters.PendingMsg{}
 // 		},
 // 	}
 // 	msgPool := &sync.Pool{
@@ -37,7 +37,7 @@ import (
 // 		}
 // 	}()
 
-// 	c := tagFilters.NewConcator(&tagFilters.ConcatorCfg{
+// 	c := tagfilters.NewConcator(&tagfilters.ConcatorCfg{
 // 		Cf:         cf,
 // 		MaxLen:     100000,
 // 		Tag:        "spring.sit",

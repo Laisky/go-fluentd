@@ -131,7 +131,7 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 
 				msg = r.msgPool.Get().(*libs.FluentMsg)
 				// libs.Logger.Info(fmt.Sprintf("got %p", msg))
-				msg.Id = r.counter.Count()
+				msg.ID = r.counter.Count()
 				msg.Tag = r.Tag
 				msg.Message = logPart
 				for rewriteKey, rewriteNewKey = range r.RewriteTags { // rewrite key
@@ -142,7 +142,7 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 					msg.Message[r.TagKey] = r.Tag
 				}
 
-				libs.Logger.Debug("receive new msg", zap.String("tag", r.Tag), zap.Int64("id", msg.Id))
+				libs.Logger.Debug("receive new msg", zap.String("tag", r.Tag), zap.Int64("id", msg.ID))
 				r.asyncOutChan <- msg
 			}
 

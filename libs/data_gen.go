@@ -148,7 +148,7 @@ func (z *FluentMsg) DecodeMsg(dc *msgp.Reader) (err error) {
 				z.Message[za0001] = za0002
 			}
 		case "Id":
-			z.Id, err = dc.ReadInt64()
+			z.ID, err = dc.ReadInt64()
 			if err != nil {
 				err = msgp.WrapError(err, "Id")
 				return
@@ -223,7 +223,7 @@ func (z *FluentMsg) EncodeMsg(en *msgp.Writer) (err error) {
 	if err != nil {
 		return
 	}
-	err = en.WriteInt64(z.Id)
+	err = en.WriteInt64(z.ID)
 	if err != nil {
 		err = msgp.WrapError(err, "Id")
 		return
@@ -268,7 +268,7 @@ func (z *FluentMsg) MarshalMsg(b []byte) (o []byte, err error) {
 	}
 	// string "Id"
 	o = append(o, 0xa2, 0x49, 0x64)
-	o = msgp.AppendInt64(o, z.Id)
+	o = msgp.AppendInt64(o, z.ID)
 	// string "ExtIds"
 	o = append(o, 0xa6, 0x45, 0x78, 0x74, 0x49, 0x64, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.ExtIds)))
@@ -333,7 +333,7 @@ func (z *FluentMsg) UnmarshalMsg(bts []byte) (o []byte, err error) {
 				z.Message[za0001] = za0002
 			}
 		case "Id":
-			z.Id, bts, err = msgp.ReadInt64Bytes(bts)
+			z.ID, bts, err = msgp.ReadInt64Bytes(bts)
 			if err != nil {
 				err = msgp.WrapError(err, "Id")
 				return

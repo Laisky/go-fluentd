@@ -7,14 +7,14 @@ import (
 
 	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/go-fluentd/monitor"
-	"github.com/Laisky/go-fluentd/tagFilters"
+	"github.com/Laisky/go-fluentd/tagfilters"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 )
 
 type DispatcherCfg struct {
 	InChan             chan *libs.FluentMsg
-	TagPipeline        tagFilters.TagPipelineItf
+	TagPipeline        tagfilters.TagPipelineItf
 	NFork, OutChanSize int
 }
 

@@ -25,7 +25,7 @@ func Test_replaceByKey(t *testing.T) {
 				"iLB": "iBBBB",
 			},
 		},
-		Id:  123,
+		ID:  123,
 		Tag: "test",
 	}
 	msgArg := &FluentMsg{
@@ -43,7 +43,7 @@ func Test_replaceByKey(t *testing.T) {
 				"iLB": "iBBBB",
 			},
 		},
-		Id:  123,
+		ID:  123,
 		Tag: "test",
 	}
 

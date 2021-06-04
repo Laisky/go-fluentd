@@ -1,4 +1,4 @@
-package tagFilters
+package tagfilters
 
 import (
 	"context"

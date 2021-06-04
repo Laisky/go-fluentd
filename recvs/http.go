@@ -179,20 +179,21 @@ func (r *HTTPRecv) HTTPLogHandler(ctx *gin.Context) {
 	}
 
 	msg := r.msgPool.Get().(*libs.FluentMsg)
-	if log, err := ioutil.ReadAll(ctx.Request.Body); err != nil {
+	log, err := ioutil.ReadAll(ctx.Request.Body)
+	if err != nil {
 		libs.Logger.Warn("try to read log got error", zap.Error(err))
 		r.msgPool.Put(msg)
 		r.BadRequest(ctx, "can not load request body")
 		return
-	} else {
-		msg.Tag = r.Tag + "." + r.Env // forward-xxx.sit
-		msg.Message = map[string]interface{}{}
-		if err = json.Unmarshal(log, &msg.Message); err != nil {
-			libs.Logger.Warn("try to unmarsh json got error")
-			r.msgPool.Put(msg)
-			r.BadRequest(ctx, "try to unmarsh json body got error")
-			return
-		}
+	}
+
+	msg.Tag = r.Tag + "." + r.Env // forward-xxx.sit
+	msg.Message = map[string]interface{}{}
+	if err = json.Unmarshal(log, &msg.Message); err != nil {
+		libs.Logger.Warn("try to unmarsh json got error")
+		r.msgPool.Put(msg)
+		r.BadRequest(ctx, "try to unmarsh json body got error")
+		return
 	}
 
 	if !r.validate(ctx, msg) {
@@ -202,8 +203,8 @@ func (r *HTTPRecv) HTTPLogHandler(ctx *gin.Context) {
 
 	libs.FlattenMap(msg.Message, "__")
 	msg.Message[r.TagKey] = r.OrigTag + "." + env
-	msg.Id = r.counter.Count()
-	libs.Logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id))
-	ctx.JSON(http.StatusOK, map[string]int64{"msgid": msg.Id})
+	msg.ID = r.counter.Count()
+	libs.Logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.ID))
+	ctx.JSON(http.StatusOK, map[string]int64{"msgid": msg.ID})
 	r.asyncOutChan <- msg
 }

@@ -6,7 +6,7 @@ package libs
 type FluentMsg struct {
 	Tag     string
 	Message map[string]interface{}
-	Id      int64
+	ID      int64
 	ExtIds  []int64
 }
 

@@ -1,4 +1,4 @@
-package tagFilters
+package tagfilters
 
 import (
 	"context"
@@ -44,8 +44,8 @@ type PendingMsg struct {
 // it's better to create and run Concator by ConcatorFactory
 //
 // TODO: concator for each tag now,
-// maybe set one concator for each identifier in the future for better performance
-func (c *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCfg, outChan chan<- *libs.FluentMsg, inChan <-chan *libs.FluentMsg) {
+//       maybe set one concator for each identifier in the future for better performance
+func (cf *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCfg, outChan chan<- *libs.FluentMsg, inChan <-chan *libs.FluentMsg) {
 	defer libs.Logger.Info("concator exit")
 	var (
 		msg        *libs.FluentMsg
@@ -64,7 +64,7 @@ func (c *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCfg
 	)
 
 	for {
-		if len(c.slot) == 0 { // no msg waitting in slot
+		if len(cf.slot) == 0 { // no msg waitting in slot
 			libs.Logger.Debug("slot clear, waitting for new msg")
 			select {
 			case <-ctx.Done():
@@ -85,7 +85,7 @@ func (c *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCfg
 					return
 				}
 			default: // no new msg
-				for identifier, pmsg = range c.slot {
+				for identifier, pmsg = range cf.slot {
 					if utils.Clock.GetUTCNow().Sub(pmsg.lastT) > concatTimeoutTs { // timeout to flush
 						// PAAS-210: I have no idea why this line could throw error
 						// libs.Logger.Debug("timeout flush", zap.ByteString("log", pmsg.msg.Message[cfg.MsgKey].([]byte)))
@@ -103,8 +103,8 @@ func (c *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCfg
 						}
 
 						outChan <- pmsg.msg
-						c.pMsgPool.Put(pmsg)
-						delete(c.slot, identifier)
+						cf.pMsgPool.Put(pmsg)
+						delete(cf.slot, identifier)
 					}
 				}
 
@@ -146,7 +146,7 @@ func (c *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCfg
 			continue
 		}
 
-		if _, ok = c.slot[identifier]; !ok { // new identifier
+		if _, ok = cf.slot[identifier]; !ok { // new identifier
 			// new line with incorrect format, skip
 			if !cfg.Regexp.Match(log) {
 				outChan <- msg
@@ -157,14 +157,14 @@ func (c *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCfg
 			libs.Logger.Debug("got new identifier",
 				zap.String("identifier", identifier),
 				zap.ByteString("log", log))
-			pmsg = c.pMsgPool.Get().(*PendingMsg)
+			pmsg = cf.pMsgPool.Get().(*PendingMsg)
 			pmsg.lastT = utils.Clock.GetUTCNow()
 			pmsg.msg = msg
-			c.slot[identifier] = pmsg
+			cf.slot[identifier] = pmsg
 			continue
 		}
 
-		pmsg = c.slot[identifier]
+		pmsg = cf.slot[identifier]
 
 		// replace exists msg in slot
 		if cfg.Regexp.Match(log) { // new line
@@ -188,19 +188,19 @@ func (c *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCfg
 		if pmsg.msg.ExtIds == nil {
 			pmsg.msg.ExtIds = []int64{} // create ids, wait to append tail-msg's id
 		}
-		pmsg.msg.ExtIds = append(pmsg.msg.ExtIds, msg.Id)
+		pmsg.msg.ExtIds = append(pmsg.msg.ExtIds, msg.ID)
 		pmsg.lastT = utils.Clock.GetUTCNow()
 
 		// too long to send
-		if len(pmsg.msg.Message[cfg.MsgKey].([]byte)) >= c.MaxLen {
+		if len(pmsg.msg.Message[cfg.MsgKey].([]byte)) >= cf.MaxLen {
 			libs.Logger.Debug("too long to send", zap.String("msgKey", cfg.MsgKey), zap.String("tag", msg.Tag))
 			outChan <- pmsg.msg
-			c.pMsgPool.Put(pmsg)
-			delete(c.slot, identifier)
+			cf.pMsgPool.Put(pmsg)
+			delete(cf.slot, identifier)
 		}
 
 		// discard concated tail msg
-		c.DiscardMsg(msg)
+		cf.DiscardMsg(msg)
 	}
 }
 

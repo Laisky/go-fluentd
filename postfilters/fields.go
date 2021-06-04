@@ -1,4 +1,4 @@
-package postFilters
+package postfilters
 
 import (
 	"fmt"

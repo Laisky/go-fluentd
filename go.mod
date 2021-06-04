@@ -1,6 +1,6 @@
 module github.com/Laisky/go-fluentd
 
-go 1.12
+go 1.16
 
 require (
 	github.com/Laisky/gin-middlewares v1.1.1

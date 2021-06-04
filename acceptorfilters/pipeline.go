@@ -1,4 +1,4 @@
-package acceptorFilters
+package acceptorfilters
 
 import (
 	"context"

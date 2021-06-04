@@ -206,7 +206,7 @@ func (r *KafkaRecv) Run(ctx context.Context) {
 // parse2Msg parse kafkamsg to fluentdmsg
 func (r *KafkaRecv) parse2Msg(kmsg *kafka.KafkaMsg) (msg *libs.FluentMsg, err error) {
 	msg = r.msgPool.Get().(*libs.FluentMsg)
-	msg.Id = r.counter.Count()
+	msg.ID = r.counter.Count()
 	msg.Tag = r.Tag
 
 	// remove old messages log

@@ -379,8 +379,8 @@ func (r *FluentdRecv) ProcessMsg(msg *libs.FluentMsg) {
 // SendMsg put msg into downstream
 func (r *FluentdRecv) SendMsg(msg *libs.FluentMsg) {
 	msg.Message[r.TagKey] = msg.Tag
-	msg.Id = r.counter.Count()
-	r.logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.Id))
+	msg.ID = r.counter.Count()
+	r.logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.ID))
 	r.asyncOutChan <- msg
 }
 

@@ -1,4 +1,4 @@
-package concator
+package controller
 
 import (
 	"context"

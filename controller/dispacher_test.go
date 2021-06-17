@@ -1,4 +1,4 @@
-package concator_test
+package controller
 
 import (
 	"testing"

@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Laisky/go-fluentd/libs"
-	"github.com/Laisky/go-fluentd/recvs"
+	"gofluentd/library"
+	"gofluentd/recvs"
+
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
@@ -23,8 +24,8 @@ var (
 func TestHTTPRecv(t *testing.T) {
 	var (
 		err          error
-		syncOutChan  = make(chan *libs.FluentMsg, 1000)
-		asyncOutChan = make(chan *libs.FluentMsg, 1000)
+		syncOutChan  = make(chan *library.FluentMsg, 1000)
+		asyncOutChan = make(chan *library.FluentMsg, 1000)
 	)
 
 	cfg := &recvs.HTTPRecvCfg{
@@ -57,7 +58,7 @@ func TestHTTPRecv(t *testing.T) {
 	go func() {
 		for {
 			if err := httpsrv.Run(addr); err != nil {
-				libs.Logger.Error("try to run server got error", zap.Error(err))
+				library.Logger.Error("try to run server got error", zap.Error(err))
 				port++
 				addr = fmt.Sprintf("localhost:%v", port)
 			}
@@ -86,7 +87,7 @@ func TestHTTPRecv(t *testing.T) {
 	}
 
 	// check msg
-	var msg *libs.FluentMsg
+	var msg *library.FluentMsg
 	select {
 	case msg = <-asyncOutChan:
 	default:

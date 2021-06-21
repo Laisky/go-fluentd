@@ -1,10 +1,9 @@
-package libs_test
+package library
 
 import (
 	"testing"
 	"time"
 
-	"github.com/Laisky/go-fluentd/libs"
 	"github.com/Laisky/zap"
 )
 
@@ -15,8 +14,8 @@ var (
 	nWaits         = 0
 	nWaitsToDouble = 2
 	timeoutTs      = 5 * time.Second
-	timer          = libs.NewTimer(
-		libs.NewTimerConfig(
+	timer          = NewTimer(
+		NewTimerConfig(
 			initWaitTs,
 			maxWaitTs,
 			waitTs,
@@ -82,7 +81,7 @@ func TestTimerSleep(t *testing.T) {
 }
 
 func init() {
-	if err := libs.Logger.ChangeLevel("debug"); err != nil {
-		libs.Logger.Panic("change level", zap.Error(err))
+	if err := Logger.ChangeLevel("debug"); err != nil {
+		Logger.Panic("change level", zap.Error(err))
 	}
 }

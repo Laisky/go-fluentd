@@ -24,7 +24,7 @@ and port 8080 to monitor HTTP API.
 
 ```sh
 # clone
-$ git clone https://github.com/Laisky/go-fluentd.git
+$ git clone https://gofluentd.git
 
 # running
 $ cd go-fluentd/docs/example
@@ -163,4 +163,3 @@ This HTTP API also support pprof endpoints:
 - <http://localhost:8080/pprof/threadcreate>
 - <http://localhost:8080/pprof/debug/block>
 - <http://localhost:8080/pprof/>
-

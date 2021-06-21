@@ -6,9 +6,10 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/Laisky/go-fluentd/libs"
-	"github.com/Laisky/go-fluentd/monitor"
-	"github.com/Laisky/go-fluentd/senders"
+	"gofluentd/library"
+	"gofluentd/monitor"
+	"gofluentd/senders"
+
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/pkg/errors"
@@ -16,15 +17,15 @@ import (
 
 // senderCache cache all sender instance in `p.sender2senderCache`
 type senderCache struct {
-	inchan chan<- *libs.FluentMsg
+	inchan chan<- *library.FluentMsg
 	sender senders.SenderItf
 }
 
 type ProducerCfg struct {
 	DistributeKey          string
-	InChan                 chan *libs.FluentMsg
+	InChan                 chan *library.FluentMsg
 	MsgPool                *sync.Pool
-	CommitChan             chan<- *libs.FluentMsg
+	CommitChan             chan<- *library.FluentMsg
 	NFork, DiscardChanSize int
 }
 
@@ -33,7 +34,7 @@ type Producer struct {
 	*ProducerCfg
 	sync.Mutex
 	senders                   []senders.SenderItf
-	successedChan, failedChan chan *libs.FluentMsg
+	successedChan, failedChan chan *library.FluentMsg
 	// discardMsgCountMap = map[&msg]discardedCount
 	// ⚠️Notify: cannot use `msgid` as key,
 	// since of there could be two msg with same msgid arrive to producer,
@@ -55,7 +56,7 @@ type Producer struct {
 type pendingDiscardMsg struct {
 	count          int
 	isAllSuccessed bool
-	msg            *libs.FluentMsg
+	msg            *library.FluentMsg
 }
 
 // NewProducer create new producer
@@ -81,19 +82,19 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) (*Producer, err
 		return nil, errors.Wrap(err, "producer config invalid")
 	}
 
-	p.successedChan = make(chan *libs.FluentMsg, cfg.DiscardChanSize)
-	p.failedChan = make(chan *libs.FluentMsg, cfg.DiscardChanSize)
+	p.successedChan = make(chan *library.FluentMsg, cfg.DiscardChanSize)
+	p.failedChan = make(chan *library.FluentMsg, cfg.DiscardChanSize)
 	p.registerMonitor()
 
 	for _, s := range senders {
-		libs.Logger.Info("enable sender", zap.String("name", s.GetName()))
+		library.Logger.Info("enable sender", zap.String("name", s.GetName()))
 		s.SetCommitChan(cfg.CommitChan)
 		s.SetMsgPool(cfg.MsgPool)
 		s.SetSuccessedChan(p.successedChan)
 		s.SetFailedChan(p.failedChan)
 	}
 
-	libs.Logger.Info("new producer",
+	library.Logger.Info("new producer",
 		zap.Int("nfork", p.NFork),
 		zap.Int("discard_chan_size", p.DiscardChanSize),
 	)
@@ -103,12 +104,12 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) (*Producer, err
 func (p *Producer) valid() error {
 	if p.NFork <= 0 {
 		p.NFork = 4
-		libs.Logger.Info("reset nfork", zap.Int("nfork", 1))
+		library.Logger.Info("reset nfork", zap.Int("nfork", 1))
 	}
 
 	if p.DiscardChanSize <= 0 {
 		p.DiscardChanSize = 10000
-		libs.Logger.Info("reset discard_chan_size", zap.Int("discard_chan_size", 10000))
+		library.Logger.Info("reset discard_chan_size", zap.Int("discard_chan_size", 10000))
 	}
 
 	return nil
@@ -156,15 +157,15 @@ func (p *Producer) discardMsg(pmsg *pendingDiscardMsg) {
 	p.pMsgPool.Put(pmsg)
 }
 
-func (p *Producer) runMsgCollector(ctx context.Context, tag2NSender *sync.Map, successedChan chan *libs.FluentMsg) {
+func (p *Producer) runMsgCollector(ctx context.Context, tag2NSender *sync.Map, successedChan chan *library.FluentMsg) {
 	var (
 		cntToDiscard    int
 		ok, isSuccessed bool
 		itf             interface{}
-		msg             *libs.FluentMsg
+		msg             *library.FluentMsg
 		pmsg            *pendingDiscardMsg
 	)
-	defer libs.Logger.Info("msg collector exit", zap.String("msg", fmt.Sprint(msg)))
+	defer library.Logger.Info("msg collector exit", zap.String("msg", fmt.Sprint(msg)))
 
 	for {
 		select {
@@ -172,13 +173,13 @@ func (p *Producer) runMsgCollector(ctx context.Context, tag2NSender *sync.Map, s
 			return
 		case msg, ok = <-p.successedChan:
 			if !ok {
-				libs.Logger.Info("successedChan closed")
+				library.Logger.Info("successedChan closed")
 				return
 			}
 			isSuccessed = true
 		case msg, ok = <-p.failedChan:
 			if !ok {
-				libs.Logger.Info("failedChan closed")
+				library.Logger.Info("failedChan closed")
 				return
 			}
 			isSuccessed = false
@@ -186,7 +187,7 @@ func (p *Producer) runMsgCollector(ctx context.Context, tag2NSender *sync.Map, s
 
 		// ⚠️Warning: Do not change tag in any sender
 		if itf, ok = tag2NSender.Load(msg.Tag); !ok {
-			libs.Logger.Panic("[panic] tag2NSender should contains tag",
+			library.Logger.Panic("[panic] tag2NSender should contains tag",
 				zap.String("tag", msg.Tag),
 				zap.String("msg", fmt.Sprint(msg)))
 			cntToDiscard = 1
@@ -219,7 +220,7 @@ func (p *Producer) runMsgCollector(ctx context.Context, tag2NSender *sync.Map, s
 
 // Run starting <n> Producer to send messages
 func (p *Producer) Run(ctx context.Context) {
-	libs.Logger.Info("start producer")
+	library.Logger.Info("start producer")
 
 	go p.runMsgCollector(ctx, p.tag2NSender, p.successedChan)
 	for i := 0; i < p.NFork; i++ {
@@ -230,24 +231,24 @@ func (p *Producer) Run(ctx context.Context) {
 				itf                interface{}
 				acceptSenderCaches []*senderCache
 				sc                 *senderCache
-				msg                *libs.FluentMsg
+				msg                *library.FluentMsg
 			)
-			defer libs.Logger.Info("producer exit", zap.Int("i", i), zap.String("msg", fmt.Sprint(msg)))
+			defer library.Logger.Info("producer exit", zap.Int("i", i), zap.String("msg", fmt.Sprint(msg)))
 			for {
 				select {
 				case <-ctx.Done():
 					return
 				case msg, ok = <-p.InChan:
 					if !ok {
-						libs.Logger.Info("InChan closed")
+						library.Logger.Info("InChan closed")
 						return
 					}
 				}
 
-				// libs.Logger.Info(fmt.Sprintf("send msg %p", msg))
+				// library.Logger.Info(fmt.Sprintf("send msg %p", msg))
 				p.counter.Count()
 				if _, ok = p.unSupportedTags.Load(msg.Tag); ok {
-					libs.Logger.Warn("do not produce since of unsupported tag", zap.String("tag", msg.Tag))
+					library.Logger.Warn("do not produce since of unsupported tag", zap.String("tag", msg.Tag))
 					p.successedChan <- msg
 					continue
 				}
@@ -262,7 +263,7 @@ func (p *Producer) Run(ctx context.Context) {
 						for _, s = range p.senders {
 							if s.IsTagSupported(msg.Tag) {
 								if itf, ok = p.sender2senderCache.Load(s); !ok {
-									libs.Logger.Info("spawn new producer sender",
+									library.Logger.Info("spawn new producer sender",
 										zap.String("name", s.GetName()),
 										zap.String("tag", msg.Tag))
 									sc = &senderCache{
@@ -279,7 +280,7 @@ func (p *Producer) Run(ctx context.Context) {
 
 						if len(acceptSenderCaches) == 0 {
 							// no sender support this tag
-							libs.Logger.Warn("do not produce since of unsupported tag", zap.String("tag", msg.Tag))
+							library.Logger.Warn("do not produce since of unsupported tag", zap.String("tag", msg.Tag))
 							p.tag2NSender.Store(msg.Tag, 1)
 							p.unSupportedTags.Store(msg.Tag, struct{}{}) // mark as unsupported
 							p.successedChan <- msg
@@ -288,7 +289,7 @@ func (p *Producer) Run(ctx context.Context) {
 							continue
 						}
 
-						libs.Logger.Info("register the number of senders for tag",
+						library.Logger.Info("register the number of senders for tag",
 							zap.String("tag", msg.Tag),
 							zap.Int("n", len(acceptSenderCaches)))
 						p.tag2Cancel.Store(msg.Tag, cancel)
@@ -310,7 +311,7 @@ func (p *Producer) Run(ctx context.Context) {
 					default:
 						if sc.sender.DiscardWhenBlocked() {
 							p.successedChan <- msg
-							libs.Logger.Warn("skip sender and discard msg since of its inchan is full",
+							library.Logger.Warn("skip sender and discard msg since of its inchan is full",
 								zap.String("name", s.GetName()),
 								zap.String("tag", msg.Tag))
 						} else {

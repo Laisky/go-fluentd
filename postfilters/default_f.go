@@ -3,14 +3,15 @@ package postfilters
 import (
 	"strings"
 
-	"github.com/Laisky/go-fluentd/libs"
+	"gofluentd/library"
+
 	"github.com/Laisky/zap"
 )
 
 type DefaultFilterCfg struct {
 	MsgKey string
 	MaxLen int
-	libs.AddCfg
+	library.AddCfg
 }
 
 type DefaultFilter struct {
@@ -23,7 +24,7 @@ func NewDefaultFilter(cfg *DefaultFilterCfg) *DefaultFilter {
 		DefaultFilterCfg: cfg,
 	}
 	if err := f.valid(); err != nil {
-		libs.Logger.Panic("DefaultFilter invalid", zap.Error(err))
+		library.Logger.Panic("DefaultFilter invalid", zap.Error(err))
 	}
 
 	return f
@@ -31,25 +32,25 @@ func NewDefaultFilter(cfg *DefaultFilterCfg) *DefaultFilter {
 
 func (f *DefaultFilter) valid() error {
 	if f.MaxLen != 0 {
-		libs.Logger.Info("enbale max_len")
+		library.Logger.Info("enbale max_len")
 		if f.MaxLen < 100 {
-			libs.Logger.Warn("default_filter's max_len too short", zap.Int("max_len", f.MaxLen))
+			library.Logger.Warn("default_filter's max_len too short", zap.Int("max_len", f.MaxLen))
 		}
 	}
 
 	if f.MsgKey == "" {
 		f.MsgKey = "log"
-		libs.Logger.Info("reset msg_key", zap.String("msg_key", f.MsgKey))
+		library.Logger.Info("reset msg_key", zap.String("msg_key", f.MsgKey))
 	}
 
-	libs.Logger.Info("new default_filter",
+	library.Logger.Info("new default_filter",
 		zap.Int("max_len", f.MaxLen),
 		zap.String("msg_key", f.MsgKey),
 	)
 	return nil
 }
 
-func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
+func (f *DefaultFilter) Filter(msg *library.FluentMsg) *library.FluentMsg {
 	for k, v := range msg.Message {
 		if k == "" {
 			delete(msg.Message, k)
@@ -81,6 +82,6 @@ func (f *DefaultFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 		}
 	}
 
-	libs.ProcessAdd(f.AddCfg, msg)
+	library.ProcessAdd(f.AddCfg, msg)
 	return msg
 }

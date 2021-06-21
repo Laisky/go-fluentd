@@ -3,7 +3,8 @@ package postfilters
 import (
 	"fmt"
 
-	"github.com/Laisky/go-fluentd/libs"
+	"gofluentd/library"
+
 	"github.com/Laisky/zap"
 )
 
@@ -29,7 +30,7 @@ func NewFieldsFilter(cfg *FieldsFilterCfg) *FieldsFilter {
 		f.supportedTags[t] = struct{}{}
 	}
 
-	libs.Logger.Info("create new FieldsFilter",
+	library.Logger.Info("create new FieldsFilter",
 		zap.Strings("tags", cfg.Tags),
 		zap.String("includes", fmt.Sprint(f.includeMap)),
 		zap.String("new_fields", fmt.Sprint(cfg.NewFieldTemplates)),
@@ -43,13 +44,13 @@ func getIncludeMap(include []string) map[string]struct{} {
 		return im
 	}
 
-	for _, k := range append(include, libs.MustIncludeFileds...) {
+	for _, k := range append(include, library.MustIncludeFileds...) {
 		im[k] = struct{}{}
 	}
 	return im
 }
 
-func (f *FieldsFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
+func (f *FieldsFilter) Filter(msg *library.FluentMsg) *library.FluentMsg {
 	var ok bool
 	if _, ok = f.supportedTags[msg.Tag]; !ok {
 		return msg
@@ -57,7 +58,7 @@ func (f *FieldsFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 
 	// combine template
 	for newFieldName, tpl := range f.NewFieldTemplates {
-		msg.Message[newFieldName] = libs.TemplateWithMap(tpl, msg.Message)
+		msg.Message[newFieldName] = library.TemplateWithMap(tpl, msg.Message)
 	}
 	// only remain include fields
 	if len(f.includeMap) != 0 {

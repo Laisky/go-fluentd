@@ -5,7 +5,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Laisky/go-fluentd/libs"
+	"gofluentd/library"
+
 	"github.com/Laisky/zap"
 )
 
@@ -44,10 +45,10 @@ func NewSpringFilter(cfg *SpringFilterCfg) *SpringFilter {
 		SpringFilterCfg: cfg,
 	}
 	if err := f.valid(); err != nil {
-		libs.Logger.Panic("config invalid", zap.Error(err))
+		library.Logger.Panic("config invalid", zap.Error(err))
 	}
 
-	libs.Logger.Info("new spring filter",
+	library.Logger.Info("new spring filter",
 		zap.String("tag", f.Tag),
 		zap.String("env", f.Env),
 		zap.String("msg_key", f.MsgKey),
@@ -59,12 +60,12 @@ func NewSpringFilter(cfg *SpringFilterCfg) *SpringFilter {
 func (f *SpringFilter) valid() error {
 	if f.TagKey == "" {
 		f.TagKey = "tag"
-		libs.Logger.Info("reset tag_key", zap.String("tag_key", f.TagKey))
+		library.Logger.Info("reset tag_key", zap.String("tag_key", f.TagKey))
 	}
 
 	if f.MsgKey == "" {
 		f.MsgKey = "log"
-		libs.Logger.Info("reset msg_key", zap.String("msg_key", f.MsgKey))
+		library.Logger.Info("reset msg_key", zap.String("msg_key", f.MsgKey))
 	}
 
 	return nil
@@ -74,7 +75,7 @@ func (f *SpringFilter) GetName() string {
 	return f.Name
 }
 
-func (f *SpringFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
+func (f *SpringFilter) Filter(msg *library.FluentMsg) *library.FluentMsg {
 	if msg.Tag != f.Tag {
 		return msg
 	}
@@ -84,7 +85,7 @@ func (f *SpringFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	case string:
 		msg.Message[f.MsgKey] = []byte(msg.Message[f.MsgKey].(string))
 	default:
-		libs.Logger.Warn("discard log since unknown type of msg",
+		library.Logger.Warn("discard log since unknown type of msg",
 			zap.String("tag", msg.Tag),
 			zap.String("msg", fmt.Sprint(msg.Message[f.MsgKey])))
 		f.DiscardMsg(msg)
@@ -93,7 +94,7 @@ func (f *SpringFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
 	// retag spring to cp/bot/app.spring
 	for _, rule := range f.Rules {
 		if rule.Regexp.Match(msg.Message[f.MsgKey].([]byte)) {
-			libs.Logger.Debug("rewrite tag", zap.String("old", msg.Tag), zap.String("new", rule.NewTag))
+			library.Logger.Debug("rewrite tag", zap.String("old", msg.Tag), zap.String("new", rule.NewTag))
 			msg.Tag = rule.NewTag
 			msg.Message[f.TagKey] = msg.Tag
 			f.upstreamChan <- msg

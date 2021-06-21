@@ -15,8 +15,8 @@ Rewrite fluentd-server by Golang, Higher performance with less resource requirem
 [![Build Status](https://travis-ci.org/Laisky/go-fluentd.svg?branch=master)](https://travis-ci.org/Laisky/go-fluentd)
 [![codecov](https://codecov.io/gh/Laisky/go-fluentd/branch/master/graph/badge.svg)](https://codecov.io/gh/Laisky/go-fluentd)
 [![Commitizen friendly](https://img.shields.io/badge/commitizen-friendly-brightgreen.svg)](http://commitizen.github.io/cz-cli/)
-[![Go Report Card](https://goreportcard.com/badge/github.com/Laisky/go-fluentd)](https://goreportcard.com/report/github.com/Laisky/go-fluentd)
-[![GoDoc](https://godoc.org/github.com/Laisky/go-fluentd?status.svg)](https://godoc.org/github.com/Laisky/go-fluentd)
+[![Go Report Card](https://goreportcard.com/badge/gofluentd)](https://goreportcard.com/report/gofluentd)
+[![GoDoc](https://godoc.org/gofluentd?status.svg)](https://godoc.org/gofluentd)
 
 Already running on our PRODUCION since 2018/9.
 

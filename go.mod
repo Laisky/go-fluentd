@@ -1,4 +1,4 @@
-module github.com/Laisky/go-fluentd
+module gofluentd
 
 go 1.16
 

@@ -7,7 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Laisky/go-fluentd/libs"
+	"gofluentd/library"
+
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 )
@@ -27,12 +28,12 @@ type FluentSender struct {
 }
 
 func NewFluentSender(cfg *FluentSenderCfg) *FluentSender {
-	libs.Logger.Info("new fluent sender",
+	library.Logger.Info("new fluent sender",
 		zap.String("addr", cfg.Addr),
 		zap.Strings("tags", cfg.Tags))
 
 	if cfg.Addr == "" {
-		libs.Logger.Panic("addr should not be empty")
+		library.Logger.Panic("addr should not be empty")
 	}
 
 	s := &FluentSender{
@@ -49,11 +50,11 @@ func (s *FluentSender) GetName() string {
 	return s.Name
 }
 
-func (s *FluentSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
-	libs.Logger.Info("spawn fluentd sender")
+func (s *FluentSender) Spawn(ctx context.Context) chan<- *library.FluentMsg {
+	library.Logger.Info("spawn fluentd sender")
 	var (
-		inChan       = make(chan *libs.FluentMsg, s.InChanSize)
-		childInChan  chan *libs.FluentMsg // for each tag
+		inChan       = make(chan *library.FluentMsg, s.InChanSize)
+		childInChan  chan *library.FluentMsg // for each tag
 		ok           bool
 		childInChani interface{}
 
@@ -69,15 +70,15 @@ func (s *FluentSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 					// double check
 					if childInChani, ok = tag2childInChan.Load(msg.Tag); !ok {
 						// create child sender
-						childInChan = make(chan *libs.FluentMsg, s.InChanSize)
+						childInChan = make(chan *library.FluentMsg, s.InChanSize)
 						go s.spawnChildSenderForTag(ctx, msg.Tag, childInChan)
 						tag2childInChan.Store(msg.Tag, childInChan)
 					} else {
-						childInChan = childInChani.(chan *libs.FluentMsg)
+						childInChan = childInChani.(chan *library.FluentMsg)
 					}
 					mutex.Unlock()
 				} else {
-					childInChan = childInChani.(chan *libs.FluentMsg)
+					childInChan = childInChani.(chan *library.FluentMsg)
 				}
 
 				select {
@@ -85,7 +86,7 @@ func (s *FluentSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 				default:
 					if s.DiscardWhenBlocked() {
 						s.successedChan <- msg
-						libs.Logger.Warn("skip sender and discard msg since of its inchan is full",
+						library.Logger.Warn("skip sender and discard msg since of its inchan is full",
 							zap.String("name", s.GetName()),
 							zap.String("tag", msg.Tag))
 					} else {
@@ -99,18 +100,18 @@ func (s *FluentSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 	return inChan
 }
 
-func (s *FluentSender) spawnChildSenderForTag(ctx context.Context, tag string, inChan chan *libs.FluentMsg) {
-	logger := libs.Logger.With(zap.String("tag", tag), zap.String("addr", s.Addr))
+func (s *FluentSender) spawnChildSenderForTag(ctx context.Context, tag string, inChan chan *library.FluentMsg) {
+	logger := library.Logger.With(zap.String("tag", tag), zap.String("addr", s.Addr))
 	logger.Info("spawn fluentd child sender")
 	var (
 		nRetry           int
 		maxRetry         = 3
-		msg              *libs.FluentMsg
-		msgBatch         = make([]*libs.FluentMsg, s.BatchSize)
-		msgBatchDelivery []*libs.FluentMsg
+		msg              *library.FluentMsg
+		msgBatch         = make([]*library.FluentMsg, s.BatchSize)
+		msgBatchDelivery []*library.FluentMsg
 		iBatch           = 0
 		lastT            = time.Unix(0, 0)
-		encoder          *libs.FluentEncoder
+		encoder          *library.FluentEncoder
 		conn             net.Conn
 		err              error
 		ok               bool
@@ -131,7 +132,7 @@ RECONNECT: // reconnect to downstream
 			zap.String("backend", conn.RemoteAddr().String()),
 			zap.String("tag", tag))
 
-		encoder = libs.NewFluentEncoder(conn) // one encoder for each connection
+		encoder = library.NewFluentEncoder(conn) // one encoder for each connection
 	NEW_MSG:
 		for {
 			select {

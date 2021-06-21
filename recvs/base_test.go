@@ -3,7 +3,8 @@ package recvs_test
 import (
 	"sync"
 
-	"github.com/Laisky/go-fluentd/libs"
+	"gofluentd/library"
+
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 )
@@ -18,7 +19,7 @@ var (
 	counter = utils.NewCounter()
 	msgPool = &sync.Pool{
 		New: func() interface{} {
-			return &libs.FluentMsg{
+			return &library.FluentMsg{
 				// Message: map[string]interface{}{},
 				ID: -1,
 			}
@@ -27,7 +28,7 @@ var (
 )
 
 func init() {
-	if err := libs.Logger.ChangeLevel("debug"); err != nil {
-		libs.Logger.Panic("change log level", zap.Error(err))
+	if err := library.Logger.ChangeLevel("debug"); err != nil {
+		library.Logger.Panic("change log level", zap.Error(err))
 	}
 }

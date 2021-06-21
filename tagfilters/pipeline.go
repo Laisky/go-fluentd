@@ -4,8 +4,9 @@ import (
 	"context"
 	"sync"
 
-	"github.com/Laisky/go-fluentd/libs"
-	"github.com/Laisky/go-fluentd/monitor"
+	"gofluentd/library"
+	"gofluentd/monitor"
+
 	"github.com/Laisky/zap"
 )
 
@@ -14,19 +15,19 @@ const (
 )
 
 type TagPipelineItf interface {
-	Spawn(context.Context, string, chan<- *libs.FluentMsg) (chan<- *libs.FluentMsg, error)
+	Spawn(context.Context, string, chan<- *library.FluentMsg) (chan<- *library.FluentMsg, error)
 }
 
 type TagPipelineCfg struct {
 	InternalChanSize int
 	MsgPool          *sync.Pool
-	WaitCommitChan   chan<- *libs.FluentMsg
+	WaitCommitChan   chan<- *library.FluentMsg
 }
 
 type TagPipeline struct {
 	*TagPipelineCfg
 	TagFilterFactoryItfs []TagFilterFactoryItf
-	monitorChans         map[string]chan<- *libs.FluentMsg
+	monitorChans         map[string]chan<- *library.FluentMsg
 }
 
 // NewTagPipeline create new TagPipeline
@@ -34,10 +35,10 @@ func NewTagPipeline(ctx context.Context, cfg *TagPipelineCfg, itfs ...TagFilterF
 	p := &TagPipeline{
 		TagPipelineCfg:       cfg,
 		TagFilterFactoryItfs: itfs,
-		monitorChans:         map[string]chan<- *libs.FluentMsg{},
+		monitorChans:         map[string]chan<- *library.FluentMsg{},
 	}
 	if err := p.valid(); err != nil {
-		libs.Logger.Panic("config invalid", zap.Error(err))
+		library.Logger.Panic("config invalid", zap.Error(err))
 	}
 
 	for _, itf := range itfs {
@@ -47,7 +48,7 @@ func NewTagPipeline(ctx context.Context, cfg *TagPipelineCfg, itfs ...TagFilterF
 	}
 
 	p.registryMonitor()
-	libs.Logger.Info("create tag pipeline",
+	library.Logger.Info("create tag pipeline",
 		zap.Int("internal_chan_size", p.InternalChanSize),
 	)
 	return p
@@ -56,15 +57,15 @@ func NewTagPipeline(ctx context.Context, cfg *TagPipelineCfg, itfs ...TagFilterF
 func (p *TagPipeline) valid() error {
 	if p.InternalChanSize <= 0 {
 		p.InternalChanSize = defaultInternalFilterChanSize
-		libs.Logger.Info("reset internal_chan_size", zap.Int("internal_chan_size", p.InternalChanSize))
+		library.Logger.Info("reset internal_chan_size", zap.Int("internal_chan_size", p.InternalChanSize))
 	}
 
 	return nil
 }
 
 // Spawn create and run new Concator for new tag, return inchan
-func (p *TagPipeline) Spawn(ctx context.Context, tag string, outChan chan<- *libs.FluentMsg) (chan<- *libs.FluentMsg, error) {
-	libs.Logger.Info("spawn tagpipeline", zap.String("tag", tag))
+func (p *TagPipeline) Spawn(ctx context.Context, tag string, outChan chan<- *library.FluentMsg) (chan<- *library.FluentMsg, error) {
+	library.Logger.Info("spawn tagpipeline", zap.String("tag", tag))
 	var (
 		f              TagFilterFactoryItf
 		i              int
@@ -74,7 +75,7 @@ func (p *TagPipeline) Spawn(ctx context.Context, tag string, outChan chan<- *lib
 	for i = len(p.TagFilterFactoryItfs) - 1; i >= 0; i-- {
 		f = p.TagFilterFactoryItfs[i]
 		if f.IsTagSupported(tag) {
-			libs.Logger.Info("enable tagfilter",
+			library.Logger.Info("enable tagfilter",
 				zap.String("name", f.GetName()),
 				zap.String("tag", tag))
 			isTagSupported = true
@@ -84,7 +85,7 @@ func (p *TagPipeline) Spawn(ctx context.Context, tag string, outChan chan<- *lib
 	}
 
 	if !isTagSupported {
-		libs.Logger.Info("skip tagPipeline", zap.String("tag", tag))
+		library.Logger.Info("skip tagPipeline", zap.String("tag", tag))
 		return outChan, nil
 	}
 

@@ -5,15 +5,16 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/Laisky/go-fluentd/libs"
-	"github.com/Laisky/go-fluentd/monitor"
-	"github.com/Laisky/go-fluentd/tagfilters"
+	"gofluentd/library"
+	"gofluentd/monitor"
+	"gofluentd/tagfilters"
+
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 )
 
 type DispatcherCfg struct {
-	InChan             chan *libs.FluentMsg
+	InChan             chan *library.FluentMsg
 	TagPipeline        tagfilters.TagPipelineItf
 	NFork, OutChanSize int
 }
@@ -21,10 +22,10 @@ type DispatcherCfg struct {
 // Dispatcher dispatch messages by tag to different concator
 type Dispatcher struct {
 	*DispatcherCfg
-	tag2Concator *sync.Map            // tag:msgchan
-	tag2Counter  *sync.Map            // tag:counter
-	tag2Cancel   *sync.Map            // tag:cancel
-	outChan      chan *libs.FluentMsg // skip concator, direct to producer
+	tag2Concator *sync.Map               // tag:msgchan
+	tag2Counter  *sync.Map               // tag:counter
+	tag2Cancel   *sync.Map               // tag:cancel
+	outChan      chan *library.FluentMsg // skip concator, direct to producer
 	counter      *utils.Counter
 }
 
@@ -32,17 +33,17 @@ type Dispatcher struct {
 func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 	d := &Dispatcher{
 		DispatcherCfg: cfg,
-		outChan:       make(chan *libs.FluentMsg, cfg.OutChanSize),
+		outChan:       make(chan *library.FluentMsg, cfg.OutChanSize),
 		tag2Concator:  &sync.Map{},
 		tag2Counter:   &sync.Map{},
 		tag2Cancel:    &sync.Map{},
 		counter:       utils.NewCounter(),
 	}
 	if err := d.valid(); err != nil {
-		libs.Logger.Panic("config invalid", zap.Error(err))
+		library.Logger.Panic("config invalid", zap.Error(err))
 	}
 
-	libs.Logger.Info("create Dispatcher",
+	library.Logger.Info("create Dispatcher",
 		zap.Int("n_fork", d.NFork),
 		zap.Int("out_chan_size", d.OutChanSize),
 	)
@@ -52,12 +53,12 @@ func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 func (d *Dispatcher) valid() error {
 	if d.NFork <= 0 {
 		d.NFork = 4
-		libs.Logger.Info("reset n_fork", zap.Int("n_fork", d.NFork))
+		library.Logger.Info("reset n_fork", zap.Int("n_fork", d.NFork))
 	}
 
 	if d.OutChanSize <= 0 {
 		d.OutChanSize = 1000
-		libs.Logger.Info("reset out_chan_size", zap.Int("out_chan_size", d.OutChanSize))
+		library.Logger.Info("reset out_chan_size", zap.Int("out_chan_size", d.OutChanSize))
 	}
 
 	return nil
@@ -65,7 +66,7 @@ func (d *Dispatcher) valid() error {
 
 // Run dispacher to dispatch messages to different concators
 func (d *Dispatcher) Run(ctx context.Context) {
-	libs.Logger.Info("run dispacher...")
+	library.Logger.Info("run dispacher...")
 	d.registerMonitor()
 	lock := &sync.Mutex{}
 
@@ -73,13 +74,13 @@ func (d *Dispatcher) Run(ctx context.Context) {
 		go func() {
 			var (
 				inChanForEachTagi interface{}
-				inChanForEachTag  chan<- *libs.FluentMsg
+				inChanForEachTag  chan<- *library.FluentMsg
 				ok                bool
 				err               error
 				counterI          interface{}
-				msg               *libs.FluentMsg
+				msg               *library.FluentMsg
 			)
-			defer libs.Logger.Info("dispatcher exist with msg", zap.String("msg", fmt.Sprint(msg)))
+			defer library.Logger.Info("dispatcher exist with msg", zap.String("msg", fmt.Sprint(msg)))
 
 			// send each message to appropriate tagfilter by `tag`
 			for {
@@ -88,7 +89,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 					return
 				case msg, ok = <-d.InChan:
 					if !ok {
-						libs.Logger.Info("inchan closed")
+						library.Logger.Info("inchan closed")
 						return
 					}
 				}
@@ -99,10 +100,10 @@ func (d *Dispatcher) Run(ctx context.Context) {
 					lock.Lock()
 					if inChanForEachTagi, ok = d.tag2Concator.Load(msg.Tag); !ok { // double check
 						// new tag, create new tagfilter and its inchan
-						libs.Logger.Info("got new tag", zap.String("tag", msg.Tag))
+						library.Logger.Info("got new tag", zap.String("tag", msg.Tag))
 						ctx2Tag, cancel := context.WithCancel(ctx)
 						if inChanForEachTag, err = d.TagPipeline.Spawn(ctx2Tag, msg.Tag, d.outChan); err != nil {
-							libs.Logger.Error("try to spawn new tagpipeline got error",
+							library.Logger.Error("try to spawn new tagpipeline got error",
 								zap.Error(err),
 								zap.String("tag", msg.Tag))
 							cancel()
@@ -115,7 +116,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 							d.tag2Concator.Store(msg.Tag, inChanForEachTag)
 							go func(tag string) {
 								<-ctx2Tag.Done()
-								libs.Logger.Info("remove tag in dispatcher", zap.String("tag", tag))
+								library.Logger.Info("remove tag in dispatcher", zap.String("tag", tag))
 								lock.Lock()
 								d.tag2Concator.Delete(tag)
 								d.tag2Counter.Delete(tag)
@@ -124,17 +125,17 @@ func (d *Dispatcher) Run(ctx context.Context) {
 							}(msg.Tag)
 						}
 					} else {
-						inChanForEachTag = inChanForEachTagi.(chan<- *libs.FluentMsg)
+						inChanForEachTag = inChanForEachTagi.(chan<- *library.FluentMsg)
 					}
 
 					lock.Unlock()
 				} else {
-					inChanForEachTag = inChanForEachTagi.(chan<- *libs.FluentMsg)
+					inChanForEachTag = inChanForEachTagi.(chan<- *library.FluentMsg)
 				}
 
 				// count
 				if counterI, ok = d.tag2Counter.Load(msg.Tag); !ok {
-					libs.Logger.Panic("counter must exists", zap.String("tag", msg.Tag))
+					library.Logger.Panic("counter must exists", zap.String("tag", msg.Tag))
 				}
 				counterI.(*utils.Counter).Count()
 
@@ -142,7 +143,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 				select {
 				case inChanForEachTag <- msg:
 				default:
-					libs.Logger.Warn("discard msg since tagfilter's inchan is blocked", zap.String("tag", msg.Tag))
+					library.Logger.Warn("discard msg since tagfilter's inchan is blocked", zap.String("tag", msg.Tag))
 				}
 			}
 		}()
@@ -166,14 +167,14 @@ func (d *Dispatcher) registerMonitor() {
 		})
 
 		d.tag2Concator.Range(func(tagi interface{}, ci interface{}) bool {
-			metrics[tagi.(string)+".ChanLen"] = len(ci.(chan<- *libs.FluentMsg))
-			metrics[tagi.(string)+".ChanCap"] = cap(ci.(chan<- *libs.FluentMsg))
+			metrics[tagi.(string)+".ChanLen"] = len(ci.(chan<- *library.FluentMsg))
+			metrics[tagi.(string)+".ChanCap"] = cap(ci.(chan<- *library.FluentMsg))
 			return true
 		})
 		return metrics
 	})
 }
 
-func (d *Dispatcher) GetOutChan() chan *libs.FluentMsg {
+func (d *Dispatcher) GetOutChan() chan *library.FluentMsg {
 	return d.outChan
 }

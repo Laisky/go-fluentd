@@ -6,7 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/Laisky/go-fluentd/libs"
+	"gofluentd/library"
+
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/pkg/errors"
@@ -23,12 +24,12 @@ type HTTPSenderCfg struct {
 type HTTPSender struct {
 	*BaseSender
 	*HTTPSenderCfg
-	retryMsgChan chan *libs.FluentMsg
+	retryMsgChan chan *library.FluentMsg
 	httpClient   *http.Client
 }
 
 func NewHTTPSender(cfg *HTTPSenderCfg) *HTTPSender {
-	libs.Logger.Info("new http sender",
+	library.Logger.Info("new http sender",
 		zap.String("addr", cfg.Addr),
 		zap.Strings("tags", cfg.Tags))
 
@@ -41,7 +42,7 @@ func NewHTTPSender(cfg *HTTPSenderCfg) *HTTPSender {
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
 		},
 		HTTPSenderCfg: cfg,
-		retryMsgChan:  make(chan *libs.FluentMsg, cfg.RetryChanSize),
+		retryMsgChan:  make(chan *library.FluentMsg, cfg.RetryChanSize),
 		httpClient: &http.Client{ // default http client
 			Transport: &http.Transport{
 				MaxIdleConnsPerHost: 30,
@@ -57,13 +58,13 @@ func (s *HTTPSender) GetName() string {
 	return s.Name
 }
 
-func (s *HTTPSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
-	libs.Logger.Info("SpawnForTag")
-	inChan := make(chan *libs.FluentMsg, s.InChanSize) // for each tag
+func (s *HTTPSender) Spawn(ctx context.Context) chan<- *library.FluentMsg {
+	library.Logger.Info("SpawnForTag")
+	inChan := make(chan *library.FluentMsg, s.InChanSize) // for each tag
 
 	for i := 0; i < s.NFork; i++ { // parallel to each tag
 		go func(i int) {
-			defer libs.Logger.Info("producer exits",
+			defer library.Logger.Info("producer exits",
 				zap.Int("i", i),
 				zap.String("name", s.GetName()))
 
@@ -71,9 +72,9 @@ func (s *HTTPSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 				ok               bool
 				nRetry           int
 				maxRetry         = 3
-				msg              *libs.FluentMsg
-				msgBatch         = make([]*libs.FluentMsg, s.BatchSize)
-				msgBatchDelivery []*libs.FluentMsg
+				msg              *library.FluentMsg
+				msgBatch         = make([]*library.FluentMsg, s.BatchSize)
+				msgBatchDelivery []*library.FluentMsg
 				iBatch           = 0
 				lastT            = time.Unix(0, 0)
 				bulkCtx          = &bulkOpCtx{}
@@ -88,7 +89,7 @@ func (s *HTTPSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 					return
 				case msg, ok = <-inChan:
 					if !ok {
-						libs.Logger.Info("inChan closed")
+						library.Logger.Info("inChan closed")
 						return
 					}
 					msgBatch[iBatch] = msg
@@ -110,7 +111,7 @@ func (s *HTTPSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 
 				nRetry = 0
 				if utils.Settings.GetBool("dry") {
-					libs.Logger.Info("send message to backend",
+					library.Logger.Info("send message to backend",
 						zap.Int("batch", len(msgBatchDelivery)),
 						zap.String("log", fmt.Sprint(msgBatch[0].Message)))
 					for _, msg = range msgBatchDelivery {
@@ -123,7 +124,7 @@ func (s *HTTPSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 				if err = s.SendBulkMsgs(bulkCtx, msgBatchDelivery); err != nil {
 					nRetry++
 					if nRetry > maxRetry {
-						libs.Logger.Error("discard msg since of sender err",
+						library.Logger.Error("discard msg since of sender err",
 							zap.Error(err),
 							zap.String("tag", msg.Tag),
 							zap.Int("num", len(msgBatchDelivery)))
@@ -136,7 +137,7 @@ func (s *HTTPSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 					goto SEND_MSG
 				}
 
-				libs.Logger.Debug("success sent message to backend",
+				library.Logger.Debug("success sent message to backend",
 					zap.String("backend", s.Addr),
 					zap.Int("batch", len(msgBatchDelivery)),
 					zap.String("tag", msg.Tag))
@@ -150,7 +151,7 @@ func (s *HTTPSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
 	return inChan
 }
 
-func (s *HTTPSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*libs.FluentMsg) (err error) {
+func (s *HTTPSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*library.FluentMsg) (err error) {
 	msgCnts := make([]map[string]interface{}, len(msgs))
 	for i, m := range msgs {
 		msgCnts[i] = m.Message
@@ -181,6 +182,6 @@ func (s *HTTPSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*libs.FluentMsg) (e
 		return errors.Wrap(err, "request es got error")
 	}
 
-	libs.Logger.Debug("httpforward bulk all done", zap.Int("batch", len(msgs)))
+	library.Logger.Debug("httpforward bulk all done", zap.Int("batch", len(msgs)))
 	return nil
 }

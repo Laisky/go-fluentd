@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Laisky/go-fluentd/libs"
-	"github.com/Laisky/go-fluentd/recvs"
+	"gofluentd/library"
+	"gofluentd/recvs"
+
 	"github.com/Laisky/go-utils"
 	"github.com/cespare/xxhash"
 )
@@ -18,8 +19,8 @@ func TestFluentdRecv(t *testing.T) {
 	var (
 		ctx, cancel  = context.WithCancel(context.Background())
 		err          error
-		syncOutChan  = make(chan *libs.FluentMsg, 1000)
-		asyncOutChan = make(chan *libs.FluentMsg, 1000)
+		syncOutChan  = make(chan *library.FluentMsg, 1000)
+		asyncOutChan = make(chan *library.FluentMsg, 1000)
 
 		// cfg
 		tag = "test.sit"
@@ -55,12 +56,12 @@ func TestFluentdRecv(t *testing.T) {
 	}
 	defer conn.Close()
 
-	msg := &libs.FluentMsg{
+	msg := &library.FluentMsg{
 		Tag:     tag,
 		Message: map[string]interface{}{"a": "b", "container_id": "lbkey"},
 		ID:      123,
 	}
-	encoder := libs.NewFluentEncoder(conn)
+	encoder := library.NewFluentEncoder(conn)
 	if err = encoder.Encode(msg); err != nil {
 		t.Fatalf("got error: %+v", err)
 	}
@@ -69,7 +70,7 @@ func TestFluentdRecv(t *testing.T) {
 
 	// send msg batch
 	cnt += 3
-	msgBatch := []*libs.FluentMsg{
+	msgBatch := []*library.FluentMsg{
 		{
 			Tag:     tag,
 			Message: map[string]interface{}{"a": "b", "container_id": "lbkey"},

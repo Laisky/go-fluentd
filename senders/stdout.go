@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Laisky/go-fluentd/libs"
+	"gofluentd/library"
+
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 )
@@ -30,7 +31,7 @@ type StdoutSender struct {
 // NewStdoutSender create new null sender
 func NewStdoutSender(cfg *StdoutSenderCfg) *StdoutSender {
 	s := &StdoutSender{
-		logger: libs.Logger.Named(cfg.Name),
+		logger: library.Logger.Named(cfg.Name),
 		BaseSender: &BaseSender{
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
 		},
@@ -87,14 +88,14 @@ func (s *StdoutSender) startStats(ctx context.Context) {
 }
 
 // Spawn fork
-func (s *StdoutSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
+func (s *StdoutSender) Spawn(ctx context.Context) chan<- *library.FluentMsg {
 	s.logger.Info("spawn for tag")
 	go s.startStats(ctx)
-	inChan := make(chan *libs.FluentMsg, s.InChanSize) // for each tag
+	inChan := make(chan *library.FluentMsg, s.InChanSize) // for each tag
 	for i := 0; i < s.NFork; i++ {
 		go func() {
 			var (
-				msg *libs.FluentMsg
+				msg *library.FluentMsg
 				ok  bool
 			)
 			defer s.logger.Info("null sender exit", zap.String("msg", fmt.Sprint("msg", msg)))

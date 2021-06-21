@@ -10,7 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Laisky/go-fluentd/libs"
+	"gofluentd/library"
+
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/pkg/errors"
@@ -43,7 +44,7 @@ type ElasticSearchSender struct {
 
 func NewElasticSearchSender(cfg *ElasticSearchSenderCfg) *ElasticSearchSender {
 	s := &ElasticSearchSender{
-		logger: libs.Logger.Named(cfg.Name),
+		logger: library.Logger.Named(cfg.Name),
 		BaseSender: &BaseSender{
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
 		},
@@ -103,10 +104,10 @@ type bulkOpCtx struct {
 	gzWriter *gzip.Writer
 	cnt      []byte
 	starting []byte
-	msg      *libs.FluentMsg
+	msg      *library.FluentMsg
 }
 
-func (s *ElasticSearchSender) getMsgStarting(msg *libs.FluentMsg) ([]byte, error) {
+func (s *ElasticSearchSender) getMsgStarting(msg *library.FluentMsg) ([]byte, error) {
 	// load origin tag from messages, because msg.Tag could modified by kafka
 	var (
 		tag string
@@ -129,7 +130,7 @@ func (s *ElasticSearchSender) getMsgStarting(msg *libs.FluentMsg) ([]byte, error
 	return []byte("{\"index\": {\"_index\": \"" + index + "\", \"_type\": \"logs\"}}\n"), nil
 }
 
-func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*libs.FluentMsg) (err error) {
+func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*library.FluentMsg) (err error) {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -248,17 +249,17 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
 	return nil
 }
 
-func (s *ElasticSearchSender) Spawn(ctx context.Context) chan<- *libs.FluentMsg {
+func (s *ElasticSearchSender) Spawn(ctx context.Context) chan<- *library.FluentMsg {
 	s.logger.Info("spawn elasticsearch sender")
-	inChan := make(chan *libs.FluentMsg, s.InChanSize) // for each tag
+	inChan := make(chan *library.FluentMsg, s.InChanSize) // for each tag
 
 	for i := 0; i < s.NFork; i++ { // parallel to each tag
 		go func(i int) {
 			var (
 				maxRetry         = 3
-				msg              *libs.FluentMsg
-				msgBatch         = make([]*libs.FluentMsg, s.BatchSize)
-				msgBatchDelivery []*libs.FluentMsg
+				msg              *library.FluentMsg
+				msgBatch         = make([]*library.FluentMsg, s.BatchSize)
+				msgBatchDelivery []*library.FluentMsg
 				iBatch           = 0
 				lastT            = time.Unix(0, 0)
 				err              error

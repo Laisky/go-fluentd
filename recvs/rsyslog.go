@@ -4,7 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/Laisky/go-fluentd/libs"
+	"gofluentd/library"
+
 	"github.com/Laisky/go-syslog"
 	"github.com/Laisky/go-syslog/format"
 	"github.com/Laisky/zap"
@@ -25,11 +26,11 @@ func NewRsyslogSrv(addr string) (*syslog.Server, syslog.LogPartsChannel, error) 
 	server.SetFormat(syslog.Automatic)
 	server.SetHandler(handler)
 	if err = server.ListenUDP(addr); err != nil {
-		libs.Logger.Error("listen udp", zap.Error(err), zap.String("addr", addr))
+		library.Logger.Error("listen udp", zap.Error(err), zap.String("addr", addr))
 		return nil, nil, err
 	}
 	if err = server.ListenTCP(addr); err != nil {
-		libs.Logger.Error("listen tcp", zap.Error(err), zap.String("addr", addr))
+		library.Logger.Error("listen tcp", zap.Error(err), zap.String("addr", addr))
 		return nil, nil, err
 	}
 	return server, inchan, nil
@@ -61,13 +62,13 @@ func (r *RsyslogRecv) GetName() string {
 }
 
 func (r *RsyslogRecv) Run(ctx context.Context) {
-	libs.Logger.Info("run RsyslogRecv", zap.String("tag", r.Tag))
+	library.Logger.Info("run RsyslogRecv", zap.String("tag", r.Tag))
 
 	go func() {
-		defer libs.Logger.Info("rsyslog reciver exit", zap.String("name", r.GetName()))
+		defer library.Logger.Info("rsyslog reciver exit", zap.String("name", r.GetName()))
 		var (
 			ok                        bool
-			msg                       *libs.FluentMsg
+			msg                       *library.FluentMsg
 			logPart                   format.LogParts
 			ctx2Srv                   context.Context
 			cancel                    func()
@@ -83,16 +84,16 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 
 			srv, inchan, err := NewRsyslogSrv(r.Addr)
 			if err != nil {
-				libs.Logger.Error("new rsyslog server", zap.String("addr", r.Addr), zap.Error(err))
+				library.Logger.Error("new rsyslog server", zap.String("addr", r.Addr), zap.Error(err))
 				time.Sleep(defaultRetryWait)
 				continue SERVER_LOOP
 			}
-			libs.Logger.Info("listening rsyslog", zap.String("addr", r.Addr))
+			library.Logger.Info("listening rsyslog", zap.String("addr", r.Addr))
 			if err = srv.Boot(&syslog.BLBCfg{
 				ACK: []byte{},
 				SYN: "hello",
 			}); err != nil {
-				libs.Logger.Error("try to start rsyslog server got error", zap.Error(err))
+				library.Logger.Error("try to start rsyslog server got error", zap.Error(err))
 				cancel()
 				continue
 			}
@@ -107,11 +108,11 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 			for {
 				select {
 				case <-ctx2Srv.Done():
-					libs.Logger.Info("try to reconnect rsyslog server")
+					library.Logger.Info("try to reconnect rsyslog server")
 					break LOG_LOOP
 				case logPart, ok = <-inchan:
 					if !ok {
-						libs.Logger.Info("rsyslog channel closed")
+						library.Logger.Info("rsyslog channel closed")
 						cancel()
 						break LOG_LOOP
 					}
@@ -122,15 +123,15 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 					logPart[r.NewTimeKey] = t.Add(r.TimeShift).UTC().Format(r.NewTimeFormat)
 					delete(logPart, r.TimeKey)
 				default:
-					libs.Logger.Error("discard log since unknown timestamp format")
+					library.Logger.Error("discard log since unknown timestamp format")
 				}
 
 				// rename to message because of the elasticsearch default query field is `message`
 				logPart["message"] = logPart[r.MsgKey]
 				delete(logPart, r.MsgKey)
 
-				msg = r.msgPool.Get().(*libs.FluentMsg)
-				// libs.Logger.Info(fmt.Sprintf("got %p", msg))
+				msg = r.msgPool.Get().(*library.FluentMsg)
+				// library.Logger.Info(fmt.Sprintf("got %p", msg))
 				msg.ID = r.counter.Count()
 				msg.Tag = r.Tag
 				msg.Message = logPart
@@ -142,12 +143,12 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 					msg.Message[r.TagKey] = r.Tag
 				}
 
-				libs.Logger.Debug("receive new msg", zap.String("tag", r.Tag), zap.Int64("id", msg.ID))
+				library.Logger.Debug("receive new msg", zap.String("tag", r.Tag), zap.Int64("id", msg.ID))
 				r.asyncOutChan <- msg
 			}
 
 			if err = srv.Kill(); err != nil {
-				libs.Logger.Error("stop rsyslog got error", zap.Error(err))
+				library.Logger.Error("stop rsyslog got error", zap.Error(err))
 			}
 		}
 	}()

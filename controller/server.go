@@ -5,8 +5,9 @@ import (
 	"net/http"
 	"time"
 
+	"gofluentd/library"
+
 	middlewares "github.com/Laisky/gin-middlewares"
-	"github.com/Laisky/go-fluentd/libs"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/gin-contrib/pprof"
@@ -39,16 +40,16 @@ func RunServer(ctx context.Context, addr string) {
 	pprof.Register(server, "pprof")
 	middlewares.BindPrometheus(server)
 
-	libs.Logger.Info("listening on http", zap.String("addr", addr))
+	library.Logger.Info("listening on http", zap.String("addr", addr))
 	go func() {
-		libs.Logger.Panic("server exit", zap.Error(httpSrv.ListenAndServe()))
+		library.Logger.Panic("server exit", zap.Error(httpSrv.ListenAndServe()))
 	}()
 
 	<-ctx.Done()
 	srvCtx, cancel := context.WithTimeout(ctx, defaultGraceShutdownWait)
 	defer cancel()
 	if err := httpSrv.Shutdown(srvCtx); err != nil {
-		libs.Logger.Error("shutdown monitor server", zap.Error(err))
+		library.Logger.Error("shutdown monitor server", zap.Error(err))
 	}
 
 }

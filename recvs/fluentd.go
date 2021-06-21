@@ -10,7 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Laisky/go-fluentd/libs"
+	"gofluentd/library"
+
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/cespare/xxhash"
@@ -59,19 +60,19 @@ type FluentdRecv struct {
 
 	concatTagCfg   map[string]*concatCfg
 	pendingMsgPool *sync.Pool
-	concators      []chan *libs.FluentMsg
+	concators      []chan *library.FluentMsg
 }
 
 // PendingMsg is the message wait tobe concatenate
 type PendingMsg struct {
-	msg   *libs.FluentMsg
+	msg   *library.FluentMsg
 	lastT time.Time
 }
 
 // NewFluentdRecv create new FluentdRecv
 func NewFluentdRecv(cfg *FluentdRecvCfg) (r *FluentdRecv) {
 	r = &FluentdRecv{
-		logger:         libs.Logger.Named(cfg.Name),
+		logger:         library.Logger.Named(cfg.Name),
 		BaseRecv:       &BaseRecv{},
 		FluentdRecvCfg: cfg,
 		pendingMsgPool: &sync.Pool{
@@ -82,7 +83,7 @@ func NewFluentdRecv(cfg *FluentdRecvCfg) (r *FluentdRecv) {
 		concatTagCfg: map[string]*concatCfg{},
 	}
 	if err := r.valid(); err != nil {
-		libs.Logger.Panic("config invalid", zap.Error(err))
+		library.Logger.Panic("config invalid", zap.Error(err))
 	}
 
 	tags := []string{}
@@ -111,46 +112,46 @@ func NewFluentdRecv(cfg *FluentdRecvCfg) (r *FluentdRecv) {
 func (r *FluentdRecv) valid() error {
 	if r.IsRewriteTagFromTagKey {
 		if r.OriginRewriteTagKey == "" {
-			libs.Logger.Panic("if IsRewriteTagFromTagKey is setted, OriginRewriteTagKey should not empty")
+			library.Logger.Panic("if IsRewriteTagFromTagKey is setted, OriginRewriteTagKey should not empty")
 		}
 	}
 
 	if r.NFork <= 0 {
 		r.NFork = 1
-		libs.Logger.Info("reset n_fork", zap.Int("n_fork", r.NFork))
+		library.Logger.Info("reset n_fork", zap.Int("n_fork", r.NFork))
 	}
 
 	if r.ConcatorBufSize <= 0 {
 		r.ConcatorBufSize = 1024
-		libs.Logger.Info("reset internal_buf_size", zap.Int("internal_buf_size", r.ConcatorBufSize))
+		library.Logger.Info("reset internal_buf_size", zap.Int("internal_buf_size", r.ConcatorBufSize))
 
 	} else if r.ConcatorBufSize < 1000 {
-		libs.Logger.Warn("internal_buf_size better greater than 1000", zap.Int("internal_buf_size", r.ConcatorBufSize))
+		library.Logger.Warn("internal_buf_size better greater than 1000", zap.Int("internal_buf_size", r.ConcatorBufSize))
 	}
 
 	if r.ConcatorWait < 1*time.Second {
 		r.ConcatorWait = defaultConcatorWait
-		libs.Logger.Info("reset concat_with_sec", zap.Duration("concat_with_sec", r.ConcatorWait))
+		library.Logger.Info("reset concat_with_sec", zap.Duration("concat_with_sec", r.ConcatorWait))
 	}
 
 	if r.ConcatMaxLen == 0 {
 		r.ConcatMaxLen = 300000
-		libs.Logger.Warn("reset concat_max_len", zap.Int("concat_max_len", r.ConcatMaxLen))
+		library.Logger.Warn("reset concat_max_len", zap.Int("concat_max_len", r.ConcatMaxLen))
 	}
 
 	if r.TagKey == "" {
 		r.TagKey = "tag"
-		libs.Logger.Info("reset tag_key", zap.String("tag_key", r.TagKey))
+		library.Logger.Info("reset tag_key", zap.String("tag_key", r.TagKey))
 	}
 
 	if r.LBKey == "" {
 		r.LBKey = "container_id"
-		libs.Logger.Info("reset lb_key", zap.String("lb_key", r.LBKey))
+		library.Logger.Info("reset lb_key", zap.String("lb_key", r.LBKey))
 	}
 
 	if r.Addr == "" {
 		r.Addr = "0.0.0.0:24225"
-		libs.Logger.Info("reset addr", zap.String("addr", r.Addr))
+		library.Logger.Info("reset addr", zap.String("addr", r.Addr))
 	}
 
 	return nil
@@ -208,12 +209,12 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 	defer conn.Close()
 	var (
 		reader = msgp.NewReader(conn)
-		v      = libs.FluentBatchMsg{nil, nil, nil} // tag, time, messages
+		v      = library.FluentBatchMsg{nil, nil, nil} // tag, time, messages
 		// 2 means inner decoder for embedded format such like [][]interface{tag, messages}
 		buf2    *bytes.Reader
 		reader2 *msgp.Reader
-		v2      = libs.FluentBatchMsg{nil, nil, nil} // tag, time, messages
-		msg     *libs.FluentMsg
+		v2      = library.FluentBatchMsg{nil, nil, nil} // tag, time, messages
+		msg     *library.FluentMsg
 		err     error
 		tag     string
 		ok      bool
@@ -262,7 +263,7 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 		switch msgBody := v[1].(type) {
 		case []interface{}:
 			for _, entryI = range msgBody {
-				msg = r.msgPool.Get().(*libs.FluentMsg)
+				msg = r.msgPool.Get().(*library.FluentMsg)
 				if msg.Message, ok = entryI.([]interface{})[1].(map[string]interface{}); !ok {
 					r.logger.Warn("discard msg since unknown message format, cannot decode",
 						zap.String("tag", tag))
@@ -300,7 +301,7 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 						zap.String("msg", fmt.Sprint(v2)))
 					continue
 				} else {
-					msg = r.msgPool.Get().(*libs.FluentMsg)
+					msg = r.msgPool.Get().(*library.FluentMsg)
 					if msg.Message, ok = v2[1].(map[string]interface{}); !ok {
 						r.logger.Warn("discard msg since unknown message format",
 							zap.String("msg", fmt.Sprint(v2[1])))
@@ -322,7 +323,7 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 
 			switch msgBody := v[2].(type) {
 			case map[string]interface{}:
-				msg = r.msgPool.Get().(*libs.FluentMsg)
+				msg = r.msgPool.Get().(*library.FluentMsg)
 				msg.Message = msgBody
 			default:
 				r.logger.Warn("discard msg since unknown msg format", zap.String("msg", fmt.Sprint(v)))
@@ -335,12 +336,12 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 		}
 
 		totalMsgCnt += msgCnt
-		libs.Logger.Debug("msg stats", zap.Int("total", totalMsgCnt))
+		library.Logger.Debug("msg stats", zap.Int("total", totalMsgCnt))
 	}
 }
 
 // ProcessMsg process msg
-func (r *FluentdRecv) ProcessMsg(msg *libs.FluentMsg) {
+func (r *FluentdRecv) ProcessMsg(msg *library.FluentMsg) {
 	if r.IsRewriteTagFromTagKey { // rewrite msg.Tag by msg.Message[OriginRewriteTagKey]
 		switch tag := msg.Message[r.OriginRewriteTagKey].(type) {
 		case string:
@@ -377,29 +378,29 @@ func (r *FluentdRecv) ProcessMsg(msg *libs.FluentMsg) {
 }
 
 // SendMsg put msg into downstream
-func (r *FluentdRecv) SendMsg(msg *libs.FluentMsg) {
+func (r *FluentdRecv) SendMsg(msg *library.FluentMsg) {
 	msg.Message[r.TagKey] = msg.Tag
 	msg.ID = r.counter.Count()
 	r.logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.ID))
 	r.asyncOutChan <- msg
 }
 
-func (r *FluentdRecv) startConcators(ctx context.Context) (concators []chan *libs.FluentMsg) {
-	concators = make([]chan *libs.FluentMsg, r.NFork)
+func (r *FluentdRecv) startConcators(ctx context.Context) (concators []chan *library.FluentMsg) {
+	concators = make([]chan *library.FluentMsg, r.NFork)
 	for i := 0; i < r.NFork; i++ {
 		r.logger.Info("start concator", zap.Int("fork", i))
-		concators[i] = make(chan *libs.FluentMsg, r.ConcatorBufSize)
+		concators[i] = make(chan *library.FluentMsg, r.ConcatorBufSize)
 		go r.runConcator(ctx, i, concators[i])
 	}
 	return
 }
 
-func (r *FluentdRecv) runConcator(ctx context.Context, i int, inChan chan *libs.FluentMsg) {
+func (r *FluentdRecv) runConcator(ctx context.Context, i int, inChan chan *library.FluentMsg) {
 	logger := r.logger.With(zap.Int("i", i))
 	defer logger.Info("fluentd concator exit")
 	var (
 		tag, identifier    string
-		msg, oldMsg        *libs.FluentMsg
+		msg, oldMsg        *library.FluentMsg
 		log                []byte
 		pmsg               *PendingMsg
 		identifier2LastMsg = map[string]*PendingMsg{}

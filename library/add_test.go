@@ -1,4 +1,4 @@
-package libs
+package library
 
 import (
 	"reflect"

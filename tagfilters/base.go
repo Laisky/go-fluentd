@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/Laisky/go-fluentd/libs"
+	"gofluentd/library"
+
 	"github.com/Laisky/zap"
 	"github.com/cespare/xxhash"
 	jsoniter "github.com/json-iterator/go"
@@ -15,18 +16,18 @@ var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 type TagFilterFactoryItf interface {
 	IsTagSupported(string) bool
-	Spawn(context.Context, string, chan<- *libs.FluentMsg) chan<- *libs.FluentMsg // Spawn(tag, outChan) inChan
+	Spawn(context.Context, string, chan<- *library.FluentMsg) chan<- *library.FluentMsg // Spawn(tag, outChan) inChan
 	GetName() string
 
 	SetMsgPool(*sync.Pool)
-	SetWaitCommitChan(chan<- *libs.FluentMsg)
+	SetWaitCommitChan(chan<- *library.FluentMsg)
 	SetDefaultIntervalChanSize(int)
-	DiscardMsg(*libs.FluentMsg)
+	DiscardMsg(*library.FluentMsg)
 }
 
 type BaseTagFilterFactory struct {
 	msgPool                 *sync.Pool
-	waitCommitChan          chan<- *libs.FluentMsg
+	waitCommitChan          chan<- *library.FluentMsg
 	defaultInternalChanSize int
 }
 
@@ -34,7 +35,7 @@ func (f *BaseTagFilterFactory) SetMsgPool(msgPool *sync.Pool) {
 	f.msgPool = msgPool
 }
 
-func (f *BaseTagFilterFactory) SetWaitCommitChan(waitCommitChan chan<- *libs.FluentMsg) {
+func (f *BaseTagFilterFactory) SetWaitCommitChan(waitCommitChan chan<- *library.FluentMsg) {
 	f.waitCommitChan = waitCommitChan
 }
 
@@ -42,13 +43,13 @@ func (f *BaseTagFilterFactory) SetDefaultIntervalChanSize(size int) {
 	f.defaultInternalChanSize = size
 }
 
-func (f *BaseTagFilterFactory) DiscardMsg(msg *libs.FluentMsg) {
+func (f *BaseTagFilterFactory) DiscardMsg(msg *library.FluentMsg) {
 	f.waitCommitChan <- msg
 }
 
-func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan chan *libs.FluentMsg, inchans []chan *libs.FluentMsg) {
+func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan chan *library.FluentMsg, inchans []chan *library.FluentMsg) {
 	if len(inchans) < 1 {
-		libs.Logger.Panic("nfork or inchans's length error",
+		library.Logger.Panic("nfork or inchans's length error",
 			zap.Int("inchans_len", len(inchans)))
 	}
 
@@ -57,17 +58,17 @@ func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan c
 		hashkey        uint64
 		defaultHashkey = xxhash.Sum64String("")
 		downChan       = inchans[0]
-		msg            *libs.FluentMsg
+		msg            *library.FluentMsg
 		ok             bool
 	)
-	defer libs.Logger.Info("concator lb exit", zap.String("msg", fmt.Sprint(msg)))
+	defer library.Logger.Info("concator lb exit", zap.String("msg", fmt.Sprint(msg)))
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case msg, ok = <-inChan:
 			if !ok {
-				libs.Logger.Info("inChan closed")
+				library.Logger.Info("inChan closed")
 				return
 			}
 		}
@@ -81,7 +82,7 @@ func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan c
 			case nil:
 				hashkey = defaultHashkey
 			default:
-				libs.Logger.Warn("unknown type of hash key",
+				library.Logger.Warn("unknown type of hash key",
 					zap.String("lb_key", lbkey),
 					zap.String("val", fmt.Sprint(msg.Message[lbkey])))
 				hashkey = defaultHashkey
@@ -93,7 +94,7 @@ func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan c
 		select {
 		case downChan <- msg:
 		default:
-			libs.Logger.Warn("discard msg since downstream worker's inchan is full",
+			library.Logger.Warn("discard msg since downstream worker's inchan is full",
 				zap.String("tag", msg.Tag),
 				zap.Uint64("idx", hashkey%uint64(nfork)))
 		}

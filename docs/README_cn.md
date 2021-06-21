@@ -25,7 +25,7 @@
 
 此文大致介绍一下 go-fluentd 的设计和开发历程，留作参考。很多设计不一定最优甚至有些拙劣，不过在较短时间内，完全支撑了线上业务，并且留出了相当大的性能冗余，应该还可以算是有一定价值。
 
-项目代码：<https://github.com/Laisky/go-fluentd>
+项目代码：<https://gofluentd>
 
 
 ---
@@ -54,7 +54,7 @@
 
 ![architect](https://s3.laisky.com/uploads/2019/01/go-fluentd-architecture.jpg)
 
-需要强调的是，在整个流程中流转的日志数据体，都封装为 `*libs.Fluentd` 数据结构（下文中以 msg 代称）：
+需要强调的是，在整个流程中流转的日志数据体，都封装为 `*library.Fluentd` 数据结构（下文中以 msg 代称）：
 
 ```go
 type FluentMsg struct {
@@ -85,10 +85,10 @@ Acceptor 是接收数据的框架。具体的接收方式是由 recvs 来实现�
 
 ```go
 type AcceptorRecvItf interface {
-    SetSyncOutChan(chan<- *libs.FluentMsg)
-    SetAsyncOutChan(chan<- *libs.FluentMsg)
+    SetSyncOutChan(chan<- *library.FluentMsg)
+    SetAsyncOutChan(chan<- *library.FluentMsg)
     SetMsgPool(*sync.Pool)
-    SetCounter(libs.CounterIft)
+    SetCounter(library.CounterIft)
     Run()
     GetName() string
 }
@@ -102,7 +102,7 @@ type AcceptorRecvItf interface {
 - http：以 http post json 的形式接收日志；
 
 
-recvs 负责将接收到的数据流转换为 *libs.Fluentd 类型后统一输出（需要确定 tag 和 id），acceptor 提供的输出 channel 有两个：
+recvs 负责将接收到的数据流转换为 *library.Fluentd 类型后统一输出（需要确定 tag 和 id），acceptor 提供的输出 channel 有两个：
 
 - `syncOutChan`：会被 journal 同步阻塞，主要用于 kafka 这类可以控速的来源；
 - `asyncOutChan`：不会被阻塞，journal 阻塞后会跳过 journal，如果后续仍然堵塞就会丢弃消息，用于确保服务不会因为日志消费不及时受到影响；
@@ -140,11 +140,11 @@ AcceptorPipeline 负责对消息进行一些简单的前处理，会按顺序执
 
 ```go
 type AcceptorFilterItf interface {
-    SetUpstream(chan *libs.FluentMsg)
+    SetUpstream(chan *library.FluentMsg)
     SetMsgPool(*sync.Pool)
 
-    Filter(*libs.FluentMsg) *libs.FluentMsg
-    DiscardMsg(*libs.FluentMsg)
+    Filter(*library.FluentMsg) *library.FluentMsg
+    DiscardMsg(*library.FluentMsg)
 }
 ```
 
@@ -226,13 +226,13 @@ tagfilters 需要符合如下接口即可：
 ```go
 type TagFilterFactoryItf interface {
     IsTagSupported(string) bool
-    Spawn(string, chan<- *libs.FluentMsg) chan<- *libs.FluentMsg // Spawn(tag, outChan) inChan
+    Spawn(string, chan<- *library.FluentMsg) chan<- *library.FluentMsg // Spawn(tag, outChan) inChan
     GetName() string
 
     SetMsgPool(*sync.Pool)
-    SetCommittedChan(chan<- *libs.FluentMsg)
+    SetCommittedChan(chan<- *library.FluentMsg)
     SetDefaultIntervalChanSize(int)
-    DiscardMsg(*libs.FluentMsg)
+    DiscardMsg(*library.FluentMsg)
 }
 ```
 
@@ -270,12 +270,12 @@ Pipeline 是对每一个 msg，由外部去调用每一个 filters 的 Filter �
 
 ```go
 type PostFilterItf interface {
-    SetUpstream(chan *libs.FluentMsg)
+    SetUpstream(chan *library.FluentMsg)
     SetMsgPool(*sync.Pool)
-    SetCommittedChan(chan<- *libs.FluentMsg)
+    SetCommittedChan(chan<- *library.FluentMsg)
 
-    Filter(*libs.FluentMsg) *libs.FluentMsg
-    DiscardMsg(*libs.FluentMsg)
+    Filter(*library.FluentMsg) *library.FluentMsg
+    DiscardMsg(*library.FluentMsg)
 }
 ```
 
@@ -295,16 +295,16 @@ senders 需要满足如下接口：
 
 ```go
 type SenderItf interface {
-    Spawn(string) chan<- *libs.FluentMsg // Spawn(tag) inChan
+    Spawn(string) chan<- *library.FluentMsg // Spawn(tag) inChan
     IsTagSupported(string) bool
     DiscardWhenBlocked() bool
     GetName() string
 
     SetMsgPool(*sync.Pool)
-    SetCommitChan(chan<- *libs.FluentMsg)
+    SetCommitChan(chan<- *library.FluentMsg)
     SetSupportedTags([]string)
-    SetDiscardChan(chan<- *libs.FluentMsg)
-    SetfailedChan(chan<- *libs.FluentMsg)
+    SetDiscardChan(chan<- *library.FluentMsg)
+    SetfailedChan(chan<- *library.FluentMsg)
 }
 ```
 

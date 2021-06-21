@@ -2,40 +2,41 @@
 //
 // recvs are components applied in acceptor. Each recv can
 // receiving specific kind of messages. All recv should
-// satisfy `libs.AcceptorRecvItf`.
+// satisfy `library.AcceptorRecvItf`.
 package recvs
 
 import (
 	"context"
 	"sync"
 
-	"github.com/Laisky/go-fluentd/libs"
+	"gofluentd/library"
+
 	"github.com/Laisky/go-utils"
 )
 
 var json = utils.JSON
 
 type AcceptorRecvItf interface {
-	SetSyncOutChan(chan<- *libs.FluentMsg)
-	SetAsyncOutChan(chan<- *libs.FluentMsg)
+	SetSyncOutChan(chan<- *library.FluentMsg)
+	SetAsyncOutChan(chan<- *library.FluentMsg)
 	SetMsgPool(*sync.Pool)
-	SetCounter(libs.CounterIft)
+	SetCounter(library.CounterIft)
 	Run(context.Context)
 	GetName() string
 }
 
 type BaseRecv struct {
-	syncOutChan  chan<- *libs.FluentMsg
-	asyncOutChan chan<- *libs.FluentMsg
+	syncOutChan  chan<- *library.FluentMsg
+	asyncOutChan chan<- *library.FluentMsg
 	msgPool      *sync.Pool
-	counter      libs.CounterIft
+	counter      library.CounterIft
 }
 
-func (r *BaseRecv) SetSyncOutChan(outchan chan<- *libs.FluentMsg) {
+func (r *BaseRecv) SetSyncOutChan(outchan chan<- *library.FluentMsg) {
 	r.syncOutChan = outchan
 }
 
-func (r *BaseRecv) SetAsyncOutChan(outchan chan<- *libs.FluentMsg) {
+func (r *BaseRecv) SetAsyncOutChan(outchan chan<- *library.FluentMsg) {
 	r.asyncOutChan = outchan
 }
 
@@ -43,6 +44,6 @@ func (r *BaseRecv) SetMsgPool(msgPool *sync.Pool) {
 	r.msgPool = msgPool
 }
 
-func (r *BaseRecv) SetCounter(counter libs.CounterIft) {
+func (r *BaseRecv) SetCounter(counter library.CounterIft) {
 	r.counter = counter
 }

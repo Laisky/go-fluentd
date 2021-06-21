@@ -3,7 +3,8 @@ package postfilters
 import (
 	"strings"
 
-	"github.com/Laisky/go-fluentd/libs"
+	"gofluentd/library"
+
 	"github.com/Laisky/zap"
 )
 
@@ -21,7 +22,7 @@ type ForwardTagRewriterFilter struct {
 }
 
 func NewForwardTagRewriterFilter(cfg *ForwardTagRewriterFilterCfg) *ForwardTagRewriterFilter {
-	libs.Logger.Info("new ForwardTagRewriterFilter",
+	library.Logger.Info("new ForwardTagRewriterFilter",
 		zap.String("tag", cfg.Tag))
 
 	return &ForwardTagRewriterFilter{
@@ -30,13 +31,13 @@ func NewForwardTagRewriterFilter(cfg *ForwardTagRewriterFilterCfg) *ForwardTagRe
 	}
 }
 
-func (f *ForwardTagRewriterFilter) Filter(msg *libs.FluentMsg) *libs.FluentMsg {
+func (f *ForwardTagRewriterFilter) Filter(msg *library.FluentMsg) *library.FluentMsg {
 	if msg.Tag != f.Tag {
 		return msg
 	}
 
 	env := strings.Split(msg.Message[f.TagKey].(string), ".")[1]
 	msg.Tag = f.tagWithoutEnv + "." + env
-	// libs.Logger.Debug("rewrite msg tag", zap.String("new_tag", msg.Tag))
+	// library.Logger.Debug("rewrite msg tag", zap.String("new_tag", msg.Tag))
 	return msg
 }

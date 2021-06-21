@@ -15,7 +15,7 @@ git for-each-ref --sort='*authordate' --format='%(tag)' refs/tags | grep -v '^$'
     fi
 
     echo '    ' >> CHANGELOG.md
-    GIT_PAGER=cat git log --no-merges --date=short --invert-grep --grep=^Merge --pretty=format:'- %ad (%an) %s -> [view commit](https://github.com/Laisky/go-fluentd/commit/%H)' $TAG..$NEXT >> CHANGELOG.md
+    GIT_PAGER=cat git log --no-merges --date=short --invert-grep --grep=^Merge --pretty=format:'- %ad (%an) %s -> [view commit](https://gofluentd/commit/%H)' $TAG..$NEXT >> CHANGELOG.md
     echo '    ' >> CHANGELOG.md
     NEXT=$TAG
 done

@@ -4,28 +4,28 @@ import (
 	"context"
 	"sync"
 
-	"github.com/Laisky/go-fluentd/libs"
+	"gofluentd/library"
 )
 
 type SenderItf interface {
-	Spawn(context.Context) chan<- *libs.FluentMsg // Spawn(ctx) inChan
+	Spawn(context.Context) chan<- *library.FluentMsg // Spawn(ctx) inChan
 	IsTagSupported(string) bool
 	DiscardWhenBlocked() bool
 	GetName() string
 
 	SetMsgPool(*sync.Pool)
-	SetCommitChan(chan<- *libs.FluentMsg)
+	SetCommitChan(chan<- *library.FluentMsg)
 	SetSupportedTags([]string)
-	SetSuccessedChan(chan<- *libs.FluentMsg)
-	SetFailedChan(chan<- *libs.FluentMsg)
+	SetSuccessedChan(chan<- *library.FluentMsg)
+	SetFailedChan(chan<- *library.FluentMsg)
 }
 
 // BaseSender
 // should not put msg into msgpool in sender
 type BaseSender struct {
 	msgPool                   *sync.Pool
-	commitChan                chan<- *libs.FluentMsg
-	successedChan, failedChan chan<- *libs.FluentMsg
+	commitChan                chan<- *library.FluentMsg
+	successedChan, failedChan chan<- *library.FluentMsg
 	tags                      map[string]struct{}
 	IsDiscardWhenBlocked      bool
 }
@@ -34,15 +34,15 @@ func (s *BaseSender) SetMsgPool(msgPool *sync.Pool) {
 	s.msgPool = msgPool
 }
 
-func (s *BaseSender) SetCommitChan(commitChan chan<- *libs.FluentMsg) {
+func (s *BaseSender) SetCommitChan(commitChan chan<- *library.FluentMsg) {
 	s.commitChan = commitChan
 }
 
-func (s *BaseSender) SetSuccessedChan(successedChan chan<- *libs.FluentMsg) {
+func (s *BaseSender) SetSuccessedChan(successedChan chan<- *library.FluentMsg) {
 	s.successedChan = successedChan
 }
 
-func (s *BaseSender) SetFailedChan(failedChan chan<- *libs.FluentMsg) {
+func (s *BaseSender) SetFailedChan(failedChan chan<- *library.FluentMsg) {
 	s.failedChan = failedChan
 }
 

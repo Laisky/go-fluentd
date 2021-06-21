@@ -8,16 +8,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Laisky/go-fluentd/libs"
+	"gofluentd/library"
+
 	"github.com/Laisky/zap"
 )
 
-func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.FluentMsg, inChan <-chan *libs.FluentMsg) {
-	defer libs.Logger.Info("parser runner exit")
+func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *library.FluentMsg, inChan <-chan *library.FluentMsg) {
+	defer library.Logger.Info("parser runner exit")
 	var (
 		err error
 		ok  bool
-		msg *libs.FluentMsg
+		msg *library.FluentMsg
 		v   string
 		t   time.Time
 	)
@@ -27,7 +28,7 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.F
 			return
 		case msg, ok = <-inChan:
 			if !ok {
-				libs.Logger.Info("inChan closed")
+				library.Logger.Info("inChan closed")
 				return
 			}
 		}
@@ -42,7 +43,7 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.F
 			case string:
 				msg.Message[cf.MsgKey] = []byte(msg.Message[cf.MsgKey].(string))
 			default:
-				libs.Logger.Warn("unknon msg_key",
+				library.Logger.Warn("unknon msg_key",
 					zap.String("tag", msg.Tag),
 					zap.String("msg", fmt.Sprint(msg.Message)),
 					zap.String("msg_key", cf.MsgKey))
@@ -52,8 +53,8 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.F
 
 			// parse log string
 			if cf.Regexp != nil {
-				if err = libs.RegexNamedSubMatch(cf.Regexp, msg.Message[cf.MsgKey].([]byte), msg.Message); err != nil {
-					libs.Logger.Warn("discard message since format not matched",
+				if err = library.RegexNamedSubMatch(cf.Regexp, msg.Message[cf.MsgKey].([]byte), msg.Message); err != nil {
+					library.Logger.Warn("discard message since format not matched",
 						zap.String("tag", msg.Tag),
 						zap.ByteString("log", msg.Message[cf.MsgKey].([]byte)))
 					cf.DiscardMsg(msg)
@@ -73,7 +74,7 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.F
 			switch log := msg.Message[cf.ParseJSONKey].(type) {
 			case string:
 				if err = json.UnmarshalFromString(log, &msg.Message); err != nil {
-					libs.Logger.Warn("json unmarshal JSON args got error",
+					library.Logger.Warn("json unmarshal JSON args got error",
 						zap.String("tag", msg.Tag),
 						zap.Error(err),
 						zap.Int64s("ext-ids", msg.ExtIds),
@@ -84,7 +85,7 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.F
 				}
 			case []byte:
 				if err = json.Unmarshal(log, &msg.Message); err != nil {
-					libs.Logger.Warn("json unmarshal JSON args got error",
+					library.Logger.Warn("json unmarshal JSON args got error",
 						zap.String("tag", msg.Tag),
 						zap.Error(err),
 						zap.Int64s("ext-ids", msg.ExtIds),
@@ -94,9 +95,9 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.F
 					ok = true
 				}
 			case nil:
-				libs.Logger.Warn("json key does not exists", zap.String("tag", msg.Tag))
+				library.Logger.Warn("json key does not exists", zap.String("tag", msg.Tag))
 			default:
-				libs.Logger.Warn("unknown args type", zap.String("tag", msg.Tag))
+				library.Logger.Warn("unknown args type", zap.String("tag", msg.Tag))
 			}
 
 			if ok { // if failed to parse json, reserve origin args
@@ -104,12 +105,12 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.F
 			}
 		}
 		// flatten messages
-		libs.FlattenMap(msg.Message, "__") // do not use `.` as delimiter!
+		library.FlattenMap(msg.Message, "__") // do not use `.` as delimiter!
 
 		// MustInclude
 		if cf.MustInclude != "" {
 			if _, ok = msg.Message[cf.MustInclude]; !ok {
-				libs.Logger.Warn("dicard since of missing key", zap.String("key", cf.MustInclude))
+				library.Logger.Warn("dicard since of missing key", zap.String("key", cf.MustInclude))
 				cf.DiscardMsg(msg)
 				continue
 			}
@@ -131,7 +132,7 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.F
 					v = ts
 				}
 			default:
-				libs.Logger.Warn("discard since unknown time format",
+				library.Logger.Warn("discard since unknown time format",
 					zap.Error(err),
 					zap.String("ts", fmt.Sprint(msg.Message[cf.TimeKey])),
 					zap.String("tag", msg.Tag),
@@ -144,7 +145,7 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.F
 
 			v = strings.Replace(v, ",", ".", -1)
 			if t, err = time.Parse(cf.TimeFormat, v); err != nil {
-				libs.Logger.Warn("discard since parse time got error",
+				library.Logger.Warn("discard since parse time got error",
 					zap.Error(err),
 					zap.String("ts", v),
 					zap.String("tag", msg.Tag),
@@ -162,7 +163,7 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *libs.F
 			msg.Message[cf.NewTimeKey] = t.UTC().Format(cf.NewTimeFormat)
 
 			// process `add` at the end of parser
-			libs.ProcessAdd(cf.AddCfg, msg)
+			library.ProcessAdd(cf.AddCfg, msg)
 		}
 
 		outChan <- msg
@@ -177,7 +178,7 @@ type ParserFactCfg struct {
 	Regexp          *regexp.Regexp
 	MsgPool         *sync.Pool
 	IsRemoveOrigLog bool
-	AddCfg          libs.AddCfg
+	AddCfg          library.AddCfg
 	ParseJSONKey,
 	MustInclude string
 	TimeKey,
@@ -201,14 +202,14 @@ func NewParserFact(cfg *ParserFactCfg) *ParserFact {
 		tagsset:              map[string]struct{}{},
 	}
 	if err := cf.valid(); err != nil {
-		libs.Logger.Panic("new parser", zap.Error(err))
+		library.Logger.Panic("new parser", zap.Error(err))
 	}
 
 	for _, tag := range cf.Tags {
 		cf.tagsset[tag] = struct{}{}
 	}
 
-	libs.Logger.Info("new parser",
+	library.Logger.Info("new parser",
 		zap.Int("n_fork", cf.NFork),
 		zap.Strings("tags", cf.Tags),
 		zap.String("msg_key", cf.MsgKey),
@@ -223,17 +224,17 @@ func NewParserFact(cfg *ParserFactCfg) *ParserFact {
 func (cf *ParserFact) valid() error {
 	if cf.NFork < 1 {
 		cf.NFork = 4
-		libs.Logger.Info("reset n_fork", zap.Int("n_fork", cf.NFork))
+		library.Logger.Info("reset n_fork", zap.Int("n_fork", cf.NFork))
 	}
 
 	if cf.NewTimeFormat == "" {
 		cf.NewTimeFormat = "2006-01-02T15:04:05.000000Z"
-		libs.Logger.Info("reset new_time_format", zap.String("new_time_format", cf.NewTimeFormat))
+		library.Logger.Info("reset new_time_format", zap.String("new_time_format", cf.NewTimeFormat))
 	}
 
 	if cf.NewTimeKey == "" {
 		cf.NewTimeKey = "@timestamp"
-		libs.Logger.Info("reset new_time_key", zap.String("new_time_key", cf.NewTimeKey))
+		library.Logger.Info("reset new_time_key", zap.String("new_time_key", cf.NewTimeKey))
 	}
 
 	return nil
@@ -248,13 +249,13 @@ func (cf *ParserFact) IsTagSupported(tag string) (ok bool) {
 	return ok
 }
 
-func (cf *ParserFact) Spawn(ctx context.Context, tag string, outChan chan<- *libs.FluentMsg) chan<- *libs.FluentMsg {
-	libs.Logger.Info("spawn parser tagfilter", zap.String("tag", tag))
-	inChan := make(chan *libs.FluentMsg, cf.defaultInternalChanSize)
+func (cf *ParserFact) Spawn(ctx context.Context, tag string, outChan chan<- *library.FluentMsg) chan<- *library.FluentMsg {
+	library.Logger.Info("spawn parser tagfilter", zap.String("tag", tag))
+	inChan := make(chan *library.FluentMsg, cf.defaultInternalChanSize)
 
-	inchans := []chan *libs.FluentMsg{}
+	inchans := []chan *library.FluentMsg{}
 	for i := 0; i < cf.NFork; i++ {
-		eachInchan := make(chan *libs.FluentMsg, cf.defaultInternalChanSize)
+		eachInchan := make(chan *library.FluentMsg, cf.defaultInternalChanSize)
 		go cf.StartNewParser(ctx, outChan, eachInchan)
 		inchans = append(inchans, eachInchan)
 	}

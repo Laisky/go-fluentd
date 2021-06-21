@@ -8,13 +8,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Laisky/go-fluentd/acceptorfilters"
-	"github.com/Laisky/go-fluentd/libs"
-	"github.com/Laisky/go-fluentd/monitor"
-	"github.com/Laisky/go-fluentd/postfilters"
-	"github.com/Laisky/go-fluentd/recvs"
-	"github.com/Laisky/go-fluentd/senders"
-	"github.com/Laisky/go-fluentd/tagfilters"
+	"gofluentd/acceptorfilters"
+	"gofluentd/library"
+	"gofluentd/monitor"
+	"gofluentd/postfilters"
+	"gofluentd/recvs"
+	"gofluentd/senders"
+	"gofluentd/tagfilters"
+
 	"github.com/Laisky/go-kafka"
 	gutils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
@@ -28,12 +29,12 @@ type Controllor struct {
 
 // NewControllor create new Controllor
 func NewControllor() (c *Controllor) {
-	libs.Logger.Info("create Controllor")
+	library.Logger.Info("create Controllor")
 
 	c = &Controllor{
 		msgPool: &sync.Pool{
 			New: func() interface{} {
-				return &libs.FluentMsg{
+				return &library.FluentMsg{
 					// Message: map[string]interface{}{},
 					// Id: -1,
 				}
@@ -74,7 +75,7 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 	case map[string]interface{}:
 		for name := range gutils.Settings.Get("settings.acceptor.recvs.plugins").(map[string]interface{}) {
 			if !StringListContains(gutils.Settings.GetStringSlice("settings.acceptor.recvs.plugins."+name+".active_env"), env) {
-				libs.Logger.Info("recv not support current env", zap.String("name", name), zap.String("env", env))
+				library.Logger.Info("recv not support current env", zap.String("name", name), zap.String("env", env))
 				continue
 			}
 
@@ -92,14 +93,14 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 					NFork:                  gutils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".nfork"),
 					ConcatorWait:           gutils.Settings.GetDuration("settings.acceptor.recvs.plugins."+name+".concat_with_sec") * time.Second,
 					ConcatorBufSize:        gutils.Settings.GetInt("settings.acceptor.recvs.plugins." + name + ".internal_buf_size"),
-					ConcatCfg:              libs.LoadTagsMapAppendEnv(env, gutils.Settings.GetStringMap("settings.acceptor.recvs.plugins."+name+".concat")),
+					ConcatCfg:              library.LoadTagsMapAppendEnv(env, gutils.Settings.GetStringMap("settings.acceptor.recvs.plugins."+name+".concat")),
 				}))
 			case "rsyslog":
 				receivers = append(receivers, recvs.NewRsyslogRecv(&recvs.RsyslogCfg{
 					Name:          name,
 					RewriteTags:   gutils.Settings.GetStringMapString("settings.acceptor.recvs.plugins." + name + ".rewrite_tags"),
 					Addr:          gutils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".addr"),
-					Tag:           libs.LoadTagReplaceEnv(env, gutils.Settings.GetString("settings.acceptor.recvs.plugins."+name+".tag")),
+					Tag:           library.LoadTagReplaceEnv(env, gutils.Settings.GetString("settings.acceptor.recvs.plugins."+name+".tag")),
 					TagKey:        gutils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tag_key"),
 					MsgKey:        gutils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".msg_key"),
 					TimeShift:     gutils.Settings.GetDuration("settings.acceptor.recvs.plugins."+name+".time_shift_sec") * time.Second,
@@ -146,18 +147,18 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 				kafkaCfg.IntervalDuration = gutils.Settings.GetDuration("settings.acceptor.recvs.plugins."+name+".interval_sec") * time.Second
 				receivers = append(receivers, recvs.NewKafkaRecv(kafkaCfg))
 			default:
-				libs.Logger.Panic("unknown recv type",
+				library.Logger.Panic("unknown recv type",
 					zap.String("type", t),
 					zap.String("name", name))
 			}
 
-			libs.Logger.Info("active recv",
+			library.Logger.Info("active recv",
 				zap.String("name", name),
 				zap.String("type", t))
 		}
 	case nil:
 	default:
-		libs.Logger.Panic("recv plugins configuration error")
+		library.Logger.Panic("recv plugins configuration error")
 	}
 
 	return receivers
@@ -207,17 +208,17 @@ func (c *Controllor) initAcceptorPipeline(ctx context.Context, env string) (*acc
 					Rules:  acceptorfilters.ParseSpringRules(env, gutils.Settings.Get("settings.acceptor_filters.plugins."+name+".rules").([]interface{})),
 				}))
 			default:
-				libs.Logger.Panic("unknown acceptorfilter type",
+				library.Logger.Panic("unknown acceptorfilter type",
 					zap.String("type", t),
 					zap.String("name", name))
 			}
-			libs.Logger.Info("active acceptorfilter",
+			library.Logger.Info("active acceptorfilter",
 				zap.String("name", name),
 				zap.String("type", t))
 		}
 	case nil:
 	default:
-		libs.Logger.Panic("acceptorfilter configuration error")
+		library.Logger.Panic("acceptorfilter configuration error")
 	}
 
 	// set the DefaultFilter as last filter
@@ -225,8 +226,8 @@ func (c *Controllor) initAcceptorPipeline(ctx context.Context, env string) (*acc
 		Name:               "default",
 		RemoveEmptyTag:     gutils.Settings.GetBool("settings.acceptor_filters.plugins.default.remove_empty_tag"),
 		RemoveUnsupportTag: gutils.Settings.GetBool("settings.acceptor_filters.plugins.default.remove_unknown_tag"),
-		AddCfg:             libs.ParseAddCfg(env, gutils.Settings.Get("settings.acceptor_filters.plugins.default.add")),
-		AcceptTags:         libs.LoadTagsReplaceEnv(env, gutils.Settings.GetStringSlice("settings.acceptor_filters.plugins.default.accept_tags")),
+		AddCfg:             library.ParseAddCfg(env, gutils.Settings.Get("settings.acceptor_filters.plugins.default.add")),
+		AcceptTags:         library.LoadTagsReplaceEnv(env, gutils.Settings.GetStringSlice("settings.acceptor_filters.plugins.default.accept_tags")),
 	}))
 
 	return acceptorfilters.NewAcceptorPipeline(ctx, &acceptorfilters.AcceptorPipelineCfg{
@@ -242,7 +243,7 @@ func (c *Controllor) initAcceptorPipeline(ctx context.Context, env string) (*acc
 	)
 }
 
-func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommitChan chan<- *libs.FluentMsg) *tagfilters.TagPipeline {
+func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommitChan chan<- *library.FluentMsg) *tagfilters.TagPipeline {
 	fs := []tagfilters.TagFilterFactoryItf{}
 	isEnableConcator := false
 
@@ -256,13 +257,13 @@ func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommit
 					Name:            name,
 					NFork:           gutils.Settings.GetInt("settings.tag_filters.plugins." + name + ".nfork"),
 					LBKey:           gutils.Settings.GetString("settings.tag_filters.plugins." + name + ".lb_key"),
-					Tags:            libs.LoadTagsReplaceEnv(env, gutils.Settings.GetStringSlice("settings.tag_filters.plugins."+name+".tags")),
+					Tags:            library.LoadTagsReplaceEnv(env, gutils.Settings.GetStringSlice("settings.tag_filters.plugins."+name+".tags")),
 					MsgKey:          gutils.Settings.GetString("settings.tag_filters.plugins." + name + ".msg_key"),
 					Regexp:          regexp.MustCompile(gutils.Settings.GetString("settings.tag_filters.plugins." + name + ".pattern")),
 					IsRemoveOrigLog: gutils.Settings.GetBool("settings.tag_filters.plugins." + name + ".is_remove_orig_log"),
 					MsgPool:         c.msgPool,
 					ParseJSONKey:    gutils.Settings.GetString("settings.tag_filters.plugins." + name + ".parse_json_key"),
-					AddCfg:          libs.ParseAddCfg(env, gutils.Settings.Get("settings.tag_filters.plugins."+name+".add")),
+					AddCfg:          library.ParseAddCfg(env, gutils.Settings.Get("settings.tag_filters.plugins."+name+".add")),
 					MustInclude:     gutils.Settings.GetString("settings.tag_filters.plugins." + name + ".must_include"),
 					TimeKey:         gutils.Settings.GetString("settings.tag_filters.plugins." + name + ".time_key"),
 					TimeFormat:      gutils.Settings.GetString("settings.tag_filters.plugins." + name + ".time_format"),
@@ -274,17 +275,17 @@ func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommit
 			case "concator":
 				isEnableConcator = true
 			default:
-				libs.Logger.Panic("unknown tagfilter type",
+				library.Logger.Panic("unknown tagfilter type",
 					zap.String("type", t),
 					zap.String("name", name))
 			}
-			libs.Logger.Info("active tagfilter",
+			library.Logger.Info("active tagfilter",
 				zap.String("name", name),
 				zap.String("type", t))
 		}
 	case nil:
 	default:
-		libs.Logger.Panic("tagfilter configuration error")
+		library.Logger.Panic("tagfilter configuration error")
 	}
 
 	// PAAS-397: put concat in fluentd-recvs
@@ -307,7 +308,7 @@ func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommit
 	)
 }
 
-func (c *Controllor) initDispatcher(ctx context.Context, waitDispatchChan chan *libs.FluentMsg, tagPipeline *tagfilters.TagPipeline) *Dispatcher {
+func (c *Controllor) initDispatcher(ctx context.Context, waitDispatchChan chan *library.FluentMsg, tagPipeline *tagfilters.TagPipeline) *Dispatcher {
 	dispatcher := NewDispatcher(&DispatcherCfg{
 		InChan:      waitDispatchChan,
 		TagPipeline: tagPipeline,
@@ -319,7 +320,7 @@ func (c *Controllor) initDispatcher(ctx context.Context, waitDispatchChan chan *
 	return dispatcher
 }
 
-func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- *libs.FluentMsg) *postfilters.PostPipeline {
+func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- *library.FluentMsg) *postfilters.PostPipeline {
 	fs := []postfilters.PostFilterItf{
 		// set the DefaultFilter as first filter
 		postfilters.NewDefaultFilter(&postfilters.DefaultFilterCfg{
@@ -339,7 +340,7 @@ func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- *libs.Fl
 			switch t {
 			case "es-dispatcher":
 				fs = append(fs, postfilters.NewESDispatcherFilter(&postfilters.ESDispatcherFilterCfg{
-					Tags:     libs.LoadTagsAppendEnv(env, gutils.Settings.GetStringSlice("settings.post_filters.plugins."+name+".tags")),
+					Tags:     library.LoadTagsAppendEnv(env, gutils.Settings.GetStringSlice("settings.post_filters.plugins."+name+".tags")),
 					TagKey:   gutils.Settings.GetString("settings.post_filters.plugins." + name + ".tag_key"),
 					ReTagMap: postfilters.LoadReTagMap(env, gutils.Settings.Get("settings.post_filters.plugins."+name+".rewrite_tag_map")),
 				}))
@@ -350,29 +351,29 @@ func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- *libs.Fl
 				}))
 			case "fields":
 				fs = append(fs, postfilters.NewFieldsFilter(&postfilters.FieldsFilterCfg{
-					Tags:              libs.LoadTagsAppendEnv(env, gutils.Settings.GetStringSlice("settings.post_filters.plugins."+name+".tags")),
+					Tags:              library.LoadTagsAppendEnv(env, gutils.Settings.GetStringSlice("settings.post_filters.plugins."+name+".tags")),
 					IncludeFields:     gutils.Settings.GetStringSlice("settings.post_filters.plugins." + name + ".include_fields"),
 					ExcludeFields:     gutils.Settings.GetStringSlice("settings.post_filters.plugins." + name + ".exclude_fields"),
 					NewFieldTemplates: gutils.Settings.GetStringMapString("settings.post_filters.plugins." + name + ".new_fields"),
 				}))
 			case "custom-bigdata":
 				fs = append(fs, postfilters.NewCustomBigDataFilter(&postfilters.CustomBigDataFilterCfg{
-					Tags: libs.LoadTagsAppendEnv(env, gutils.Settings.GetStringSlice("settings.post_filters.plugins."+name+".tags")),
+					Tags: library.LoadTagsAppendEnv(env, gutils.Settings.GetStringSlice("settings.post_filters.plugins."+name+".tags")),
 				}))
 			default:
-				libs.Logger.Panic("unknown post_filter type",
+				library.Logger.Panic("unknown post_filter type",
 					zap.String("post_filter_type", t),
 					zap.String("post_filter_name", name))
 			}
 
-			libs.Logger.Info("active post_filter",
+			library.Logger.Info("active post_filter",
 				zap.String("type", t),
 				zap.String("name", name),
 				zap.String("env", env))
 		}
 	case nil:
 	default:
-		libs.Logger.Panic("post_filter configuration error")
+		library.Logger.Panic("post_filter configuration error")
 	}
 
 	return postfilters.NewPostPipeline(&postfilters.PostPipelineCfg{
@@ -400,7 +401,7 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 	case map[string]interface{}:
 		for name := range gutils.Settings.Get("settings.producer.plugins").(map[string]interface{}) {
 			if !StringListContains(gutils.Settings.GetStringSlice("settings.producer.plugins."+name+".active_env"), env) {
-				libs.Logger.Info("sender not support current env", zap.String("name", name), zap.String("env", env))
+				library.Logger.Info("sender not support current env", zap.String("name", name), zap.String("env", env))
 				continue
 			}
 
@@ -427,7 +428,7 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 					MaxWait:              gutils.Settings.GetDuration("settings.producer.plugins."+name+".max_wait_sec") * time.Second,
 					InChanSize:           gutils.Settings.GetInt("settings.producer.sender_inchan_size"),
 					NFork:                gutils.Settings.GetInt("settings.producer.plugins." + name + ".forks"),
-					Tags:                 libs.LoadTagsAppendEnv(env, gutils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
+					Tags:                 library.LoadTagsAppendEnv(env, gutils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
 					IsDiscardWhenBlocked: gutils.Settings.GetBool("settings.producer.plugins." + name + ".is_discard_when_blocked"),
 				}))
 			case "es":
@@ -439,14 +440,14 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 					InChanSize:           gutils.Settings.GetInt("settings.producer.sender_inchan_size"),
 					NFork:                gutils.Settings.GetInt("settings.producer.plugins." + name + ".forks"),
 					TagKey:               gutils.Settings.GetString("settings.producer.plugins." + name + ".tag_key"),
-					Tags:                 libs.LoadTagsReplaceEnv(env, gutils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
+					Tags:                 library.LoadTagsReplaceEnv(env, gutils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
 					TagIndexMap:          senders.LoadESTagIndexMap(env, gutils.Settings.Get("settings.producer.plugins."+name+".indices")),
 					IsDiscardWhenBlocked: gutils.Settings.GetBool("settings.producer.plugins." + name + ".is_discard_when_blocked"),
 				}))
 			case "stdout":
 				ss = append(ss, senders.NewStdoutSender(&senders.StdoutSenderCfg{
 					Name:                 name,
-					Tags:                 libs.LoadTagsReplaceEnv(env, gutils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
+					Tags:                 library.LoadTagsReplaceEnv(env, gutils.Settings.GetStringSlice("settings.producer.plugins."+name+".tags")),
 					LogLevel:             gutils.Settings.GetString("settings.producer.plugins." + name + ".log_level"),
 					InChanSize:           gutils.Settings.GetInt("settings.producer.sender_inchan_size"),
 					NFork:                gutils.Settings.GetInt("settings.producer.plugins." + name + ".forks"),
@@ -454,24 +455,24 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 					IsDiscardWhenBlocked: gutils.Settings.GetBool("settings.producer.plugins." + name + ".is_discard_when_blocked"),
 				}))
 			default:
-				libs.Logger.Panic("unknown sender type",
+				library.Logger.Panic("unknown sender type",
 					zap.String("type", t),
 					zap.String("name", name))
 			}
-			libs.Logger.Info("active sender",
+			library.Logger.Info("active sender",
 				zap.String("type", t),
 				zap.String("name", name),
 				zap.String("env", env))
 		}
 	case nil:
 	default:
-		libs.Logger.Panic("sender configuration error")
+		library.Logger.Panic("sender configuration error")
 	}
 
 	return ss
 }
 
-func (c *Controllor) initProducer(env string, waitProduceChan chan *libs.FluentMsg, commitChan chan<- *libs.FluentMsg, senders []senders.SenderItf) *Producer {
+func (c *Controllor) initProducer(env string, waitProduceChan chan *library.FluentMsg, commitChan chan<- *library.FluentMsg, senders []senders.SenderItf) *Producer {
 	hasher := xxhash.New()
 	p, err := NewProducer(
 		&ProducerCfg{
@@ -486,14 +487,14 @@ func (c *Controllor) initProducer(env string, waitProduceChan chan *libs.FluentM
 		senders...,
 	)
 	if err != nil {
-		libs.Logger.Panic("new producer", zap.Error(err))
+		library.Logger.Panic("new producer", zap.Error(err))
 	}
 
 	return p
 }
 
 func (c *Controllor) runHeartBeat(ctx context.Context) {
-	defer libs.Logger.Info("heartbeat exit")
+	defer library.Logger.Info("heartbeat exit")
 	for {
 		select {
 		case <-ctx.Done():
@@ -501,7 +502,7 @@ func (c *Controllor) runHeartBeat(ctx context.Context) {
 		default:
 		}
 
-		libs.Logger.Info("heartbeat",
+		library.Logger.Info("heartbeat",
 			zap.Int("goroutine", runtime.NumGoroutine()),
 		)
 		time.Sleep(gutils.Settings.GetDuration("heartbeat") * time.Second)
@@ -510,7 +511,7 @@ func (c *Controllor) runHeartBeat(ctx context.Context) {
 
 // Run starting all pipeline
 func (c *Controllor) Run(ctx context.Context) {
-	libs.Logger.Info("running...")
+	library.Logger.Info("running...")
 	env := gutils.Settings.GetString("env")
 
 	journal := c.initJournal(ctx)
@@ -519,7 +520,7 @@ func (c *Controllor) Run(ctx context.Context) {
 	acceptor := c.initAcceptor(ctx, journal, receivers)
 	acceptorPipeline, err := c.initAcceptorPipeline(ctx, env)
 	if err != nil {
-		libs.Logger.Panic("initAcceptorPipeline", zap.Error(err))
+		library.Logger.Panic("initAcceptorPipeline", zap.Error(err))
 	}
 
 	waitCommitChan := journal.GetCommitChan()

@@ -17,11 +17,11 @@ import (
 // 	}
 // 	msgPool := &sync.Pool{
 // 		New: func() interface{} {
-// 			return &libs.FluentMsg{}
+// 			return &library.FluentMsg{}
 // 		},
 // 	}
-// 	inChan := make(chan *libs.FluentMsg, 2000)
-// 	outChan := make(chan *libs.FluentMsg, 10000)
+// 	inChan := make(chan *library.FluentMsg, 2000)
+// 	outChan := make(chan *library.FluentMsg, 10000)
 
 // 	go func() {
 // 		i := 0.0
@@ -51,13 +51,13 @@ import (
 // 	go c.Run(inChan)
 
 // 	var (
-// 		msg1, msg2 *libs.FluentMsg
+// 		msg1, msg2 *library.FluentMsg
 // 	)
 
 // 	b.Run("concator", func(b *testing.B) {
 // 		for i := 0; i < b.N; i++ {
 // 			if rand.Float64() <= 0.5 {
-// 				msg1 = msgPool.Get().(*libs.FluentMsg)
+// 				msg1 = msgPool.Get().(*library.FluentMsg)
 // 				msg1.Tag = "app.spring.sit"
 // 				msg1.Id = 1
 // 				msg1.Message = map[string]interface{}{
@@ -66,7 +66,7 @@ import (
 // 				}
 // 				inChan <- msg1
 // 			} else {
-// 				msg2 = msgPool.Get().(*libs.FluentMsg)
+// 				msg2 = msgPool.Get().(*library.FluentMsg)
 // 				msg2.Tag = "app.spring.sit"
 // 				msg2.Id = 2
 // 				msg2.Message = map[string]interface{}{

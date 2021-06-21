@@ -1,4 +1,4 @@
-package libs
+package library
 
 type CounterIft interface {
 	Count() int64

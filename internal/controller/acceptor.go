@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
+	"gofluentd/internal/recvs"
 	"gofluentd/library"
-	"gofluentd/recvs"
 
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"

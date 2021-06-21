@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"sync"
 
+	"gofluentd/internal/monitor"
+	"gofluentd/internal/senders"
 	"gofluentd/library"
-	"gofluentd/monitor"
-	"gofluentd/senders"
 
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"

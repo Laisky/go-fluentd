@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
+	"gofluentd/internal/monitor"
 	"gofluentd/library"
-	"gofluentd/monitor"
 
 	"github.com/Laisky/zap"
 )

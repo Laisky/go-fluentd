@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
+	"gofluentd/internal/monitor"
 	"gofluentd/library"
-	"gofluentd/monitor"
 
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"

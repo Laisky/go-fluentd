@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"gofluentd/controller"
+	"gofluentd/internal/controller"
 	"gofluentd/library"
 
 	gutils "github.com/Laisky/go-utils"

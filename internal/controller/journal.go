@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"gofluentd/internal/monitor"
 	"gofluentd/library"
-	"gofluentd/monitor"
 
 	"github.com/Laisky/go-journal"
 	utils "github.com/Laisky/go-utils"

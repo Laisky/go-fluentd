@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sync"
 
+	"gofluentd/internal/monitor"
+	"gofluentd/internal/tagfilters"
 	"gofluentd/library"
-	"gofluentd/monitor"
-	"gofluentd/tagfilters"
 
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"

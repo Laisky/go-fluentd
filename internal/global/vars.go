@@ -1,7 +1,7 @@
 package global
 
 import (
-	"gofluentd/library"
+	"gofluentd/library/config"
 )
 
-var Config = new(library.Config)
+var Config = new(config.Config)

@@ -16,7 +16,7 @@ import (
 
 func main() {
 	ctx := context.Background()
-	setupArgs()
+	parseCMD()
 	setupGC(ctx)
 	setupSettings()
 	setupLogger(ctx)
@@ -28,13 +28,14 @@ func main() {
 }
 
 func setupGC(ctx context.Context) {
-	if !gutils.Settings.GetBool("enable-auto-gc") {
+	if !global.Config.CMDArgs.EnableAutoGC {
 		return
 	}
+
 	opts := []gutils.GcOptFunc{}
-	ratio := gutils.Settings.GetInt("gc-mem-ratio")
+	ratio := global.Config.CMDArgs.GCMemRatio
 	if ratio > 0 {
-		opts = append(opts, gutils.WithGCMemRatio(ratio))
+		opts = append(opts, gutils.WithGCMemRatio(int(ratio)))
 	}
 
 	if err := gutils.AutoGC(ctx, opts...); err != nil {
@@ -45,7 +46,7 @@ func setupGC(ctx context.Context) {
 // setupSettings setup arguments restored in viper
 func setupSettings() {
 	// check `--log-level`
-	switch gutils.Settings.GetString("log-level") {
+	switch global.Config.CMDArgs.LogLevel {
 	case "debug":
 	case "info":
 	case "warn":
@@ -53,7 +54,7 @@ func setupSettings() {
 	default:
 		gutils.Logger.Panic(
 			"unknown value",
-			zap.String("--log-level", gutils.Settings.GetString("log-level")),
+			zap.String("--log-level", global.Config.CMDArgs.LogLevel),
 		)
 	}
 
@@ -68,26 +69,27 @@ func setupSettings() {
 	// }
 
 	// mode
-	if gutils.Settings.GetBool("debug") {
+	if global.Config.CMDArgs.Debug {
 		fmt.Println("run in debug mode")
-		gutils.Settings.Set("log-level", "debug")
+		global.Config.CMDArgs.LogLevel = gutils.LoggerLevelDebug
+		gutils.Settings.Set("log-level", gutils.LoggerLevelDebug)
 	} else { // prod mode
 		fmt.Println("run in prod mode")
 	}
 
 	// log
-	if err := log.Logger.ChangeLevel(gutils.Settings.GetString("log-level")); err != nil {
+	if err := log.Logger.ChangeLevel(global.Config.CMDArgs.LogLevel); err != nil {
 		log.Logger.Panic("change log level", zap.Error(err))
 	}
 	log.Logger.Info("set log level",
-		zap.String("level", gutils.Settings.GetString("log-level")))
+		zap.String("level", global.Config.CMDArgs.LogLevel))
 
 	// clock
 	gutils.SetupClock(100 * time.Millisecond)
 
 	// load configuration
 	isCfgLoaded := false
-	cfgFilePath := gutils.Settings.GetString("config")
+	cfgFilePath := global.Config.CMDArgs.ConfigPath
 	if err := gutils.Settings.LoadFromFile(cfgFilePath); err != nil {
 		log.Logger.Info("can not load config from disk",
 			zap.String("config", cfgFilePath))
@@ -97,16 +99,16 @@ func setupSettings() {
 		isCfgLoaded = true
 	}
 
-	if gutils.Settings.GetString("config-server") != "" &&
-		gutils.Settings.GetString("config-server-appname") != "" &&
-		gutils.Settings.GetString("config-server-profile") != "" &&
-		gutils.Settings.GetString("config-server-label") != "" &&
-		gutils.Settings.GetString("config-server-key") != "" {
+	if global.Config.CMDArgs.ConfigServer != "" &&
+		global.Config.CMDArgs.ConfigServerAppname != "" &&
+		global.Config.CMDArgs.ConfigServerProfile != "" &&
+		global.Config.CMDArgs.ConfigServerLabel != "" &&
+		global.Config.CMDArgs.ConfigServerKey != "" {
 		if err := gutils.Settings.LoadFromConfigServer(
-			gutils.Settings.GetString("config-server"),
-			gutils.Settings.GetString("config-server-appname"),
-			gutils.Settings.GetString("config-server-profile"),
-			gutils.Settings.GetString("config-server-label"),
+			global.Config.CMDArgs.ConfigServer,
+			global.Config.CMDArgs.ConfigServerAppname,
+			global.Config.CMDArgs.ConfigServerProfile,
+			global.Config.CMDArgs.ConfigServerLabel,
 		); err != nil {
 			log.Logger.Panic("try to load configuration from config-server got error", zap.Error(err))
 		} else {
@@ -123,23 +125,23 @@ func setupSettings() {
 	}
 }
 
-func setupArgs() {
-	pflag.Bool("debug", false, "run in debug mode")
-	pflag.Bool("dry", false, "run in dry mode")
-	pflag.Bool("enable-auto-gc", false, "enable auto gc")
-	pflag.Int("gc-mem-ratio", 85, "trigger gc when memory usage")
-	pflag.String("host", "unknown", "hostname")
-	pflag.StringP("config", "c", "/etc/go-fluentd/settings/settings.yml", "config file path")
-	pflag.String("config-server", "", "config server url")
-	pflag.String("config-server-appname", "", "config server app name")
-	pflag.String("config-server-profile", "", "config server profile name")
-	pflag.String("config-server-label", "", "config server branch name")
-	pflag.String("config-server-key", "", "raw content key ")
-	pflag.String("addr", "localhost:8080", "like `localhost:8080`")
-	pflag.String("env", "", "environment `sit/perf/uat/prod`")
-	pflag.String("log-level", "info", "`debug/info/error`")
-	pflag.Bool("log-alert", false, "is enable log AlertPusher")
-	pflag.Int("heartbeat", 60, "heartbeat seconds")
+func parseCMD() {
+	pflag.BoolVar(&global.Config.CMDArgs.Debug, "debug", false, "run in debug mode")
+	pflag.BoolVar(&global.Config.CMDArgs.Dry, "dry", false, "run in dry mode")
+	pflag.BoolVar(&global.Config.CMDArgs.EnableAutoGC, "enable-auto-gc", false, "enable auto gc")
+	pflag.UintVar(&global.Config.CMDArgs.GCMemRatio, "gc-mem-ratio", 85, "trigger gc when memory usage")
+	pflag.StringVar(&global.Config.CMDArgs.HostName, "host", "unknown", "hostname")
+	pflag.StringVarP(&global.Config.CMDArgs.ConfigPath, "config", "c", "/etc/go-fluentd/settings/settings.yml", "config file path")
+	pflag.StringVar(&global.Config.CMDArgs.ConfigServer, "config-server", "", "config server url")
+	pflag.StringVar(&global.Config.CMDArgs.ConfigServerAppname, "config-server-appname", "", "config server app name")
+	pflag.StringVar(&global.Config.CMDArgs.ConfigServerProfile, "config-server-profile", "", "config server profile name")
+	pflag.StringVar(&global.Config.CMDArgs.ConfigServerLabel, "config-server-label", "", "config server branch name")
+	pflag.StringVar(&global.Config.CMDArgs.ConfigServerKey, "config-server-key", "", "raw content key ")
+	pflag.StringVar(&global.Config.CMDArgs.ListenAddr, "addr", "localhost:8080", "like `localhost:8080`")
+	pflag.StringVar(&global.Config.CMDArgs.Env, "env", "", "environment `sit/perf/uat/prod`")
+	pflag.StringVar(&global.Config.CMDArgs.LogLevel, "log-level", "info", "`debug/info/error`")
+	pflag.BoolVar(&global.Config.CMDArgs.EnableLogAlert, "log-alert", false, "is enable log AlertPusher")
+	pflag.UintVar(&global.Config.CMDArgs.HeartBeat, "heartbeat", 60, "heartbeat seconds")
 	pflag.Parse()
 	if err := gutils.Settings.BindPFlags(pflag.CommandLine); err != nil {
 		log.Logger.Panic("parse command arguments", zap.Error(err))
@@ -147,11 +149,12 @@ func setupArgs() {
 }
 
 func setupLogger(ctx context.Context) {
-	if !gutils.Settings.GetBool("log-alert") {
+	if !global.Config.CMDArgs.EnableLogAlert {
 		return
 	}
+
 	log.Logger.Info("enable alert pusher")
-	log.Logger = log.Logger.Named("go-fluentd-" + gutils.Settings.GetString("env") + "-" + gutils.Settings.GetString("host"))
+	log.Logger = log.Logger.Named("go-fluentd-" + global.Config.CMDArgs.Env + "-" + global.Config.CMDArgs.HostName)
 
 	if gutils.Settings.GetString("settings.logger.push_api") != "" {
 		// telegram alert

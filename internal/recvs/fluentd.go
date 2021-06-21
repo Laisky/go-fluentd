@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gofluentd/library"
+	"gofluentd/library/log"
 
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
@@ -72,7 +73,7 @@ type PendingMsg struct {
 // NewFluentdRecv create new FluentdRecv
 func NewFluentdRecv(cfg *FluentdRecvCfg) (r *FluentdRecv) {
 	r = &FluentdRecv{
-		logger:         library.Logger.Named(cfg.Name),
+		logger:         log.Logger.Named(cfg.Name),
 		BaseRecv:       &BaseRecv{},
 		FluentdRecvCfg: cfg,
 		pendingMsgPool: &sync.Pool{
@@ -83,7 +84,7 @@ func NewFluentdRecv(cfg *FluentdRecvCfg) (r *FluentdRecv) {
 		concatTagCfg: map[string]*concatCfg{},
 	}
 	if err := r.valid(); err != nil {
-		library.Logger.Panic("config invalid", zap.Error(err))
+		log.Logger.Panic("config invalid", zap.Error(err))
 	}
 
 	tags := []string{}
@@ -112,46 +113,46 @@ func NewFluentdRecv(cfg *FluentdRecvCfg) (r *FluentdRecv) {
 func (r *FluentdRecv) valid() error {
 	if r.IsRewriteTagFromTagKey {
 		if r.OriginRewriteTagKey == "" {
-			library.Logger.Panic("if IsRewriteTagFromTagKey is setted, OriginRewriteTagKey should not empty")
+			log.Logger.Panic("if IsRewriteTagFromTagKey is setted, OriginRewriteTagKey should not empty")
 		}
 	}
 
 	if r.NFork <= 0 {
 		r.NFork = 1
-		library.Logger.Info("reset n_fork", zap.Int("n_fork", r.NFork))
+		log.Logger.Info("reset n_fork", zap.Int("n_fork", r.NFork))
 	}
 
 	if r.ConcatorBufSize <= 0 {
 		r.ConcatorBufSize = 1024
-		library.Logger.Info("reset internal_buf_size", zap.Int("internal_buf_size", r.ConcatorBufSize))
+		log.Logger.Info("reset internal_buf_size", zap.Int("internal_buf_size", r.ConcatorBufSize))
 
 	} else if r.ConcatorBufSize < 1000 {
-		library.Logger.Warn("internal_buf_size better greater than 1000", zap.Int("internal_buf_size", r.ConcatorBufSize))
+		log.Logger.Warn("internal_buf_size better greater than 1000", zap.Int("internal_buf_size", r.ConcatorBufSize))
 	}
 
 	if r.ConcatorWait < 1*time.Second {
 		r.ConcatorWait = defaultConcatorWait
-		library.Logger.Info("reset concat_with_sec", zap.Duration("concat_with_sec", r.ConcatorWait))
+		log.Logger.Info("reset concat_with_sec", zap.Duration("concat_with_sec", r.ConcatorWait))
 	}
 
 	if r.ConcatMaxLen == 0 {
 		r.ConcatMaxLen = 300000
-		library.Logger.Warn("reset concat_max_len", zap.Int("concat_max_len", r.ConcatMaxLen))
+		log.Logger.Warn("reset concat_max_len", zap.Int("concat_max_len", r.ConcatMaxLen))
 	}
 
 	if r.TagKey == "" {
 		r.TagKey = "tag"
-		library.Logger.Info("reset tag_key", zap.String("tag_key", r.TagKey))
+		log.Logger.Info("reset tag_key", zap.String("tag_key", r.TagKey))
 	}
 
 	if r.LBKey == "" {
 		r.LBKey = "container_id"
-		library.Logger.Info("reset lb_key", zap.String("lb_key", r.LBKey))
+		log.Logger.Info("reset lb_key", zap.String("lb_key", r.LBKey))
 	}
 
 	if r.Addr == "" {
 		r.Addr = "0.0.0.0:24225"
-		library.Logger.Info("reset addr", zap.String("addr", r.Addr))
+		log.Logger.Info("reset addr", zap.String("addr", r.Addr))
 	}
 
 	return nil
@@ -336,7 +337,7 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 		}
 
 		totalMsgCnt += msgCnt
-		library.Logger.Debug("msg stats", zap.Int("total", totalMsgCnt))
+		log.Logger.Debug("msg stats", zap.Int("total", totalMsgCnt))
 	}
 }
 

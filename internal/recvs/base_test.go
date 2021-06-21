@@ -1,11 +1,12 @@
-package recvs_test
+package recvs
 
 import (
 	"sync"
 
 	"gofluentd/library"
+	"gofluentd/library/log"
 
-	utils "github.com/Laisky/go-utils"
+	gutils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 )
 
@@ -16,7 +17,7 @@ var (
 	// 	},
 	// 	Timeout: 30 * time.Second,
 	// }
-	counter = utils.NewCounter()
+	counter = gutils.NewCounter()
 	msgPool = &sync.Pool{
 		New: func() interface{} {
 			return &library.FluentMsg{
@@ -28,7 +29,7 @@ var (
 )
 
 func init() {
-	if err := library.Logger.ChangeLevel("debug"); err != nil {
-		library.Logger.Panic("change log level", zap.Error(err))
+	if err := log.Logger.ChangeLevel("debug"); err != nil {
+		log.Logger.Panic("change log level", zap.Error(err))
 	}
 }

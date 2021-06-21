@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"gofluentd/library"
+	"gofluentd/library/log"
 
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
@@ -44,7 +45,7 @@ type ElasticSearchSender struct {
 
 func NewElasticSearchSender(cfg *ElasticSearchSenderCfg) *ElasticSearchSender {
 	s := &ElasticSearchSender{
-		logger: library.Logger.Named(cfg.Name),
+		logger: log.Logger.Named(cfg.Name),
 		BaseSender: &BaseSender{
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
 		},

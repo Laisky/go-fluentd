@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"gofluentd/library"
+	"gofluentd/library/log"
 
 	"github.com/Laisky/zap"
 )
@@ -45,10 +46,10 @@ func NewSpringFilter(cfg *SpringFilterCfg) *SpringFilter {
 		SpringFilterCfg: cfg,
 	}
 	if err := f.valid(); err != nil {
-		library.Logger.Panic("config invalid", zap.Error(err))
+		log.Logger.Panic("config invalid", zap.Error(err))
 	}
 
-	library.Logger.Info("new spring filter",
+	log.Logger.Info("new spring filter",
 		zap.String("tag", f.Tag),
 		zap.String("env", f.Env),
 		zap.String("msg_key", f.MsgKey),
@@ -60,12 +61,12 @@ func NewSpringFilter(cfg *SpringFilterCfg) *SpringFilter {
 func (f *SpringFilter) valid() error {
 	if f.TagKey == "" {
 		f.TagKey = "tag"
-		library.Logger.Info("reset tag_key", zap.String("tag_key", f.TagKey))
+		log.Logger.Info("reset tag_key", zap.String("tag_key", f.TagKey))
 	}
 
 	if f.MsgKey == "" {
 		f.MsgKey = "log"
-		library.Logger.Info("reset msg_key", zap.String("msg_key", f.MsgKey))
+		log.Logger.Info("reset msg_key", zap.String("msg_key", f.MsgKey))
 	}
 
 	return nil
@@ -85,7 +86,7 @@ func (f *SpringFilter) Filter(msg *library.FluentMsg) *library.FluentMsg {
 	case string:
 		msg.Message[f.MsgKey] = []byte(msg.Message[f.MsgKey].(string))
 	default:
-		library.Logger.Warn("discard log since unknown type of msg",
+		log.Logger.Warn("discard log since unknown type of msg",
 			zap.String("tag", msg.Tag),
 			zap.String("msg", fmt.Sprint(msg.Message[f.MsgKey])))
 		f.DiscardMsg(msg)
@@ -94,7 +95,7 @@ func (f *SpringFilter) Filter(msg *library.FluentMsg) *library.FluentMsg {
 	// retag spring to cp/bot/app.spring
 	for _, rule := range f.Rules {
 		if rule.Regexp.Match(msg.Message[f.MsgKey].([]byte)) {
-			library.Logger.Debug("rewrite tag", zap.String("old", msg.Tag), zap.String("new", rule.NewTag))
+			log.Logger.Debug("rewrite tag", zap.String("old", msg.Tag), zap.String("new", rule.NewTag))
 			msg.Tag = rule.NewTag
 			msg.Message[f.TagKey] = msg.Tag
 			f.upstreamChan <- msg

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gofluentd/library"
+	"gofluentd/library/log"
 
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
@@ -28,12 +29,12 @@ type FluentSender struct {
 }
 
 func NewFluentSender(cfg *FluentSenderCfg) *FluentSender {
-	library.Logger.Info("new fluent sender",
+	log.Logger.Info("new fluent sender",
 		zap.String("addr", cfg.Addr),
 		zap.Strings("tags", cfg.Tags))
 
 	if cfg.Addr == "" {
-		library.Logger.Panic("addr should not be empty")
+		log.Logger.Panic("addr should not be empty")
 	}
 
 	s := &FluentSender{
@@ -51,7 +52,7 @@ func (s *FluentSender) GetName() string {
 }
 
 func (s *FluentSender) Spawn(ctx context.Context) chan<- *library.FluentMsg {
-	library.Logger.Info("spawn fluentd sender")
+	log.Logger.Info("spawn fluentd sender")
 	var (
 		inChan       = make(chan *library.FluentMsg, s.InChanSize)
 		childInChan  chan *library.FluentMsg // for each tag
@@ -86,7 +87,7 @@ func (s *FluentSender) Spawn(ctx context.Context) chan<- *library.FluentMsg {
 				default:
 					if s.DiscardWhenBlocked() {
 						s.successedChan <- msg
-						library.Logger.Warn("skip sender and discard msg since of its inchan is full",
+						log.Logger.Warn("skip sender and discard msg since of its inchan is full",
 							zap.String("name", s.GetName()),
 							zap.String("tag", msg.Tag))
 					} else {
@@ -101,7 +102,7 @@ func (s *FluentSender) Spawn(ctx context.Context) chan<- *library.FluentMsg {
 }
 
 func (s *FluentSender) spawnChildSenderForTag(ctx context.Context, tag string, inChan chan *library.FluentMsg) {
-	logger := library.Logger.With(zap.String("tag", tag), zap.String("addr", s.Addr))
+	logger := log.Logger.With(zap.String("tag", tag), zap.String("addr", s.Addr))
 	logger.Info("spawn fluentd child sender")
 	var (
 		nRetry           int

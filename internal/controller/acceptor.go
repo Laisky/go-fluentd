@@ -7,6 +7,7 @@ import (
 
 	"gofluentd/internal/recvs"
 	"gofluentd/library"
+	"gofluentd/library/log"
 
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
@@ -36,10 +37,10 @@ func NewAcceptor(cfg *AcceptorCfg, recvs ...recvs.AcceptorRecvItf) *Acceptor {
 		recvs:        recvs,
 	}
 	if err := a.valid(); err != nil {
-		library.Logger.Panic("new acceptor", zap.Error(err))
+		log.Logger.Panic("new acceptor", zap.Error(err))
 	}
 
-	library.Logger.Info("create acceptor",
+	log.Logger.Info("create acceptor",
 		zap.Int64("max_rotate_id", a.MaxRotateID),
 		zap.Int("sync_out_chan_size", a.SyncOutChanSize),
 		zap.Int("async_out_chan_size", a.AsyncOutChanSize),
@@ -50,19 +51,19 @@ func NewAcceptor(cfg *AcceptorCfg, recvs ...recvs.AcceptorRecvItf) *Acceptor {
 func (a *Acceptor) valid() error {
 	if a.MaxRotateID == 0 {
 		a.MaxRotateID = 372036854775807
-		library.Logger.Info("reset max_rotate_id", zap.Int64("max_rotate_id", a.MaxRotateID))
+		log.Logger.Info("reset max_rotate_id", zap.Int64("max_rotate_id", a.MaxRotateID))
 	} else if a.MaxRotateID < 1000000 {
-		library.Logger.Warn("max_rotate_id should not too small", zap.Int64("max_rotate_id", a.MaxRotateID))
+		log.Logger.Warn("max_rotate_id should not too small", zap.Int64("max_rotate_id", a.MaxRotateID))
 	}
 
 	if a.SyncOutChanSize == 0 {
 		a.SyncOutChanSize = 10000
-		library.Logger.Info("reset sync_out_chan_size", zap.Int("sync_out_chan_size", a.SyncOutChanSize))
+		log.Logger.Info("reset sync_out_chan_size", zap.Int("sync_out_chan_size", a.SyncOutChanSize))
 	}
 
 	if a.AsyncOutChanSize == 0 {
 		a.AsyncOutChanSize = 10000
-		library.Logger.Info("reset async_out_chan_size", zap.Int("async_out_chan_size", a.AsyncOutChanSize))
+		log.Logger.Info("reset async_out_chan_size", zap.Int("async_out_chan_size", a.AsyncOutChanSize))
 	}
 
 	return nil
@@ -72,10 +73,10 @@ func (a *Acceptor) valid() error {
 // you can use `acceptor.MessageChan()` to load messages`
 func (a *Acceptor) Run(ctx context.Context) {
 	// got exists max id from legacy
-	library.Logger.Info("process legacy data...")
+	log.Logger.Info("process legacy data...")
 	maxID, err := a.Journal.LoadMaxID()
 	if err != nil {
-		library.Logger.Panic("try to process legacy messages got error", zap.Error(err))
+		log.Logger.Panic("try to process legacy messages got error", zap.Error(err))
 	}
 
 	couter, err := utils.NewParallelCounterFromN((maxID+1)%a.MaxRotateID, 10000, a.MaxRotateID)
@@ -84,7 +85,7 @@ func (a *Acceptor) Run(ctx context.Context) {
 	}
 
 	for _, recv := range a.recvs {
-		library.Logger.Info("enable recv", zap.String("name", recv.GetName()))
+		log.Logger.Info("enable recv", zap.String("name", recv.GetName()))
 		recv.SetAsyncOutChan(a.asyncOutChan)
 		recv.SetSyncOutChan(a.syncOutChan)
 		recv.SetMsgPool(a.MsgPool)

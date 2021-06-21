@@ -8,6 +8,7 @@ import (
 	"gofluentd/internal/monitor"
 	"gofluentd/internal/tagfilters"
 	"gofluentd/library"
+	"gofluentd/library/log"
 
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
@@ -40,10 +41,10 @@ func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 		counter:       utils.NewCounter(),
 	}
 	if err := d.valid(); err != nil {
-		library.Logger.Panic("config invalid", zap.Error(err))
+		log.Logger.Panic("config invalid", zap.Error(err))
 	}
 
-	library.Logger.Info("create Dispatcher",
+	log.Logger.Info("create Dispatcher",
 		zap.Int("n_fork", d.NFork),
 		zap.Int("out_chan_size", d.OutChanSize),
 	)
@@ -53,12 +54,12 @@ func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 func (d *Dispatcher) valid() error {
 	if d.NFork <= 0 {
 		d.NFork = 4
-		library.Logger.Info("reset n_fork", zap.Int("n_fork", d.NFork))
+		log.Logger.Info("reset n_fork", zap.Int("n_fork", d.NFork))
 	}
 
 	if d.OutChanSize <= 0 {
 		d.OutChanSize = 1000
-		library.Logger.Info("reset out_chan_size", zap.Int("out_chan_size", d.OutChanSize))
+		log.Logger.Info("reset out_chan_size", zap.Int("out_chan_size", d.OutChanSize))
 	}
 
 	return nil
@@ -66,7 +67,7 @@ func (d *Dispatcher) valid() error {
 
 // Run dispacher to dispatch messages to different concators
 func (d *Dispatcher) Run(ctx context.Context) {
-	library.Logger.Info("run dispacher...")
+	log.Logger.Info("run dispacher...")
 	d.registerMonitor()
 	lock := &sync.Mutex{}
 
@@ -80,7 +81,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 				counterI          interface{}
 				msg               *library.FluentMsg
 			)
-			defer library.Logger.Info("dispatcher exist with msg", zap.String("msg", fmt.Sprint(msg)))
+			defer log.Logger.Info("dispatcher exist with msg", zap.String("msg", fmt.Sprint(msg)))
 
 			// send each message to appropriate tagfilter by `tag`
 			for {
@@ -89,7 +90,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 					return
 				case msg, ok = <-d.InChan:
 					if !ok {
-						library.Logger.Info("inchan closed")
+						log.Logger.Info("inchan closed")
 						return
 					}
 				}
@@ -100,10 +101,10 @@ func (d *Dispatcher) Run(ctx context.Context) {
 					lock.Lock()
 					if inChanForEachTagi, ok = d.tag2Concator.Load(msg.Tag); !ok { // double check
 						// new tag, create new tagfilter and its inchan
-						library.Logger.Info("got new tag", zap.String("tag", msg.Tag))
+						log.Logger.Info("got new tag", zap.String("tag", msg.Tag))
 						ctx2Tag, cancel := context.WithCancel(ctx)
 						if inChanForEachTag, err = d.TagPipeline.Spawn(ctx2Tag, msg.Tag, d.outChan); err != nil {
-							library.Logger.Error("try to spawn new tagpipeline got error",
+							log.Logger.Error("try to spawn new tagpipeline got error",
 								zap.Error(err),
 								zap.String("tag", msg.Tag))
 							cancel()
@@ -116,7 +117,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 							d.tag2Concator.Store(msg.Tag, inChanForEachTag)
 							go func(tag string) {
 								<-ctx2Tag.Done()
-								library.Logger.Info("remove tag in dispatcher", zap.String("tag", tag))
+								log.Logger.Info("remove tag in dispatcher", zap.String("tag", tag))
 								lock.Lock()
 								d.tag2Concator.Delete(tag)
 								d.tag2Counter.Delete(tag)
@@ -135,7 +136,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 
 				// count
 				if counterI, ok = d.tag2Counter.Load(msg.Tag); !ok {
-					library.Logger.Panic("counter must exists", zap.String("tag", msg.Tag))
+					log.Logger.Panic("counter must exists", zap.String("tag", msg.Tag))
 				}
 				counterI.(*utils.Counter).Count()
 
@@ -143,7 +144,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 				select {
 				case inChanForEachTag <- msg:
 				default:
-					library.Logger.Warn("discard msg since tagfilter's inchan is blocked", zap.String("tag", msg.Tag))
+					log.Logger.Warn("discard msg since tagfilter's inchan is blocked", zap.String("tag", msg.Tag))
 				}
 			}
 		}()

@@ -1,4 +1,4 @@
-package recvs_test
+package recvs
 
 import (
 	"crypto/md5"
@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"gofluentd/library"
-	"gofluentd/recvs"
+	"gofluentd/library/log"
 
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
@@ -28,7 +28,7 @@ func TestHTTPRecv(t *testing.T) {
 		asyncOutChan = make(chan *library.FluentMsg, 1000)
 	)
 
-	cfg := &recvs.HTTPRecvCfg{
+	cfg := &HTTPRecvCfg{
 		Name:               "test-http-srv",
 		HTTPSrv:            httpsrv,
 		Env:                "sit",
@@ -46,7 +46,7 @@ func TestHTTPRecv(t *testing.T) {
 		MaxAllowedDelaySec: 300 * time.Second,
 		MaxAllowedAheadSec: 60 * time.Second,
 	}
-	httprecv := recvs.NewHTTPRecv(cfg)
+	httprecv := NewHTTPRecv(cfg)
 
 	httprecv.SetCounter(counter)
 	httprecv.SetMsgPool(msgPool)
@@ -58,7 +58,7 @@ func TestHTTPRecv(t *testing.T) {
 	go func() {
 		for {
 			if err := httpsrv.Run(addr); err != nil {
-				library.Logger.Error("try to run server got error", zap.Error(err))
+				log.Logger.Error("try to run server got error", zap.Error(err))
 				port++
 				addr = fmt.Sprintf("localhost:%v", port)
 			}

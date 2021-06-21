@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"gofluentd/internal/controller"
-	"gofluentd/library"
+	"gofluentd/internal/global"
+	"gofluentd/library/log"
 
 	gutils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
@@ -19,7 +20,7 @@ func main() {
 	setupGC(ctx)
 	setupSettings()
 	setupLogger(ctx)
-	defer library.Logger.Info("All done")
+	defer log.Logger.Info("All done")
 
 	// run
 	controllor := controller.NewControllor()
@@ -37,7 +38,7 @@ func setupGC(ctx context.Context) {
 	}
 
 	if err := gutils.AutoGC(ctx, opts...); err != nil {
-		library.Logger.Panic("enable auto gc", zap.Error(err))
+		log.Logger.Panic("enable auto gc", zap.Error(err))
 	}
 }
 
@@ -50,7 +51,10 @@ func setupSettings() {
 	case "warn":
 	case "error":
 	default:
-		panic(fmt.Sprintf("unknown value `--log-level=%v`", gutils.Settings.GetString("log-level")))
+		gutils.Logger.Panic(
+			"unknown value",
+			zap.String("--log-level", gutils.Settings.GetString("log-level")),
+		)
 	}
 
 	// check `--env`
@@ -72,10 +76,11 @@ func setupSettings() {
 	}
 
 	// log
-	if err := library.Logger.ChangeLevel(gutils.Settings.GetString("log-level")); err != nil {
-		library.Logger.Panic("change log level", zap.Error(err))
+	if err := log.Logger.ChangeLevel(gutils.Settings.GetString("log-level")); err != nil {
+		log.Logger.Panic("change log level", zap.Error(err))
 	}
-	library.Logger.Info("set log level", zap.String("level", gutils.Settings.GetString("log-level")))
+	log.Logger.Info("set log level",
+		zap.String("level", gutils.Settings.GetString("log-level")))
 
 	// clock
 	gutils.SetupClock(100 * time.Millisecond)
@@ -84,10 +89,10 @@ func setupSettings() {
 	isCfgLoaded := false
 	cfgFilePath := gutils.Settings.GetString("config")
 	if err := gutils.Settings.LoadFromFile(cfgFilePath); err != nil {
-		library.Logger.Info("can not load config from disk",
+		log.Logger.Info("can not load config from disk",
 			zap.String("config", cfgFilePath))
 	} else {
-		library.Logger.Info("success load configuration from dir",
+		log.Logger.Info("success load configuration from dir",
 			zap.String("config", cfgFilePath))
 		isCfgLoaded = true
 	}
@@ -103,15 +108,18 @@ func setupSettings() {
 			gutils.Settings.GetString("config-server-profile"),
 			gutils.Settings.GetString("config-server-label"),
 		); err != nil {
-			library.Logger.Panic("try to load configuration from config-server got error", zap.Error(err))
+			log.Logger.Panic("try to load configuration from config-server got error", zap.Error(err))
 		} else {
-			library.Logger.Info("success load configuration from config-server")
+			log.Logger.Info("success load configuration from config-server")
 			isCfgLoaded = true
 		}
 	}
 
 	if !isCfgLoaded {
-		library.Logger.Panic("can not load any configuration")
+		log.Logger.Panic("can not load any configuration")
+	}
+	if err := gutils.Settings.Unmarshal(global.Config); err != nil {
+		log.Logger.Panic("unmarshal settings", zap.Error(err))
 	}
 }
 
@@ -134,7 +142,7 @@ func setupArgs() {
 	pflag.Int("heartbeat", 60, "heartbeat seconds")
 	pflag.Parse()
 	if err := gutils.Settings.BindPFlags(pflag.CommandLine); err != nil {
-		library.Logger.Panic("parse command arguments", zap.Error(err))
+		log.Logger.Panic("parse command arguments", zap.Error(err))
 	}
 }
 
@@ -142,8 +150,8 @@ func setupLogger(ctx context.Context) {
 	if !gutils.Settings.GetBool("log-alert") {
 		return
 	}
-	library.Logger.Info("enable alert pusher")
-	library.Logger = library.Logger.Named("go-fluentd-" + gutils.Settings.GetString("env") + "-" + gutils.Settings.GetString("host"))
+	log.Logger.Info("enable alert pusher")
+	log.Logger = log.Logger.Named("go-fluentd-" + gutils.Settings.GetString("env") + "-" + gutils.Settings.GetString("host"))
 
 	if gutils.Settings.GetString("settings.logger.push_api") != "" {
 		// telegram alert
@@ -154,9 +162,9 @@ func setupLogger(ctx context.Context) {
 			gutils.Settings.GetString("settings.logger.push_token"),
 		)
 		if err != nil {
-			library.Logger.Panic("create AlertPusher", zap.Error(err))
+			log.Logger.Panic("create AlertPusher", zap.Error(err))
 		}
-		library.Logger = library.Logger.
+		log.Logger = log.Logger.
 			WithOptions(zap.HooksWithFields(alertPusher.GetZapHook()))
 	}
 
@@ -168,8 +176,8 @@ func setupLogger(ctx context.Context) {
 			gutils.Settings.GetString("settings.pateo_alert.token"),
 		)
 		if err != nil {
-			library.Logger.Panic("create PateoAlertPusher", zap.Error(err))
+			log.Logger.Panic("create PateoAlertPusher", zap.Error(err))
 		}
-		library.Logger = library.Logger.WithOptions(zap.HooksWithFields(pateoAlertPusher.GetZapHook()))
+		log.Logger = log.Logger.WithOptions(zap.HooksWithFields(pateoAlertPusher.GetZapHook()))
 	}
 }

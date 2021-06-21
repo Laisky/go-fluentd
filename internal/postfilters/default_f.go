@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"gofluentd/library"
+	"gofluentd/library/log"
 
 	"github.com/Laisky/zap"
 )
@@ -24,7 +25,7 @@ func NewDefaultFilter(cfg *DefaultFilterCfg) *DefaultFilter {
 		DefaultFilterCfg: cfg,
 	}
 	if err := f.valid(); err != nil {
-		library.Logger.Panic("DefaultFilter invalid", zap.Error(err))
+		log.Logger.Panic("DefaultFilter invalid", zap.Error(err))
 	}
 
 	return f
@@ -32,18 +33,18 @@ func NewDefaultFilter(cfg *DefaultFilterCfg) *DefaultFilter {
 
 func (f *DefaultFilter) valid() error {
 	if f.MaxLen != 0 {
-		library.Logger.Info("enbale max_len")
+		log.Logger.Info("enbale max_len")
 		if f.MaxLen < 100 {
-			library.Logger.Warn("default_filter's max_len too short", zap.Int("max_len", f.MaxLen))
+			log.Logger.Warn("default_filter's max_len too short", zap.Int("max_len", f.MaxLen))
 		}
 	}
 
 	if f.MsgKey == "" {
 		f.MsgKey = "log"
-		library.Logger.Info("reset msg_key", zap.String("msg_key", f.MsgKey))
+		log.Logger.Info("reset msg_key", zap.String("msg_key", f.MsgKey))
 	}
 
-	library.Logger.Info("new default_filter",
+	log.Logger.Info("new default_filter",
 		zap.Int("max_len", f.MaxLen),
 		zap.String("msg_key", f.MsgKey),
 	)

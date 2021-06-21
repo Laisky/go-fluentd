@@ -7,6 +7,7 @@ import (
 
 	"gofluentd/internal/monitor"
 	"gofluentd/library"
+	"gofluentd/library/log"
 
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
@@ -33,7 +34,7 @@ func NewPostPipeline(cfg *PostPipelineCfg, filters ...PostFilterItf) *PostPipeli
 		reEnterChan:     make(chan *library.FluentMsg, cfg.ReEnterChanSize),
 	}
 	if err := pp.valid(); err != nil {
-		library.Logger.Panic("cfg invalid", zap.Error(err))
+		log.Logger.Panic("cfg invalid", zap.Error(err))
 	}
 
 	pp.registerMonitor()
@@ -44,7 +45,7 @@ func NewPostPipeline(cfg *PostPipelineCfg, filters ...PostFilterItf) *PostPipeli
 		filter.SetWaitCommitChan(pp.WaitCommitChan)
 	}
 
-	library.Logger.Info("new post pipeline",
+	log.Logger.Info("new post pipeline",
 		zap.Int("n_fork", pp.NFork),
 		zap.Int("out_buf_len", pp.OutChanSize),
 		zap.Int("reenter_chan_len", pp.ReEnterChanSize),
@@ -55,17 +56,17 @@ func NewPostPipeline(cfg *PostPipelineCfg, filters ...PostFilterItf) *PostPipeli
 func (f *PostPipeline) valid() error {
 	if f.NFork < 1 {
 		f.NFork = 4
-		library.Logger.Info("reset n_fork", zap.Int("n_fork", f.NFork))
+		log.Logger.Info("reset n_fork", zap.Int("n_fork", f.NFork))
 	}
 
 	if f.OutChanSize <= 0 {
 		f.OutChanSize = 1000
-		library.Logger.Info("reset out_buf_len", zap.Int("out_buf_len", f.OutChanSize))
+		log.Logger.Info("reset out_buf_len", zap.Int("out_buf_len", f.OutChanSize))
 	}
 
 	if f.ReEnterChanSize <= 0 {
 		f.ReEnterChanSize = 1000
-		library.Logger.Info("reset reenter_chan_len", zap.Int("reenter_chan_len", f.ReEnterChanSize))
+		log.Logger.Info("reset reenter_chan_len", zap.Int("reenter_chan_len", f.ReEnterChanSize))
 	}
 
 	return nil
@@ -90,7 +91,7 @@ func (f *PostPipeline) Wrap(ctx context.Context, inChan chan *library.FluentMsg)
 				msg    *library.FluentMsg
 				ok     bool
 			)
-			defer library.Logger.Info("quit postPipeline", zap.Int("i", i), zap.String("msg", fmt.Sprint(msg)))
+			defer log.Logger.Info("quit postPipeline", zap.Int("i", i), zap.String("msg", fmt.Sprint(msg)))
 
 		NEW_MSG:
 			for {
@@ -99,12 +100,12 @@ func (f *PostPipeline) Wrap(ctx context.Context, inChan chan *library.FluentMsg)
 					return
 				case msg, ok = <-f.reEnterChan:
 					if !ok {
-						library.Logger.Info("reEnterChan closed")
+						log.Logger.Info("reEnterChan closed")
 						return
 					}
 				case msg, ok = <-inChan:
 					if !ok {
-						library.Logger.Info("inChan closed")
+						log.Logger.Info("inChan closed")
 						return
 					}
 				}

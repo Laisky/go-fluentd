@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"gofluentd/library"
+	"gofluentd/library/log"
 
 	"github.com/Laisky/zap"
 	"github.com/cespare/xxhash"
@@ -49,7 +50,7 @@ func (f *BaseTagFilterFactory) DiscardMsg(msg *library.FluentMsg) {
 
 func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan chan *library.FluentMsg, inchans []chan *library.FluentMsg) {
 	if len(inchans) < 1 {
-		library.Logger.Panic("nfork or inchans's length error",
+		log.Logger.Panic("nfork or inchans's length error",
 			zap.Int("inchans_len", len(inchans)))
 	}
 
@@ -61,14 +62,14 @@ func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan c
 		msg            *library.FluentMsg
 		ok             bool
 	)
-	defer library.Logger.Info("concator lb exit", zap.String("msg", fmt.Sprint(msg)))
+	defer log.Logger.Info("concator lb exit", zap.String("msg", fmt.Sprint(msg)))
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case msg, ok = <-inChan:
 			if !ok {
-				library.Logger.Info("inChan closed")
+				log.Logger.Info("inChan closed")
 				return
 			}
 		}
@@ -82,7 +83,7 @@ func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan c
 			case nil:
 				hashkey = defaultHashkey
 			default:
-				library.Logger.Warn("unknown type of hash key",
+				log.Logger.Warn("unknown type of hash key",
 					zap.String("lb_key", lbkey),
 					zap.String("val", fmt.Sprint(msg.Message[lbkey])))
 				hashkey = defaultHashkey
@@ -94,7 +95,7 @@ func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan c
 		select {
 		case downChan <- msg:
 		default:
-			library.Logger.Warn("discard msg since downstream worker's inchan is full",
+			log.Logger.Warn("discard msg since downstream worker's inchan is full",
 				zap.String("tag", msg.Tag),
 				zap.Uint64("idx", hashkey%uint64(nfork)))
 		}

@@ -15,6 +15,7 @@ import (
 	"gofluentd/internal/senders"
 	"gofluentd/internal/tagfilters"
 	"gofluentd/library"
+	"gofluentd/library/log"
 
 	"github.com/Laisky/go-kafka"
 	gutils "github.com/Laisky/go-utils"
@@ -29,7 +30,7 @@ type Controllor struct {
 
 // NewControllor create new Controllor
 func NewControllor() (c *Controllor) {
-	library.Logger.Info("create Controllor")
+	log.Logger.Info("create Controllor")
 
 	c = &Controllor{
 		msgPool: &sync.Pool{
@@ -75,7 +76,7 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 	case map[string]interface{}:
 		for name := range gutils.Settings.Get("settings.acceptor.recvs.plugins").(map[string]interface{}) {
 			if !StringListContains(gutils.Settings.GetStringSlice("settings.acceptor.recvs.plugins."+name+".active_env"), env) {
-				library.Logger.Info("recv not support current env", zap.String("name", name), zap.String("env", env))
+				log.Logger.Info("recv not support current env", zap.String("name", name), zap.String("env", env))
 				continue
 			}
 
@@ -147,18 +148,18 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 				kafkaCfg.IntervalDuration = gutils.Settings.GetDuration("settings.acceptor.recvs.plugins."+name+".interval_sec") * time.Second
 				receivers = append(receivers, recvs.NewKafkaRecv(kafkaCfg))
 			default:
-				library.Logger.Panic("unknown recv type",
+				log.Logger.Panic("unknown recv type",
 					zap.String("type", t),
 					zap.String("name", name))
 			}
 
-			library.Logger.Info("active recv",
+			log.Logger.Info("active recv",
 				zap.String("name", name),
 				zap.String("type", t))
 		}
 	case nil:
 	default:
-		library.Logger.Panic("recv plugins configuration error")
+		log.Logger.Panic("recv plugins configuration error")
 	}
 
 	return receivers
@@ -208,17 +209,17 @@ func (c *Controllor) initAcceptorPipeline(ctx context.Context, env string) (*acc
 					Rules:  acceptorfilters.ParseSpringRules(env, gutils.Settings.Get("settings.acceptor_filters.plugins."+name+".rules").([]interface{})),
 				}))
 			default:
-				library.Logger.Panic("unknown acceptorfilter type",
+				log.Logger.Panic("unknown acceptorfilter type",
 					zap.String("type", t),
 					zap.String("name", name))
 			}
-			library.Logger.Info("active acceptorfilter",
+			log.Logger.Info("active acceptorfilter",
 				zap.String("name", name),
 				zap.String("type", t))
 		}
 	case nil:
 	default:
-		library.Logger.Panic("acceptorfilter configuration error")
+		log.Logger.Panic("acceptorfilter configuration error")
 	}
 
 	// set the DefaultFilter as last filter
@@ -275,17 +276,17 @@ func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommit
 			case "concator":
 				isEnableConcator = true
 			default:
-				library.Logger.Panic("unknown tagfilter type",
+				log.Logger.Panic("unknown tagfilter type",
 					zap.String("type", t),
 					zap.String("name", name))
 			}
-			library.Logger.Info("active tagfilter",
+			log.Logger.Info("active tagfilter",
 				zap.String("name", name),
 				zap.String("type", t))
 		}
 	case nil:
 	default:
-		library.Logger.Panic("tagfilter configuration error")
+		log.Logger.Panic("tagfilter configuration error")
 	}
 
 	// PAAS-397: put concat in fluentd-recvs
@@ -361,19 +362,19 @@ func (c *Controllor) initPostPipeline(env string, waitCommitChan chan<- *library
 					Tags: library.LoadTagsAppendEnv(env, gutils.Settings.GetStringSlice("settings.post_filters.plugins."+name+".tags")),
 				}))
 			default:
-				library.Logger.Panic("unknown post_filter type",
+				log.Logger.Panic("unknown post_filter type",
 					zap.String("post_filter_type", t),
 					zap.String("post_filter_name", name))
 			}
 
-			library.Logger.Info("active post_filter",
+			log.Logger.Info("active post_filter",
 				zap.String("type", t),
 				zap.String("name", name),
 				zap.String("env", env))
 		}
 	case nil:
 	default:
-		library.Logger.Panic("post_filter configuration error")
+		log.Logger.Panic("post_filter configuration error")
 	}
 
 	return postfilters.NewPostPipeline(&postfilters.PostPipelineCfg{
@@ -401,7 +402,7 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 	case map[string]interface{}:
 		for name := range gutils.Settings.Get("settings.producer.plugins").(map[string]interface{}) {
 			if !StringListContains(gutils.Settings.GetStringSlice("settings.producer.plugins."+name+".active_env"), env) {
-				library.Logger.Info("sender not support current env", zap.String("name", name), zap.String("env", env))
+				log.Logger.Info("sender not support current env", zap.String("name", name), zap.String("env", env))
 				continue
 			}
 
@@ -455,18 +456,18 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 					IsDiscardWhenBlocked: gutils.Settings.GetBool("settings.producer.plugins." + name + ".is_discard_when_blocked"),
 				}))
 			default:
-				library.Logger.Panic("unknown sender type",
+				log.Logger.Panic("unknown sender type",
 					zap.String("type", t),
 					zap.String("name", name))
 			}
-			library.Logger.Info("active sender",
+			log.Logger.Info("active sender",
 				zap.String("type", t),
 				zap.String("name", name),
 				zap.String("env", env))
 		}
 	case nil:
 	default:
-		library.Logger.Panic("sender configuration error")
+		log.Logger.Panic("sender configuration error")
 	}
 
 	return ss
@@ -487,14 +488,14 @@ func (c *Controllor) initProducer(env string, waitProduceChan chan *library.Flue
 		senders...,
 	)
 	if err != nil {
-		library.Logger.Panic("new producer", zap.Error(err))
+		log.Logger.Panic("new producer", zap.Error(err))
 	}
 
 	return p
 }
 
 func (c *Controllor) runHeartBeat(ctx context.Context) {
-	defer library.Logger.Info("heartbeat exit")
+	defer log.Logger.Info("heartbeat exit")
 	for {
 		select {
 		case <-ctx.Done():
@@ -502,7 +503,7 @@ func (c *Controllor) runHeartBeat(ctx context.Context) {
 		default:
 		}
 
-		library.Logger.Info("heartbeat",
+		log.Logger.Info("heartbeat",
 			zap.Int("goroutine", runtime.NumGoroutine()),
 		)
 		time.Sleep(gutils.Settings.GetDuration("heartbeat") * time.Second)
@@ -511,7 +512,7 @@ func (c *Controllor) runHeartBeat(ctx context.Context) {
 
 // Run starting all pipeline
 func (c *Controllor) Run(ctx context.Context) {
-	library.Logger.Info("running...")
+	log.Logger.Info("running...")
 	env := gutils.Settings.GetString("env")
 
 	journal := c.initJournal(ctx)
@@ -520,7 +521,7 @@ func (c *Controllor) Run(ctx context.Context) {
 	acceptor := c.initAcceptor(ctx, journal, receivers)
 	acceptorPipeline, err := c.initAcceptorPipeline(ctx, env)
 	if err != nil {
-		library.Logger.Panic("initAcceptorPipeline", zap.Error(err))
+		log.Logger.Panic("initAcceptorPipeline", zap.Error(err))
 	}
 
 	waitCommitChan := journal.GetCommitChan()

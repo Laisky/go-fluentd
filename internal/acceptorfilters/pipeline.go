@@ -7,6 +7,7 @@ import (
 
 	"gofluentd/internal/monitor"
 	"gofluentd/library"
+	"gofluentd/library/log"
 
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
@@ -36,7 +37,7 @@ func NewAcceptorPipeline(ctx context.Context, cfg *AcceptorPipelineCfg, filters 
 		counter:             utils.NewCounter(),
 	}
 	if err := a.valid(); err != nil {
-		library.Logger.Panic("invalid cfg for acceptor pipeline")
+		log.Logger.Panic("invalid cfg for acceptor pipeline")
 	}
 
 	a.registerMonitor()
@@ -46,7 +47,7 @@ func NewAcceptorPipeline(ctx context.Context, cfg *AcceptorPipelineCfg, filters 
 	}
 
 	if a.IsThrottle {
-		library.Logger.Info("enable acceptor throttle",
+		log.Logger.Info("enable acceptor throttle",
 			zap.Int("max", a.ThrottleMax),
 			zap.Int("n_perf_sec", a.ThrottleNPerSec))
 		if a.throttle, err = utils.NewThrottleWithCtx(
@@ -59,7 +60,7 @@ func NewAcceptorPipeline(ctx context.Context, cfg *AcceptorPipelineCfg, filters 
 		}
 	}
 
-	library.Logger.Info("new acceptor pipeline",
+	log.Logger.Info("new acceptor pipeline",
 		zap.Int("n_fork", a.NFork),
 		zap.Int("out_buf_len", a.OutChanSize),
 		zap.Int("reenter_chan_len", a.ReEnterChanSize),
@@ -73,33 +74,33 @@ func NewAcceptorPipeline(ctx context.Context, cfg *AcceptorPipelineCfg, filters 
 func (f *AcceptorPipeline) valid() error {
 	if f.NFork <= 0 {
 		f.NFork = 4
-		library.Logger.Info("reset n_fork", zap.Int("n_fork", f.NFork))
+		log.Logger.Info("reset n_fork", zap.Int("n_fork", f.NFork))
 	}
 
 	if f.OutChanSize <= 0 {
 		f.OutChanSize = 1000
-		library.Logger.Info("reset out_buf_len", zap.Int("out_buf_len", f.OutChanSize))
+		log.Logger.Info("reset out_buf_len", zap.Int("out_buf_len", f.OutChanSize))
 	}
 
 	if f.ReEnterChanSize <= 0 {
 		f.ReEnterChanSize = 1000
-		library.Logger.Info("reset reenter_chan_len", zap.Int("reenter_chan_len", f.ReEnterChanSize))
+		log.Logger.Info("reset reenter_chan_len", zap.Int("reenter_chan_len", f.ReEnterChanSize))
 	}
 
 	if f.NFork <= 0 {
 		f.NFork = 4
-		library.Logger.Info("reset n_fork", zap.Int("n_fork", f.NFork))
+		log.Logger.Info("reset n_fork", zap.Int("n_fork", f.NFork))
 	}
 
 	if f.IsThrottle {
 		if f.ThrottleMax <= 0 {
 			f.ThrottleMax = 10000
-			library.Logger.Info("reset throttle_max", zap.Int("throttle_max", f.ThrottleMax))
+			log.Logger.Info("reset throttle_max", zap.Int("throttle_max", f.ThrottleMax))
 		}
 
 		if f.ThrottleNPerSec <= 0 {
 			f.ThrottleNPerSec = 1000
-			library.Logger.Info("reset throttle_per_sec", zap.Int("throttle_per_sec", f.ThrottleNPerSec))
+			log.Logger.Info("reset throttle_per_sec", zap.Int("throttle_per_sec", f.ThrottleNPerSec))
 		}
 	}
 
@@ -132,7 +133,7 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 				msg    *library.FluentMsg
 				ok     bool
 			)
-			defer library.Logger.Info("quit acceptorPipeline asyncChan", zap.String("last_msg", fmt.Sprint(msg)))
+			defer log.Logger.Info("quit acceptorPipeline asyncChan", zap.String("last_msg", fmt.Sprint(msg)))
 
 		NEXT_ASYNC_MSG:
 			for {
@@ -141,21 +142,21 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 					return
 				case msg, ok = <-f.reEnterChan: // CAUTION: do not put msg into reEnterChan forever
 					if !ok {
-						library.Logger.Info("reEnterChan closed")
+						log.Logger.Info("reEnterChan closed")
 						return
 					}
 				case msg, ok = <-asyncInChan:
 					if !ok {
-						library.Logger.Info("asyncInChan closed")
+						log.Logger.Info("asyncInChan closed")
 						return
 					}
 				}
 				f.counter.Count()
 
-				// library.Logger.Debug("AcceptorPipeline got msg")
+				// log.Logger.Debug("AcceptorPipeline got msg")
 
 				if f.IsThrottle && !f.throttle.Allow() {
-					library.Logger.Warn("discard msg by throttle", zap.String("tag", msg.Tag))
+					log.Logger.Warn("discard msg by throttle", zap.String("tag", msg.Tag))
 					f.DiscardMsg(msg)
 					continue
 				}
@@ -173,7 +174,7 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 					case outChan <- msg:
 					case skipDumpChan <- msg: // baidu has low disk performance
 					default:
-						library.Logger.Error("discard msg since disk & downstream are busy", zap.String("tag", msg.Tag))
+						log.Logger.Error("discard msg since disk & downstream are busy", zap.String("tag", msg.Tag))
 						f.MsgPool.Put(msg)
 					}
 				}
@@ -187,7 +188,7 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 				msg    *library.FluentMsg
 				ok     bool
 			)
-			defer library.Logger.Info("quit acceptorPipeline syncChan", zap.String("last_msg", fmt.Sprint(msg)))
+			defer log.Logger.Info("quit acceptorPipeline syncChan", zap.String("last_msg", fmt.Sprint(msg)))
 
 		NEXT_SYNC_MSG:
 			for {
@@ -196,15 +197,15 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 					return
 				case msg, ok = <-syncInChan:
 					if !ok {
-						library.Logger.Info("syncInChan closed")
+						log.Logger.Info("syncInChan closed")
 						return
 					}
 				}
-				// library.Logger.Debug("AcceptorPipeline got blockable msg")
+				// log.Logger.Debug("AcceptorPipeline got blockable msg")
 				f.counter.Count()
 
 				if f.IsThrottle && !f.throttle.Allow() {
-					library.Logger.Warn("discard msg by throttle", zap.String("tag", msg.Tag))
+					log.Logger.Warn("discard msg by throttle", zap.String("tag", msg.Tag))
 					f.DiscardMsg(msg)
 					continue
 				}

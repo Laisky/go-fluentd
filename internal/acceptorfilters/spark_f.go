@@ -5,6 +5,7 @@ import (
 	"regexp"
 
 	"gofluentd/library"
+	"gofluentd/library/log"
 
 	"github.com/Laisky/zap"
 )
@@ -22,7 +23,7 @@ type SparkFilter struct {
 }
 
 func NewSparkFilter(cfg *SparkFilterCfg) *SparkFilter {
-	library.Logger.Info("NewSparkFilter",
+	log.Logger.Info("NewSparkFilter",
 		zap.String("regex", cfg.IgnoreRegex.String()),
 		zap.String("tag", cfg.Tag))
 
@@ -52,7 +53,7 @@ func (f *SparkFilter) Filter(msg *library.FluentMsg) *library.FluentMsg {
 	}
 
 	// discard some format
-	// library.Logger.Debug("ignore spark log",
+	// log.Logger.Debug("ignore spark log",
 	// 	zap.String("tag", f.Tag),
 	// 	zap.ByteString("log", msg.Message[f.MsgKey].([]byte)))
 	if f.IgnoreRegex.Match(msg.Message[f.MsgKey].([]byte)) {

@@ -1,4 +1,4 @@
-package recvs_test
+package recvs
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"gofluentd/library"
-	"gofluentd/recvs"
 
 	"github.com/Laisky/go-utils"
 	"github.com/cespare/xxhash"
@@ -27,14 +26,14 @@ func TestFluentdRecv(t *testing.T) {
 	)
 	defer cancel()
 
-	cfg := &recvs.FluentdRecvCfg{
+	cfg := &FluentdRecvCfg{
 		NFork:           3,
 		ConcatorBufSize: 1000,
 		Name:            "fluentd-test",
 		Addr:            "127.0.0.1:24228",
 		TagKey:          "tag",
 	}
-	recv := recvs.NewFluentdRecv(cfg)
+	recv := NewFluentdRecv(cfg)
 
 	recv.SetCounter(counter)
 	recv.SetMsgPool(msgPool)

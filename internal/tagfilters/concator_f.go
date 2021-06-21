@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gofluentd/library"
+	"gofluentd/library/log"
 
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
@@ -47,12 +48,12 @@ type PendingMsg struct {
 // TODO: concator for each tag now,
 //       maybe set one concator for each identifier in the future for better performance
 func (cf *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCfg, outChan chan<- *library.FluentMsg, inChan <-chan *library.FluentMsg) {
-	defer library.Logger.Info("concator exit")
+	defer log.Logger.Info("concator exit")
 	var (
 		msg        *library.FluentMsg
 		pmsg       *PendingMsg
 		identifier string
-		log        []byte
+		msgData    []byte
 		ok         bool
 
 		initWaitTs      = 1 * time.Millisecond
@@ -66,13 +67,13 @@ func (cf *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCf
 
 	for {
 		if len(cf.slot) == 0 { // no msg waitting in slot
-			library.Logger.Debug("slot clear, waitting for new msg")
+			log.Logger.Debug("slot clear, waitting for new msg")
 			select {
 			case <-ctx.Done():
 				return
 			case msg, ok = <-inChan:
 				if !ok {
-					library.Logger.Info("inChan closed")
+					log.Logger.Info("inChan closed")
 					return
 				}
 			}
@@ -82,22 +83,22 @@ func (cf *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCf
 				return
 			case msg, ok = <-inChan:
 				if !ok {
-					library.Logger.Info("inChan closed")
+					log.Logger.Info("inChan closed")
 					return
 				}
 			default: // no new msg
 				for identifier, pmsg = range cf.slot {
 					if utils.Clock.GetUTCNow().Sub(pmsg.lastT) > concatTimeoutTs { // timeout to flush
 						// PAAS-210: I have no idea why this line could throw error
-						// library.Logger.Debug("timeout flush", zap.ByteString("log", pmsg.msg.Message[cfg.MsgKey].([]byte)))
+						// log.Logger.Debug("timeout flush", zap.ByteString("log", pmsg.msg.Message[cfg.MsgKey].([]byte)))
 
 						switch pmsg.msg.Message[cfg.MsgKey].(type) {
 						case []byte:
-							library.Logger.Debug("timeout flush",
+							log.Logger.Debug("timeout flush",
 								zap.ByteString("log", pmsg.msg.Message[cfg.MsgKey].([]byte)),
 								zap.String("tag", pmsg.msg.Tag))
 						default:
-							library.Logger.Panic("[panic] unknown type of `pmsg.msg.Message[cfg.MsgKey]`",
+							log.Logger.Panic("[panic] unknown type of `pmsg.msg.Message[cfg.MsgKey]`",
 								zap.String("tag", pmsg.msg.Tag),
 								zap.String("log", fmt.Sprint(pmsg.msg.Message[cfg.MsgKey])),
 								zap.String("msg", fmt.Sprint(pmsg.msg)))
@@ -123,7 +124,7 @@ func (cf *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCf
 		case string:
 			identifier = msg.Message[cfg.Identifier].(string)
 		default:
-			library.Logger.Warn("unknown identifier or unknown type",
+			log.Logger.Warn("unknown identifier or unknown type",
 				zap.String("tag", msg.Tag),
 				zap.String("identifier_key", cfg.Identifier),
 				zap.String("identifier", fmt.Sprint(msg.Message[cfg.Identifier])))
@@ -134,12 +135,12 @@ func (cf *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCf
 		// unknon msg key
 		switch msg.Message[cfg.MsgKey].(type) {
 		case []byte:
-			log = msg.Message[cfg.MsgKey].([]byte)
+			msgData = msg.Message[cfg.MsgKey].([]byte)
 		case string:
-			log = []byte(msg.Message[cfg.MsgKey].(string))
-			msg.Message[cfg.MsgKey] = log
+			msgData = []byte(msg.Message[cfg.MsgKey].(string))
+			msg.Message[cfg.MsgKey] = msgData
 		default:
-			library.Logger.Warn("unknown msg key or unknown type",
+			log.Logger.Warn("unknown msg key or unknown type",
 				zap.String("tag", msg.Tag),
 				zap.String("msg_key", cfg.MsgKey),
 				zap.String("msg", fmt.Sprint(msg.Message)))
@@ -149,15 +150,15 @@ func (cf *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCf
 
 		if _, ok = cf.slot[identifier]; !ok { // new identifier
 			// new line with incorrect format, skip
-			if !cfg.Regexp.Match(log) {
+			if !cfg.Regexp.Match(msgData) {
 				outChan <- msg
 				continue
 			}
 
 			// new line with correct format, set as first line
-			library.Logger.Debug("got new identifier",
+			log.Logger.Debug("got new identifier",
 				zap.String("identifier", identifier),
-				zap.ByteString("log", log))
+				zap.ByteString("log", msgData))
 			pmsg = cf.pMsgPool.Get().(*PendingMsg)
 			pmsg.lastT = utils.Clock.GetUTCNow()
 			pmsg.msg = msg
@@ -168,9 +169,9 @@ func (cf *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCf
 		pmsg = cf.slot[identifier]
 
 		// replace exists msg in slot
-		if cfg.Regexp.Match(log) { // new line
-			library.Logger.Debug("got new line",
-				zap.ByteString("log", log),
+		if cfg.Regexp.Match(msgData) { // new line
+			log.Logger.Debug("got new line",
+				zap.ByteString("log", msgData),
 				zap.String("tag", msg.Tag))
 			outChan <- pmsg.msg
 			pmsg.msg = msg
@@ -179,7 +180,7 @@ func (cf *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCf
 		}
 
 		// need to concat
-		library.Logger.Debug("concat lines",
+		log.Logger.Debug("concat lines",
 			zap.String("tag", msg.Tag),
 			zap.ByteString("log", msg.Message[cfg.MsgKey].([]byte)))
 		// pmsg.msg.Message[cfg.MsgKey] =
@@ -194,7 +195,7 @@ func (cf *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCf
 
 		// too long to send
 		if len(pmsg.msg.Message[cfg.MsgKey].([]byte)) >= cf.MaxLen {
-			library.Logger.Debug("too long to send", zap.String("msgKey", cfg.MsgKey), zap.String("tag", msg.Tag))
+			log.Logger.Debug("too long to send", zap.String("msgKey", cfg.MsgKey), zap.String("tag", msg.Tag))
 			outChan <- pmsg.msg
 			cf.pMsgPool.Put(pmsg)
 			delete(cf.slot, identifier)
@@ -222,16 +223,16 @@ type ConcatorFactory struct {
 
 // NewConcatorFact create new ConcatorFactory
 func NewConcatorFact(cfg *ConcatorFactCfg) *ConcatorFactory {
-	library.Logger.Info("create concatorFactory", zap.Int("max_len", cfg.MaxLen))
+	log.Logger.Info("create concatorFactory", zap.Int("max_len", cfg.MaxLen))
 
 	if cfg.MaxLen <= 0 {
-		library.Logger.Panic("concator max_length should bigger than 0")
+		log.Logger.Panic("concator max_length should bigger than 0")
 	} else if cfg.MaxLen < 10000 {
-		library.Logger.Warn("concator max_length maybe too short", zap.Int("len", cfg.MaxLen))
+		log.Logger.Warn("concator max_length maybe too short", zap.Int("len", cfg.MaxLen))
 	}
 
 	if cfg.NFork < 1 {
-		library.Logger.Panic("nfork should bigger than 1")
+		log.Logger.Panic("nfork should bigger than 1")
 	}
 
 	cf := &ConcatorFactory{
@@ -252,14 +253,14 @@ func (cf *ConcatorFactory) GetName() string {
 }
 
 func (cf *ConcatorFactory) IsTagSupported(tag string) bool {
-	// library.Logger.Debug("IsTagSupported", zap.String("tag", tag))
+	// log.Logger.Debug("IsTagSupported", zap.String("tag", tag))
 	_, ok := cf.Plugins[tag]
 	return ok
 }
 
 // Spawn create and run new Concator for new tag
 func (cf *ConcatorFactory) Spawn(ctx context.Context, tag string, outChan chan<- *library.FluentMsg) chan<- *library.FluentMsg {
-	library.Logger.Info("spawn concator tagfilter", zap.String("tag", tag))
+	log.Logger.Info("spawn concator tagfilter", zap.String("tag", tag))
 	var (
 		inChan  = make(chan *library.FluentMsg, cf.defaultInternalChanSize)
 		inchans = []chan *library.FluentMsg{}

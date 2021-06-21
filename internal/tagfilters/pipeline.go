@@ -6,6 +6,7 @@ import (
 
 	"gofluentd/internal/monitor"
 	"gofluentd/library"
+	"gofluentd/library/log"
 
 	"github.com/Laisky/zap"
 )
@@ -38,7 +39,7 @@ func NewTagPipeline(ctx context.Context, cfg *TagPipelineCfg, itfs ...TagFilterF
 		monitorChans:         map[string]chan<- *library.FluentMsg{},
 	}
 	if err := p.valid(); err != nil {
-		library.Logger.Panic("config invalid", zap.Error(err))
+		log.Logger.Panic("config invalid", zap.Error(err))
 	}
 
 	for _, itf := range itfs {
@@ -48,7 +49,7 @@ func NewTagPipeline(ctx context.Context, cfg *TagPipelineCfg, itfs ...TagFilterF
 	}
 
 	p.registryMonitor()
-	library.Logger.Info("create tag pipeline",
+	log.Logger.Info("create tag pipeline",
 		zap.Int("internal_chan_size", p.InternalChanSize),
 	)
 	return p
@@ -57,7 +58,7 @@ func NewTagPipeline(ctx context.Context, cfg *TagPipelineCfg, itfs ...TagFilterF
 func (p *TagPipeline) valid() error {
 	if p.InternalChanSize <= 0 {
 		p.InternalChanSize = defaultInternalFilterChanSize
-		library.Logger.Info("reset internal_chan_size", zap.Int("internal_chan_size", p.InternalChanSize))
+		log.Logger.Info("reset internal_chan_size", zap.Int("internal_chan_size", p.InternalChanSize))
 	}
 
 	return nil
@@ -65,7 +66,7 @@ func (p *TagPipeline) valid() error {
 
 // Spawn create and run new Concator for new tag, return inchan
 func (p *TagPipeline) Spawn(ctx context.Context, tag string, outChan chan<- *library.FluentMsg) (chan<- *library.FluentMsg, error) {
-	library.Logger.Info("spawn tagpipeline", zap.String("tag", tag))
+	log.Logger.Info("spawn tagpipeline", zap.String("tag", tag))
 	var (
 		f              TagFilterFactoryItf
 		i              int
@@ -75,7 +76,7 @@ func (p *TagPipeline) Spawn(ctx context.Context, tag string, outChan chan<- *lib
 	for i = len(p.TagFilterFactoryItfs) - 1; i >= 0; i-- {
 		f = p.TagFilterFactoryItfs[i]
 		if f.IsTagSupported(tag) {
-			library.Logger.Info("enable tagfilter",
+			log.Logger.Info("enable tagfilter",
 				zap.String("name", f.GetName()),
 				zap.String("tag", tag))
 			isTagSupported = true
@@ -85,7 +86,7 @@ func (p *TagPipeline) Spawn(ctx context.Context, tag string, outChan chan<- *lib
 	}
 
 	if !isTagSupported {
-		library.Logger.Info("skip tagPipeline", zap.String("tag", tag))
+		log.Logger.Info("skip tagPipeline", zap.String("tag", tag))
 		return outChan, nil
 	}
 

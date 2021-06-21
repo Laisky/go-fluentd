@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"gofluentd/library"
+	"gofluentd/library/log"
 
 	"github.com/Laisky/zap"
 )
@@ -28,14 +29,14 @@ func NewDefaultFilter(cfg *DefaultFilterCfg) *DefaultFilter {
 		tags:             map[string]struct{}{},
 	}
 	if err := f.valid(); err != nil {
-		library.Logger.Panic("new default filter", zap.Error(err))
+		log.Logger.Panic("new default filter", zap.Error(err))
 	}
 
 	for _, tag := range cfg.AcceptTags {
 		f.tags[tag] = struct{}{}
 	}
 
-	library.Logger.Info("new default filter",
+	log.Logger.Info("new default filter",
 		zap.Strings("accept_tags", f.AcceptTags),
 		zap.Bool("remove_empty_tag", f.RemoveEmptyTag),
 		zap.Bool("remove_unknown_tag", f.RemoveUnsupportTag),
@@ -62,13 +63,13 @@ func (f *DefaultFilter) isTagAccepted(tag string) (ok bool) {
 
 func (f *DefaultFilter) Filter(msg *library.FluentMsg) *library.FluentMsg {
 	if f.RemoveEmptyTag && msg.Tag == "" {
-		library.Logger.Warn("discard log since empty tag", zap.String("tag", msg.Tag))
+		log.Logger.Warn("discard log since empty tag", zap.String("tag", msg.Tag))
 		f.DiscardMsg(msg)
 		return nil
 	}
 
 	if f.RemoveUnsupportTag && !f.isTagAccepted(msg.Tag) {
-		library.Logger.Warn("discard log since unsupported tag", zap.String("tag", msg.Tag))
+		log.Logger.Warn("discard log since unsupported tag", zap.String("tag", msg.Tag))
 		f.DiscardMsg(msg)
 		return nil
 	}

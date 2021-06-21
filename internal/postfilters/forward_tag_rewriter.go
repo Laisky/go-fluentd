@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"gofluentd/library"
+	"gofluentd/library/log"
 
 	"github.com/Laisky/zap"
 )
@@ -22,7 +23,7 @@ type ForwardTagRewriterFilter struct {
 }
 
 func NewForwardTagRewriterFilter(cfg *ForwardTagRewriterFilterCfg) *ForwardTagRewriterFilter {
-	library.Logger.Info("new ForwardTagRewriterFilter",
+	log.Logger.Info("new ForwardTagRewriterFilter",
 		zap.String("tag", cfg.Tag))
 
 	return &ForwardTagRewriterFilter{
@@ -38,6 +39,6 @@ func (f *ForwardTagRewriterFilter) Filter(msg *library.FluentMsg) *library.Fluen
 
 	env := strings.Split(msg.Message[f.TagKey].(string), ".")[1]
 	msg.Tag = f.tagWithoutEnv + "." + env
-	// library.Logger.Debug("rewrite msg tag", zap.String("new_tag", msg.Tag))
+	// log.Logger.Debug("rewrite msg tag", zap.String("new_tag", msg.Tag))
 	return msg
 }

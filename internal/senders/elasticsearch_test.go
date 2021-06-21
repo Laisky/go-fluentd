@@ -1,4 +1,4 @@
-package senders_test
+package senders
 
 var (
 // httpClient = &http.Client{ // default http client

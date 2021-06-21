@@ -94,7 +94,7 @@ Then Producer can send logs to anywhere (depends on Senders).
 directly run:
 
 ```sh
-go run -race entrypoints/main.go \
+go run -race main.go \
   --config=./docs/settings/tiny_settings.yml \
   --env=sit \
   --log-level=debug

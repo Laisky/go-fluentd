@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gofluentd/library"
+	"gofluentd/library/log"
 
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
@@ -31,7 +32,7 @@ type StdoutSender struct {
 // NewStdoutSender create new null sender
 func NewStdoutSender(cfg *StdoutSenderCfg) *StdoutSender {
 	s := &StdoutSender{
-		logger: library.Logger.Named(cfg.Name),
+		logger: log.Logger.Named(cfg.Name),
 		BaseSender: &BaseSender{
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
 		},

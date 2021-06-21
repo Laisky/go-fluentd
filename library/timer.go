@@ -28,11 +28,11 @@ type Timer struct {
 
 func NewTimer(cfg *TimerConfig) *Timer {
 	if cfg.waitTs < 1*time.Millisecond {
-		Logger.Panic("timer interval should not less than 1ms")
+		panic("timer interval should not less than 1ms")
 	}
 
 	if cfg.maxWaitTs <= cfg.waitTs {
-		Logger.Panic("maxWaitTs should bigger than waitTs")
+		panic("maxWaitTs should bigger than waitTs")
 	}
 
 	return &Timer{

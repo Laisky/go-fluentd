@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"gofluentd/internal/controller"
@@ -137,6 +138,9 @@ func setupSettings() {
 	if err := gutils.Settings.Unmarshal(global.Config); err != nil {
 		log.Logger.Panic("unmarshal settings", zap.Error(err))
 	}
+
+	c := global.Config
+	fmt.Println(c)
 }
 
 func init() {

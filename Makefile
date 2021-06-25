@@ -1,16 +1,14 @@
-init:
-	go get golang.org/x/tools/cmd/goimports
-	# go get -u github.com/golang/protobuf/protoc-gen-go
-
 test:
 	@tox --recreate
 	@tox
 
+lint:
+	go mod tidy
+	# goimports -local gofluentd -w .
+	goimports -w .
+	gofmt -s -w .
+	golangci-lint run --timeout 3m -E golint,depguard,gocognit,goconst,gofmt,misspell,exportloopref,nilerr #,gosec,lll
+
+
 changelog: CHANGELOG.md
 	sh ./.scripts/generate_changelog.sh
-
-lint:
-	# goimports -local oogway -w .
-	gofmt -s -w .
-	go mod tidy
-	golangci-lint run

@@ -15,30 +15,30 @@ consts:
       - 2.2.2.2:9092
   tags:
     all-tags: &all-tags
-      - test
-      - app.spring
-      - gateway
-      - connector
-      - qingai
-      - cp
-      - ptdeployer
-      - httpguard
-      - ramjet
-      - tsp
-      - ai
-      - base
-      - geely
-      - bot
-      - spark
-      - emqtt
-      - speech
-      - kafkabuf
-      - wechat
-      - forward-wechat
-      - fluentd-forward
-      - usertracking
-      - bigdata-wuling
-      - kube-nginx
+      - test.{env}
+      - app.spring.{env}
+      - gateway.{env}
+      - connector.{env}
+      - qingai.{env}
+      - cp.{env}
+      - ptdeployer.{env}
+      - httpguard.{env}
+      - ramjet.{env}
+      - tsp.{env}
+      - ai.{env}
+      - base.{env}
+      - geely.{env}
+      - bot.{env}
+      - spark.{env}
+      - emqtt.{env}
+      - speech.{env}
+      - kafkabuf.{env}
+      - wechat.{env}
+      - forward-wechat.{env}
+      - fluentd-forward.{env}
+      - usertracking.{env}
+      - bigdata-wuling.{env}
+      - kube-nginx.{env}
   envs:
     all-env: &all-env
       - sit
@@ -77,7 +77,7 @@ settings:
 
     # msg_id 的滚动阈值，采用 int64，一般来说设一个远大于每日日质量的数准没错。
     # 一旦设定，就不要轻易中途改小，因为可能会出现冲突导致丢数据。
-    max_rotate_id: 4294967295  # do not change to smaller number
+    max_rotate_id: 4294967295 # do not change to smaller number
 
     # recvs 插件的配置
     recvs:
@@ -388,11 +388,6 @@ settings:
           # msg_key: log
           is_json_format: true
 
-
-          # meta 用来添加自定义的 key:val
-          meta:
-            container_id: "@RANDOM_STRING"
-
           # 为不同环境设置不同的 msg.Tag 和 msg.Message["tag"]
           tag_key: tag
           tags:
@@ -427,7 +422,6 @@ settings:
     # 可以有多个 sender 支持相同的 tag，所有的 sender 都成功后，producer 才会将消息标记为成功，
     # 等所有的 sender 都成功后（通过 successedChan 传递而来），producer 才会 commit 消息。
     plugins:
-
       # null sender
       # 用来测试的 sender，可以将消息输出到终端
       localtest:
@@ -461,28 +455,11 @@ settings:
         type: es
         active_env: *all-env
         tags:
-          # - es-general
-          # - test
-          - app.spring
-          - gateway
-          - connector
-          - qingai
-          - cp
-          - ptdeployer
-          - fluentd-forward
-          - httpguard
-          - ramjet
-          - tsp
-          - ai
-          - base
-          - bot
-          - spark
-          - emqtt
-          - speech
-          # - kafkabuf
-          - wechat
-          - usertracking
-          - bigdata-wuling
+          - app.spring.{env}
+          - gateway.{env}
+          - connector.{env}
+          - qingai.{env}
+          - cp.{env}
         forks: 3
 
         # elasticsearch 的 HTTP API，如果有 username/passwrd 验证可以直接写在 URL 里
@@ -584,7 +561,7 @@ settings:
     buf_dir_path: ./data/go-fluentd
     # buf_dir_path: /data/log/fluentd/go-concator
     # journal data 文件滚动的大小限制
-    buf_file_bytes: 209315200  # 200 MB
+    buf_file_bytes: 209315200 # 200 MB
 
     # journal 输出 channel 的 size
     journal_out_chan_len: 100000
@@ -594,8 +571,8 @@ settings:
 
     # journal 内会为每一个 tag 建立一个子 journal，
     # 所以还需要为子 journal 配置 data/ids 的 inchan buf size，
-    child_data_chan_len: 200000  # default to journal_out_chan_len
-    child_id_chan_len: 200000  # default to commit_id_chan_len
+    child_data_chan_len: 200000 # default to journal_out_chan_len
+    child_id_chan_len: 200000 # default to commit_id_chan_len
 
     # 在内存中保存 committed ids 的时间，实际存活的时间会在 1x ~ 2x 间浮动。
     # 在内存中长时间的保存 committed ids 是为了减少消息的重复率。
@@ -606,7 +583,7 @@ settings:
     # CPU 资源紧张时不要考虑使用此项。
     is_compress: true
 
-  # acceptorFilters，紧接着 acceptor，
+  # acceptorfilters，紧接着 acceptor，
   # 过滤掉一些明显不需要后续处理的消息，或者做一些非常简单的消息处理，减轻 journal 的负担。
   # 因为这一段发生在 journal 之前，消息有可能丢失，所以要尽可能快。
   acceptor_filters:
@@ -627,11 +604,10 @@ settings:
     throttle_per_sec: 5000
 
     # 插件配置，插件会被串行的连接在一起，并行 `fork` 份。
-    # 插件的代码放在 ./acceptorFilters/xxx.go 里。
+    # 插件的代码放在 ./acceptorfilters/xxx.go 里。
     #
     # 一般来说，插件的配置会比较随意，因为插件都是根据具体的业务需求高度定制化的，而不需要过多考虑通用型。
     plugins:
-
       # 过滤一些消息
       spark:
         type: spark
@@ -657,7 +633,7 @@ settings:
           - new_tag: app.spring.{env}
             regexp: .*
 
-  # postFilters 在 dispatcher 和 tagPiepline 之后，对进入 producer 前的数据进行一些处理，
+  # postfilters 在 dispatcher 和 tagPiepline 之后，对进入 producer 前的数据进行一些处理，
   # 和 acceptorFilter 类似，一般也是业务性很强的配置，插件会做的比较特异性。
   # 不过和 acceptorFilter 最大的区别是，此时的消息几乎已经是最终状态，更容易处理。
   post_filters:
@@ -667,7 +643,6 @@ settings:
 
     # 插件配置
     plugins:
-
       # 设定消息 `msg.Message[<msg_key>]` 的最大长度，超过限额的会被截断
       default:
         msg_key: log
@@ -715,11 +690,11 @@ settings:
         tags:
           - bigdata-wuling
 
-  # dispatcher，将 journal 传递过来的消息分发给 tagFilters。
-  # 做这个初衷是因为以前 concator 的逻辑放在 tagFilters 中，但是随着将 concator 逻辑前置进 fluentd-recv 中，
-  # dispatcher 和 tagFilters 的作用已经弱化了，目前最重要的 tagFilter 大概就是正则 parser 了。
+  # dispatcher，将 journal 传递过来的消息分发给 tagfilters。
+  # 做这个初衷是因为以前 concator 的逻辑放在 tagfilters 中，但是随着将 concator 逻辑前置进 fluentd-recv 中，
+  # dispatcher 和 tagfilters 的作用已经弱化了，目前最重要的 tagFilter 大概就是正则 parser 了。
   #
-  # tagFilters 和 acceptorPipeline/PostPipeline 最大的区别就在于，tagFilters 不是串行的，
+  # tagfilters 和 acceptorPipeline/PostPipeline 最大的区别就在于，tagfilters 不是串行的，
   # 而是按照 tag 的不同并行。
   dispatcher:
     # dispatcher 的并行度，防止消息分发成为瓶颈
@@ -737,7 +712,6 @@ settings:
     internal_chan_size: 100000
 
     plugins:
-
       # parser 就是正则解析的 parser
       #
       # parser 中各项操作的顺序是：正则解析 -> JSON 解析 -> must_include 检查 -> add 添加新字段 -> 时间解析
@@ -751,8 +725,8 @@ settings:
         nfork: 4
 
         tags:
-          - connector
-          - gateway
+          - connector.{env}
+          - gateway.{env}
 
         # 需要解析的字符串存放的位置，`msg.Message[<msg_key>]`
         msg_key: log
@@ -798,16 +772,18 @@ settings:
           uat: "+0800"
           prod: "+0800"
 
-        # 增加新字段，格式为 tag: key:val。
-        add:  # optional
+        # 调整字段，格式为 tag: key:val
+        # 支持 新增/重命名/删除/引用其他字段/引用内建变量等多种方式
+        # add 运行于 parser 的最终阶段
+        add: # optional
           # 为 ai.<env> 的消息加上新的 {"datasource": "ai"}
-          ai:
+          ai.{env}:
             datasource: ai
-          tsp:
+          tsp.{env}:
             datasource: tsp
-          base:
+          base.{env}:
             datasource: base
-          bot:
+          bot.{env}:
             datasource: bot
-          app.spring:
+          app.spring.{env}:
             datasource: spring

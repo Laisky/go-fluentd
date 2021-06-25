@@ -25,7 +25,7 @@
 
 此文大致介绍一下 go-fluentd 的设计和开发历程，留作参考。很多设计不一定最优甚至有些拙劣，不过在较短时间内，完全支撑了线上业务，并且留出了相当大的性能冗余，应该还可以算是有一定价值。
 
-项目代码：<https://github.com/Laisky/go-fluentd>
+项目代码：<https://gofluentd>
 
 
 ---
@@ -42,7 +42,7 @@
 - 日志接收：acceptor + recvs
 - 日志预处理：acceptorPipeline
 - redo log：journal
-- 日志解析：dispatcher + tagFilters
+- 日志解析：dispatcher + tagfilters
 - 日志后处理：postPipeline
 - 日志转发：producer + senders
 
@@ -54,7 +54,7 @@
 
 ![architect](https://s3.laisky.com/uploads/2019/01/go-fluentd-architecture.jpg)
 
-需要强调的是，在整个流程中流转的日志数据体，都封装为 `*libs.Fluentd` 数据结构（下文中以 msg 代称）：
+需要强调的是，在整个流程中流转的日志数据体，都封装为 `*library.Fluentd` 数据结构（下文中以 msg 代称）：
 
 ```go
 type FluentMsg struct {
@@ -85,10 +85,10 @@ Acceptor 是接收数据的框架。具体的接收方式是由 recvs 来实现�
 
 ```go
 type AcceptorRecvItf interface {
-    SetSyncOutChan(chan<- *libs.FluentMsg)
-    SetAsyncOutChan(chan<- *libs.FluentMsg)
+    SetSyncOutChan(chan<- *library.FluentMsg)
+    SetAsyncOutChan(chan<- *library.FluentMsg)
     SetMsgPool(*sync.Pool)
-    SetCounter(libs.CounterIft)
+    SetCounter(library.CounterIft)
     Run()
     GetName() string
 }
@@ -102,7 +102,7 @@ type AcceptorRecvItf interface {
 - http：以 http post json 的形式接收日志；
 
 
-recvs 负责将接收到的数据流转换为 *libs.Fluentd 类型后统一输出（需要确定 tag 和 id），acceptor 提供的输出 channel 有两个：
+recvs 负责将接收到的数据流转换为 *library.Fluentd 类型后统一输出（需要确定 tag 和 id），acceptor 提供的输出 channel 有两个：
 
 - `syncOutChan`：会被 journal 同步阻塞，主要用于 kafka 这类可以控速的来源；
 - `asyncOutChan`：不会被阻塞，journal 阻塞后会跳过 journal，如果后续仍然堵塞就会丢弃消息，用于确保服务不会因为日志消费不及时受到影响；
@@ -135,20 +135,20 @@ recv 会输出大量的 msg 数据，不过并不是所有的数据都是有效�
 
 除此之外，有一些 msg 需要根据内容改变自己的 tag，这一步也放在这里做了。
 
-AcceptorPipeline 负责对消息进行一些简单的前处理，会按顺序执行 acceptorFilters，
+AcceptorPipeline 负责对消息进行一些简单的前处理，会按顺序执行 acceptorfilters，
 各个 filter 自行判断如何处理消息（跳过、处理或丢弃）。任何 filter 需要满足如下接口：
 
 ```go
 type AcceptorFilterItf interface {
-    SetUpstream(chan *libs.FluentMsg)
+    SetUpstream(chan *library.FluentMsg)
     SetMsgPool(*sync.Pool)
 
-    Filter(*libs.FluentMsg) *libs.FluentMsg
-    DiscardMsg(*libs.FluentMsg)
+    Filter(*library.FluentMsg) *library.FluentMsg
+    DiscardMsg(*library.FluentMsg)
 }
 ```
 
-目前实现的 acceptorFilters 有：
+目前实现的 acceptorfilters 有：
 
 - spring：重命名 tag，拆分为 cp、bot、app.spring 等；
 - spark：过滤掉不合格式的日志（某些 spark 日志不进行记录）；
@@ -160,7 +160,7 @@ type AcceptorFilterItf interface {
 所以即使返回 nil，Pipeline 也无法判定消息是否还要使用，
 如果丢弃消息的话，各个 filter 需要自行调用 `DiscardMsg` 进行回收。
 
-需要注意的是，acceptorFilters 早于 journal，消息尚未被持久化到磁盘，
+需要注意的是，acceptorfilters 早于 journal，消息尚未被持久化到磁盘，
 所以为了提高可靠性，不要在这里实现太复杂的逻辑，应该让 msg 尽可能快的通过。
 
 
@@ -212,7 +212,7 @@ ids 文件采用简单的 binary Big Endian 存储定长的 int64。
 另一个小问题是，从 pprof 上来看，`File.Stat` 的开销还不小，看来这个操作也挺费时的。
 
 
-### Dispatcher & tagFilters
+### Dispatcher & tagfilters
 
 其实最初导致 Fluentd 不能水平扩展的根本原因就在于我们需要让日志以 tag & container_id 来分流，
 而目前使用的 lb（如 haproxy） 只支持 roundrobin 或 ip source，都不符合需求。
@@ -221,27 +221,27 @@ ids 文件采用简单的 binary Big Endian 存储定长的 int64。
 
 简单的说，dispatcher 就是一个负载均衡，利用后续的多个 goroutine 来让解析压力分散到每一个 CPU 上。
 
-tagFilters 需要符合如下接口即可：
+tagfilters 需要符合如下接口即可：
 
 ```go
 type TagFilterFactoryItf interface {
     IsTagSupported(string) bool
-    Spawn(string, chan<- *libs.FluentMsg) chan<- *libs.FluentMsg // Spawn(tag, outChan) inChan
+    Spawn(string, chan<- *library.FluentMsg) chan<- *library.FluentMsg // Spawn(tag, outChan) inChan
     GetName() string
 
     SetMsgPool(*sync.Pool)
-    SetCommittedChan(chan<- *libs.FluentMsg)
+    SetCommittedChan(chan<- *library.FluentMsg)
     SetDefaultIntervalChanSize(int)
-    DiscardMsg(*libs.FluentMsg)
+    DiscardMsg(*library.FluentMsg)
 }
 ```
 
-tagFilters 和 acceptorPipeline 以及 postPipeline 在设计上最大的区别在于：
+tagfilters 和 acceptorPipeline 以及 postPipeline 在设计上最大的区别在于：
 Pipeline 是对每一个 msg，由外部去调用每一个 filters 的 Filter 方法，
-而 tagFilters 是一系列 filters 通过 inChan 和 outChan 串联起来。
-所以 tagFilters 中的每一个 filter 都需要自行决定是否要将 msg 传递给后续 channel，而且需要自行回收决定要丢弃的 msg。
+而 tagfilters 是一系列 filters 通过 inChan 和 outChan 串联起来。
+所以 tagfilters 中的每一个 filter 都需要自行决定是否要将 msg 传递给后续 channel，而且需要自行回收决定要丢弃的 msg。
 
-目前已经实现的 tagFilters 有：
+目前已经实现的 tagfilters 有：
 
 - concator：负责日志拼接，将被 docker 切分的日志拼为一整条（已 hardcoding 为第一个 tagfilter）；
 - parser：日志解析，将字符串按照正则解析为结构化数据。
@@ -265,21 +265,21 @@ Pipeline 是对每一个 msg，由外部去调用每一个 filters 的 Filter �
 ### PostPipeline
 
 负责对已解析的日志进行后处理，该步骤结束后就直接进入转发步骤。
-内部设计理念和 acceptorPipeline 完全一致，postFilters 的接口要求为：
+内部设计理念和 acceptorPipeline 完全一致，postfilters 的接口要求为：
 
 
 ```go
 type PostFilterItf interface {
-    SetUpstream(chan *libs.FluentMsg)
+    SetUpstream(chan *library.FluentMsg)
     SetMsgPool(*sync.Pool)
-    SetCommittedChan(chan<- *libs.FluentMsg)
+    SetCommittedChan(chan<- *library.FluentMsg)
 
-    Filter(*libs.FluentMsg) *libs.FluentMsg
-    DiscardMsg(*libs.FluentMsg)
+    Filter(*library.FluentMsg) *library.FluentMsg
+    DiscardMsg(*library.FluentMsg)
 }
 ```
 
-目前实现的 postFilters 有：
+目前实现的 postfilters 有：
 
 - elasticsearch_dispatcher: 按照 tag 分发到不同的 es_sender；
   - 不过后来发现单独为每个 tag 开一个 sender 似乎对 es 服务器的 CPU 压力更小，所以此功能后来没有启用。
@@ -295,16 +295,16 @@ senders 需要满足如下接口：
 
 ```go
 type SenderItf interface {
-    Spawn(string) chan<- *libs.FluentMsg // Spawn(tag) inChan
+    Spawn(string) chan<- *library.FluentMsg // Spawn(tag) inChan
     IsTagSupported(string) bool
     DiscardWhenBlocked() bool
     GetName() string
 
     SetMsgPool(*sync.Pool)
-    SetCommitChan(chan<- *libs.FluentMsg)
+    SetCommitChan(chan<- *library.FluentMsg)
     SetSupportedTags([]string)
-    SetDiscardChan(chan<- *libs.FluentMsg)
-    SetfailedChan(chan<- *libs.FluentMsg)
+    SetDiscardChan(chan<- *library.FluentMsg)
+    SetfailedChan(chan<- *library.FluentMsg)
 }
 ```
 
@@ -539,7 +539,7 @@ exit status 2
 也就是会从 `{config-server}/{config-server-appname}/{config-server-profile}/{config-server-label}` 加载 json，
 并且从其中的 `{config-server-key}` key 中读取原始的 yml 文件内容进行解析。
 
-其中一些重要的经常变动的组件，如 senders、recvs、tagFilters，
+其中一些重要的经常变动的组件，如 senders、recvs、tagfilters，
 已经可以根据配置文件来加载所需的插件，而需要改动代码。不过并不支持动态加载。
 
 

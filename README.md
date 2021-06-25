@@ -5,7 +5,7 @@ Rewrite fluentd-server by Golang, Higher performance with less resource requirem
 * At-Least-Once guarantee(disk WAL)
 * log concatenation by head regexp expression
 * log parsing by regexp expression(support embedded json)
-* log filter by custom plugins(acceptorFilters & tagFilters)
+* log filter by custom plugins(acceptorfilters & tagfilters)
 * multiple receivers(support multiple protocols: msgpack, http, syslog, kafka, ...)
 * multiple senders(support multiple backend: elasticsearch, fluentd, ...)
 * multiple environments deployment(`--env`: sit, perf, uat, prod)
@@ -15,8 +15,8 @@ Rewrite fluentd-server by Golang, Higher performance with less resource requirem
 [![Build Status](https://travis-ci.org/Laisky/go-fluentd.svg?branch=master)](https://travis-ci.org/Laisky/go-fluentd)
 [![codecov](https://codecov.io/gh/Laisky/go-fluentd/branch/master/graph/badge.svg)](https://codecov.io/gh/Laisky/go-fluentd)
 [![Commitizen friendly](https://img.shields.io/badge/commitizen-friendly-brightgreen.svg)](http://commitizen.github.io/cz-cli/)
-[![Go Report Card](https://goreportcard.com/badge/github.com/Laisky/go-fluentd)](https://goreportcard.com/report/github.com/Laisky/go-fluentd)
-[![GoDoc](https://godoc.org/github.com/Laisky/go-fluentd?status.svg)](https://godoc.org/github.com/Laisky/go-fluentd)
+[![Go Report Card](https://goreportcard.com/badge/gofluentd)](https://goreportcard.com/report/gofluentd)
+[![GoDoc](https://godoc.org/gofluentd?status.svg)](https://godoc.org/gofluentd)
 
 Already running on our PRODUCION since 2018/9.
 
@@ -97,7 +97,7 @@ Then Producer can send logs to anywhere (depends on Senders).
 directly run:
 
 ```sh
-go run -race entrypoints/main.go \
+go run -race main.go \
   --config=./docs/settings/tiny_settings.yml \
   --env=sit \
   --log-level=debug

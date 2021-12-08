@@ -12,7 +12,7 @@ require (
 	github.com/Shopify/sarama v1.26.4
 	github.com/cespare/xxhash v1.1.0
 	github.com/gin-contrib/pprof v1.3.0
-	github.com/gin-gonic/gin v1.6.3
+	github.com/gin-gonic/gin v1.7.0
 	github.com/json-iterator/go v1.1.11
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v1.0.0

@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"gofluentd/library/log"
+
 	"github.com/Laisky/zap"
 )
 
@@ -81,7 +83,7 @@ func TestTimerSleep(t *testing.T) {
 }
 
 func init() {
-	if err := Logger.ChangeLevel("debug"); err != nil {
-		Logger.Panic("change level", zap.Error(err))
+	if err := log.Logger.ChangeLevel("debug"); err != nil {
+		log.Logger.Panic("change level", zap.Error(err))
 	}
 }

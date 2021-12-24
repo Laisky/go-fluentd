@@ -100,7 +100,7 @@ func setupSettings() {
 		zap.String("level", global.Config.CMDArgs.LogLevel))
 
 	// clock
-	gutils.SetupClock(100 * time.Millisecond)
+	gutils.SetInternalClock(100 * time.Millisecond)
 
 	// load configuration
 	isCfgLoaded := false

@@ -4,8 +4,8 @@ test:
 
 lint:
 	go mod tidy
-	# goimports -local gofluentd -w .
-	goimports -w .
+	goimports -local gofluentd -w .
+	# goimports -w .
 	gofmt -s -w .
 	golangci-lint run --timeout 3m -E golint,depguard,gocognit,goconst,gofmt,misspell,exportloopref,nilerr #,gosec,lll
 

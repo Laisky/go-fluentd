@@ -2,6 +2,7 @@ package recvs
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"gofluentd/library"
@@ -31,6 +32,7 @@ func NewRsyslogSrv(addr string) (*syslog.Server, syslog.LogPartsChannel, error) 
 		return nil, nil, err
 	}
 	if err = server.ListenTCP(addr); err != nil {
+		server.Kill() // release an already-bound UDP socket on partial startup failure
 		log.Logger.Error("listen tcp", zap.Error(err), zap.String("addr", addr))
 		return nil, nil, err
 	}
@@ -119,6 +121,9 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 				}
 
 				msg = r.parseLogPart(logPart)
+				if msg == nil {
+					continue
+				}
 
 				log.Logger.Debug("receive new msg", zap.String("tag", r.Tag), zap.Int64("id", msg.ID))
 				r.asyncOutChan <- msg
@@ -132,30 +137,43 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 }
 
 func (r *RsyslogRecv) parseLogPart(logPart format.LogParts) *library.FluentMsg {
-	switch t := logPart[r.TimeKey].(type) {
-	case time.Time:
-		logPart[r.NewTimeKey] = t.Add(r.TimeShift).UTC().Format(r.NewTimeFormat)
-		delete(logPart, r.TimeKey)
-	default:
-		log.Logger.Error("discard log since unknown timestamp format")
+	timestamp, ok := logPart[r.TimeKey].(time.Time)
+	if !ok {
+		log.Logger.Warn("discard syslog with invalid timestamp", zap.String("tag", r.Tag))
+		return nil
 	}
-
-	// rename to message because of the elasticsearch default query field is `message`
-	logPart["message"] = logPart[r.MsgKey]
+	content := logPart[r.MsgKey]
+	// Read the original values before removing source fields, including when
+	// a source key is identical to its destination.
+	delete(logPart, r.TimeKey)
 	delete(logPart, r.MsgKey)
-
+	logPart[r.NewTimeKey] = timestamp.Add(r.TimeShift).UTC().Format(r.NewTimeFormat)
+	logPart["message"] = content
+	replacements := map[string]interface{}{}
+	keys := make([]string, 0, len(r.RewriteTags))
+	for key := range r.RewriteTags {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if value, exists := logPart[key]; exists {
+			replacements[r.RewriteTags[key]] = value
+		}
+	}
+	for _, key := range keys {
+		if _, exists := logPart[key]; exists {
+			delete(logPart, key)
+		}
+	}
+	for key, value := range replacements {
+		logPart[key] = value
+	}
 	msg := r.getMsg()
-	// log.Logger.Info(fmt.Sprintf("got %p", msg))
 	msg.ID = r.counter.Count()
 	msg.Tag = r.Tag
 	msg.Message = logPart
-	for rewriteKey, rewriteNewKey := range r.RewriteTags { // rewrite key
-		msg.Message[rewriteNewKey] = msg.Message[rewriteKey]
-		delete(msg.Message, rewriteKey)
-	}
-	if r.TagKey != "" { // reset tag
+	if r.TagKey != "" {
 		msg.Message[r.TagKey] = r.Tag
 	}
-
 	return msg
 }

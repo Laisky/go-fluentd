@@ -51,12 +51,18 @@ func TestBehaviorJournalDataAndConstituentAcknowledgements(t *testing.T) {
 			// Commit 1 and 2 using the actual constituent-ID writer; 3 must survive.
 			ack := &library.FluentMsg{Tag: "logs", ID: 1, ExtIds: []int64{2}}
 			j.GetCommitChan() <- ack
-			// Drain and join the ID writer via channel closure, then wait until the
-			// IDs are visible on disk. Never read an ACK object after handing it off.
+			// The committed index is published only after a complete ID write.
+
 			deadline := time.Now().Add(time.Second)
 			suffix := "*.ids"
 			if compress {
 				suffix += ".gz"
+			}
+			for backend.GetMetric()["idsSetLen"].(int) < 2 {
+				if time.Now().After(deadline) {
+					t.Fatal("ID writer did not finish")
+				}
+				time.Sleep(time.Millisecond)
 			}
 			for {
 				if err := backend.Sync(); err != nil {

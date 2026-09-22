@@ -54,6 +54,14 @@ func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan c
 			zap.Int("inchans_len", len(inchans)))
 	}
 
+	// The balancer is the sole producer of these worker inputs. Closing them
+	// lets parsers and concatenators drain when the caller closes the input.
+	defer func() {
+		for _, ch := range inchans {
+			close(ch)
+		}
+	}()
+
 	var (
 		nfork          = len(inchans)
 		hashkey        uint64

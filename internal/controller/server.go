@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"errors"
+	"net"
 	"net/http"
 	"time"
 
@@ -40,16 +42,40 @@ func RunServer(ctx context.Context, addr string) {
 	pprof.Register(server, "pprof")
 	middlewares.BindPrometheus(server)
 
-	log.Logger.Info("listening on http", zap.String("addr", addr))
-	go func() {
-		log.Logger.Panic("server exit", zap.Error(httpSrv.ListenAndServe()))
-	}()
-
-	<-ctx.Done()
-	srvCtx, cancel := context.WithTimeout(ctx, defaultGraceShutdownWait)
-	defer cancel()
-	if err := httpSrv.Shutdown(srvCtx); err != nil {
-		log.Logger.Error("shutdown monitor server", zap.Error(err))
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Logger.Error("listen on HTTP", zap.Error(err))
+		return
 	}
+	log.Logger.Info("listening on http", zap.String("addr", ln.Addr().String()))
+	if err := serveHTTP(ctx, &httpSrv, ln); err != nil {
+		log.Logger.Error("HTTP server stopped", zap.Error(err))
+	}
+}
 
+func serveHTTP(ctx context.Context, srv *http.Server, ln net.Listener) error {
+	done := make(chan error, 1)
+	go func() { done <- srv.Serve(ln) }()
+	select {
+	case err := <-done:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+		// The parent is already cancelled. Deriving from it would cancel the
+		// grace period immediately and interrupt otherwise healthy requests.
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), defaultGraceShutdownWait)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			srv.Close()
+			<-done
+			return err
+		}
+		err := <-done
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	}
 }

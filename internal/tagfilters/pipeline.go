@@ -29,6 +29,7 @@ type TagPipeline struct {
 	*TagPipelineCfg
 	TagFilterFactoryItfs []TagFilterFactoryItf
 	monitorChans         map[string]chan<- *library.FluentMsg
+	monitorMu            sync.RWMutex
 }
 
 // NewTagPipeline create new TagPipeline
@@ -80,8 +81,10 @@ func (p *TagPipeline) Spawn(ctx context.Context, tag string, outChan chan<- *lib
 				zap.String("name", f.GetName()),
 				zap.String("tag", tag))
 			isTagSupported = true
-			downstreamChan = f.Spawn(ctx, tag, downstreamChan)   // downstream's inChan is upstream's outChan
+			downstreamChan = f.Spawn(ctx, tag, downstreamChan) // downstream's inChan is upstream's outChan
+			p.monitorMu.Lock()
 			p.monitorChans[tag+"."+f.GetName()] = downstreamChan // instream
+			p.monitorMu.Unlock()
 		}
 	}
 
@@ -96,6 +99,8 @@ func (p *TagPipeline) Spawn(ctx context.Context, tag string, outChan chan<- *lib
 func (p *TagPipeline) registryMonitor() {
 	monitor.AddMetric("tagpipeline", func() map[string]interface{} {
 		metrics := map[string]interface{}{}
+		p.monitorMu.RLock()
+		defer p.monitorMu.RUnlock()
 		for k, c := range p.monitorChans {
 			metrics[k+".ChanLen"] = len(c)
 			metrics[k+".ChanCap"] = cap(c)

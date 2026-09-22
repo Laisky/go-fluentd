@@ -56,6 +56,7 @@ type FluentdRecv struct {
 	*BaseRecv
 	*FluentdRecvCfg
 	logger *utils.LoggerType
+	listen func(string, string) (net.Listener, error)
 
 	concatTagCfg   map[string]*concatCfg
 	pendingMsgPool *sync.Pool
@@ -173,7 +174,11 @@ func (r *FluentdRecv) Run(ctx context.Context) {
 		go func(i int) { defer workers.Done(); r.runConcator(ctx, i, r.concators[i]) }(i)
 	}
 	for ctx.Err() == nil {
-		ln, err := net.Listen("tcp", r.Addr)
+		listen := net.Listen
+		if r.listen != nil {
+			listen = r.listen
+		}
+		ln, err := listen("tcp", r.Addr)
 		if err != nil {
 			r.logger.Error("listen for Fluent input", zap.Error(err))
 		} else {

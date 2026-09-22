@@ -4,7 +4,6 @@ import (
 	"context"
 	"math/rand"
 	"net"
-	"runtime"
 	"testing"
 	"time"
 
@@ -25,26 +24,37 @@ func TestFluentdRecv(t *testing.T) {
 		tag = "test.sit"
 	)
 	defer cancel()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
 
 	cfg := &FluentdRecvCfg{
 		NFork:           3,
 		ConcatorBufSize: 1000,
 		Name:            "fluentd-test",
-		Addr:            "127.0.0.1:24228",
+		Addr:            listener.Addr().String(),
 		TagKey:          "tag",
 	}
 	recv := NewFluentdRecv(cfg)
+	recv.listen = func(string, string) (net.Listener, error) { return listener, nil }
 
 	recv.SetCounter(counter)
 	recv.SetMsgPool(msgPool)
 	recv.SetAsyncOutChan(asyncOutChan)
 	recv.SetSyncOutChan(syncOutChan)
 
-	go func() {
-		recv.Run(ctx)
+	done := make(chan struct{})
+	go func() { defer close(done); recv.Run(ctx) }()
+	defer func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Error("receiver did not shut down")
+		}
 	}()
-	runtime.Gosched()
-	time.Sleep(100 * time.Millisecond)
 	cnt := 0
 
 	// send signle msg
@@ -64,8 +74,9 @@ func TestFluentdRecv(t *testing.T) {
 	if err = encoder.Encode(msg); err != nil {
 		t.Fatalf("got error: %+v", err)
 	}
-	encoder.Flush()
-	time.Sleep(100 * time.Millisecond)
+	if err := encoder.Flush(); err != nil {
+		t.Fatal(err)
+	}
 
 	// send msg batch
 	cnt += 3
@@ -89,9 +100,9 @@ func TestFluentdRecv(t *testing.T) {
 	if err = encoder.EncodeBatch(tag, msgBatch); err != nil {
 		t.Fatalf("got error: %+v", err)
 	}
-	encoder.Flush()
-	runtime.Gosched()
-	time.Sleep(100 * time.Millisecond)
+	if err := encoder.Flush(); err != nil {
+		t.Fatal(err)
+	}
 
 	// check msg
 	for {
@@ -102,7 +113,7 @@ func TestFluentdRecv(t *testing.T) {
 
 		select {
 		case msg = <-asyncOutChan:
-		default:
+		case <-time.After(time.Second):
 			t.Fatalf("can not load msg")
 		}
 		t.Log("load 1 msg")

@@ -71,12 +71,12 @@ func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 		tag2IDsCounter:      &sync.Map{},
 		tag2DataCounter:     &sync.Map{},
 	}
-	j.commitChan = make(chan *library.FluentMsg, cfg.CommitIDChanLen)
-	j.outChan = make(chan *library.FluentMsg, cfg.JournalOutChanLen)
 	if err := j.valid(); err != nil {
 		log.Logger.Panic("invalid", zap.Error(err))
 	}
 
+	j.commitChan = make(chan *library.FluentMsg, cfg.CommitIDChanLen)
+	j.outChan = make(chan *library.FluentMsg, cfg.JournalOutChanLen)
 	j.initLegacyJJ(ctx)
 	j.registerMonitor()
 	j.startCommitRunner(ctx)

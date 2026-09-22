@@ -35,7 +35,11 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *librar
 		}
 
 		if !cf.IsTagSupported(msg.Tag) {
-			outChan <- msg
+			select {
+			case outChan <- msg:
+			case <-ctx.Done():
+				return
+			}
 			continue
 		}
 
@@ -49,7 +53,11 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *librar
 					zap.String("tag", msg.Tag),
 					zap.String("msg", fmt.Sprint(msg.Message)),
 					zap.String("msg_key", cf.MsgKey))
-				outChan <- msg
+				select {
+				case outChan <- msg:
+				case <-ctx.Done():
+					return
+				}
 				continue
 			}
 
@@ -59,7 +67,11 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *librar
 					log.Logger.Warn("discard message since format not matched",
 						zap.String("tag", msg.Tag),
 						zap.ByteString("log", msg.Message[cf.MsgKey].([]byte)))
-					cf.DiscardMsg(msg)
+					select {
+					case cf.waitCommitChan <- msg:
+					case <-ctx.Done():
+						return
+					}
 					continue
 				}
 			}
@@ -99,7 +111,11 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *librar
 		if cf.MustInclude != "" {
 			if _, ok = msg.Message[cf.MustInclude]; !ok {
 				log.Logger.Warn("dicard since of missing key", zap.String("key", cf.MustInclude))
-				cf.DiscardMsg(msg)
+				select {
+				case cf.waitCommitChan <- msg:
+				case <-ctx.Done():
+					return
+				}
 				continue
 			}
 		}
@@ -127,7 +143,11 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *librar
 					zap.String("time_key", cf.TimeKey),
 					zap.String("time_format", cf.TimeFormat),
 					zap.String("append_time_zone", cf.AppendTimeZone))
-				cf.DiscardMsg(msg)
+				select {
+				case cf.waitCommitChan <- msg:
+				case <-ctx.Done():
+					return
+				}
 				continue
 			}
 
@@ -140,7 +160,11 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *librar
 					zap.String("time_key", cf.TimeKey),
 					zap.String("time_format", cf.TimeFormat),
 					zap.String("append_time_zone", cf.AppendTimeZone))
-				cf.DiscardMsg(msg)
+				select {
+				case cf.waitCommitChan <- msg:
+				case <-ctx.Done():
+					return
+				}
 				continue
 			}
 
@@ -153,7 +177,11 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *librar
 		}
 
 		library.ProcessAdd(cf.AddCfg, msg)
-		outChan <- msg
+		select {
+		case outChan <- msg:
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 

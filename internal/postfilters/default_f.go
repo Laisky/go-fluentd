@@ -1,6 +1,7 @@
 package postfilters
 
 import (
+	"sort"
 	"strings"
 
 	"gofluentd/library"
@@ -52,37 +53,36 @@ func (f *DefaultFilter) valid() error {
 }
 
 func (f *DefaultFilter) Filter(msg *library.FluentMsg) *library.FluentMsg {
-	for k, v := range msg.Message {
-		if k == "" {
-			delete(msg.Message, k)
+	keys := make([]string, 0, len(msg.Message))
+	for key := range msg.Message {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	normalized := make(map[string]interface{}, len(msg.Message))
+	for _, key := range keys {
+		if key == "" {
+			continue
 		}
-
-		if strings.Contains(k, ".") {
-			msg.Message[strings.Replace(k, ".", "__", -1)] = msg.Message[k]
-			delete(msg.Message, k)
-		}
-
-		switch v := v.(type) {
-		case []byte: // convert all bytes fields to string
-			msg.Message[k] = string(v)
-		case string:
-			msg.Message[k] = v
-		}
-
-		if f.MaxLen != 0 {
-			switch v := v.(type) {
-			case string:
-				if len(v) > f.MaxLen {
-					msg.Message[k] = v[:f.MaxLen]
-				}
-			case []byte:
-				if len(v) > f.MaxLen {
-					msg.Message[k] = v[:f.MaxLen]
-				}
+		target := strings.ReplaceAll(key, ".", "__")
+		if target != key {
+			if _, exists := msg.Message[target]; exists {
+				continue
 			}
 		}
+		value := msg.Message[key]
+		if b, ok := value.([]byte); ok {
+			value = string(b)
+		}
+		if text, ok := value.(string); ok && f.MaxLen > 0 && len(text) > f.MaxLen {
+			value = text[:f.MaxLen]
+		}
+		normalized[target] = value
 	}
-
+	// Preserve the caller's map identity.
+	clear(msg.Message)
+	for key, value := range normalized {
+		msg.Message[key] = value
+	}
 	library.ProcessAdd(f.AddCfg, msg)
 	return msg
 }

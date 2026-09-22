@@ -47,3 +47,11 @@ func (r *BaseRecv) SetMsgPool(msgPool *sync.Pool) {
 func (r *BaseRecv) SetCounter(counter library.CounterIft) {
 	r.counter = counter
 }
+
+// getMsg starts a new ownership lifetime. A pooled message may have been a
+// concatenated journal record; its IDs must never leak into a new input.
+func (r *BaseRecv) getMsg() *library.FluentMsg {
+	msg := r.msgPool.Get().(*library.FluentMsg)
+	*msg = library.FluentMsg{}
+	return msg
+}

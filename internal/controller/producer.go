@@ -147,9 +147,13 @@ func (p *Producer) registerMonitor() {
 	})
 }
 
-func (p *Producer) discardMsg(pmsg *pendingDiscardMsg) {
+func (p *Producer) discardMsg(ctx context.Context, pmsg *pendingDiscardMsg) {
 	if pmsg.isAllSuccessed {
-		p.CommitChan <- pmsg.msg
+		select {
+		case p.CommitChan <- pmsg.msg:
+		case <-ctx.Done():
+			p.MsgPool.Put(pmsg.msg)
+		}
 	} else {
 		// committed msg will recycled in journal
 		p.MsgPool.Put(pmsg.msg)
@@ -212,7 +216,7 @@ func (p *Producer) runMsgCollector(ctx context.Context, tag2NSender *sync.Map, s
 		if pmsg.count == cntToDiscard {
 			// msg already sent by all sender
 			p.discardMsgCountMap.Delete(pmsg.msg)
-			p.discardMsg(pmsg)
+			p.discardMsg(ctx, pmsg)
 		} else {
 			p.discardMsgCountMap.Store(pmsg.msg, pmsg)
 		}

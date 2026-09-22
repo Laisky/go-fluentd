@@ -28,7 +28,7 @@ func NewForwardTagRewriterFilter(cfg *ForwardTagRewriterFilterCfg) *ForwardTagRe
 
 	return &ForwardTagRewriterFilter{
 		ForwardTagRewriterFilterCfg: cfg,
-		tagWithoutEnv:               strings.Split(cfg.Tag, ".")[0],
+		tagWithoutEnv:               tagPrefix(cfg.Tag),
 	}
 }
 
@@ -37,8 +37,22 @@ func (f *ForwardTagRewriterFilter) Filter(msg *library.FluentMsg) *library.Fluen
 		return msg
 	}
 
-	env := strings.Split(msg.Message[f.TagKey].(string), ".")[1]
-	msg.Tag = f.tagWithoutEnv + "." + env
+	origin, ok := msg.Message[f.TagKey].(string)
+	if !ok {
+		return msg
+	}
+	idx := strings.LastIndexByte(origin, '.')
+	if idx <= 0 || idx == len(origin)-1 {
+		return msg
+	}
+	msg.Tag = f.tagWithoutEnv + "." + origin[idx+1:]
 	// log.Logger.Debug("rewrite msg tag", zap.String("new_tag", msg.Tag))
 	return msg
+}
+
+func tagPrefix(tag string) string {
+	if i := strings.LastIndexByte(tag, '.'); i >= 0 {
+		return tag[:i]
+	}
+	return tag
 }

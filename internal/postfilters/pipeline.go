@@ -31,12 +31,12 @@ func NewPostPipeline(cfg *PostPipelineCfg, filters ...PostFilterItf) *PostPipeli
 		PostPipelineCfg: cfg,
 		counter:         utils.NewCounter(),
 		filters:         filters,
-		reEnterChan:     make(chan *library.FluentMsg, cfg.ReEnterChanSize),
 	}
 	if err := pp.valid(); err != nil {
 		log.Logger.Panic("cfg invalid", zap.Error(err))
 	}
 
+	pp.reEnterChan = make(chan *library.FluentMsg, cfg.ReEnterChanSize)
 	pp.registerMonitor()
 
 	for _, filter := range pp.filters {

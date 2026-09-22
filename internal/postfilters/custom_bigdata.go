@@ -1,7 +1,6 @@
 package postfilters
 
 import (
-	"fmt"
 	"strconv"
 	"time"
 
@@ -48,24 +47,17 @@ var (
 )
 
 func (f *CustomBigDataFilter) Filter(msg *library.FluentMsg) *library.FluentMsg {
-	var (
-		err error
-		t   time.Time
-		ok  bool
-	)
-	if _, ok = f.supportedTags[msg.Tag]; !ok {
+	if _, supported := f.supportedTags[msg.Tag]; !supported {
 		return msg
 	}
-
-	if t, err = time.Parse(timeFormat, msg.Message[tsKey].(string)); err != nil {
-		log.Logger.Error("unknown format of @timestamp for bigdata",
-			zap.String("tag", msg.Tag),
-			zap.String(tsKey, fmt.Sprint(msg.Message[tsKey])),
-			zap.Error(err),
-		)
+	timestamp, validTime := msg.Message[tsKey].(string)
+	vin, validVIN := msg.Message["vin"].(string)
+	parsed, err := time.Parse(timeFormat, timestamp)
+	if !validTime || !validVIN || vin == "" || err != nil {
+		log.Logger.Warn("discard invalid bigdata record", zap.String("tag", msg.Tag))
+		f.DiscardMsg(msg)
 		return nil
 	}
-
-	msg.Message["rowkey"] = msg.Message["vin"].(string) + "_" + strconv.FormatInt(t.Unix(), 10)
+	msg.Message["rowkey"] = vin + "_" + strconv.FormatInt(parsed.Unix(), 10)
 	return msg
 }

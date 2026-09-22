@@ -1,7 +1,6 @@
 package library
 
 import (
-	"bytes"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -26,134 +25,96 @@ const (
 	variableUpper = "@upper"
 )
 
-var keyReplaceRegexp = regexp.MustCompile(`\%\{(@?[\w\-_\.]+(:\S+)?)\}`)
+var keyReplaceRegexp = regexp.MustCompile(`\%\{(@?[\w\-_\.]+(:[^{}\s]+)?)\}`)
 
 // AddCfg config of add
 //
 // config in yaml file:
 //
-//   add:
-//     log-conn.{env}:
-//       agent_id: "%{agentid}"
-//       src_ip: "%{source.ip}"
-//       src_port: "%{source.port}"
-//       dst_ip: "%{destination.ip}"
-//       dst_port: "%{destination.port}"
-//       conn_type: "%{network.transport}"
-//       package_size: "%{network.bytes}"
-//       "lvl": "%{@upper:info}"
-//       "@metadata": null
-//       "host": null
+//	add:
+//	  log-conn.{env}:
+//	    agent_id: "%{agentid}"
+//	    src_ip: "%{source.ip}"
+//	    src_port: "%{source.port}"
+//	    dst_ip: "%{destination.ip}"
+//	    dst_port: "%{destination.port}"
+//	    conn_type: "%{network.transport}"
+//	    package_size: "%{network.bytes}"
+//	    "lvl": "%{@upper:info}"
+//	    "@metadata": null
+//	    "host": null
 type AddCfg map[string][]map[string]interface{}
 
 // ReplaceStrByMsg replace variable in v by lib.FluentMsg
 //
-//   * `%{key}`            ->    `msg.Message["key"]`
-//   * `%{a.b}`            ->    `msg.Message["a"]["b"]`
-//   * `%{@tag}`           ->    `msg.Tag`
-//   * `%{@id}`            ->    `msg.ID`
-//   * `%{@str}`           ->    `<random_string>`
-//   * `%{@now}`           ->    `2006-01-02T15:04:05Z07:00`
-//   * `%{@unix}`          ->    `1590722923`
-//   * `%{@lower:key}`     ->    `xxxx`
-//   * `%{@upper:key}`     ->    `XXXX`
+//   - `%{key}`            ->    `msg.Message["key"]`
+//   - `%{a.b}`            ->    `msg.Message["a"]["b"]`
+//   - `%{@tag}`           ->    `msg.Tag`
+//   - `%{@id}`            ->    `msg.ID`
+//   - `%{@str}`           ->    `<random_string>`
+//   - `%{@now}`           ->    `2006-01-02T15:04:05Z07:00`
+//   - `%{@unix}`          ->    `1590722923`
+//   - `%{@lower:key}`     ->    `xxxx`
+//   - `%{@upper:key}`     ->    `XXXX`
 func ReplaceStrByMsg(msg *FluentMsg, v string) string {
-	var (
-		keys   = map[string]struct{}{}
-		key    string
-		cmds   []string
-		newVal interface{}
-		ok,
-		isLower, isUpper bool
-	)
-
-	// fmt.Println(">>>>>>>>>>>>>>>>>>>>>>>>")
-
-	for _, grp := range keyReplaceRegexp.FindAllStringSubmatch(v, -1) {
-		isLower, isUpper = false, false
-		if len(grp) < 2 || grp[1] == "" {
-			continue
+	// Cache by the entire expression, not the underlying field: upper/lower
+	// and plain lookups of one field are different substitutions.
+	values := make(map[string]string)
+	return keyReplaceRegexp.ReplaceAllStringFunc(v, func(expr string) string {
+		if text, ok := values[expr]; ok {
+			return text
 		}
-
-		// fmt.Println("grp", grp)
-
-		key = grp[1]
-		// already replaced this key
-		if _, ok = keys[key]; ok {
-			continue
-		}
-
+		key := expr[2 : len(expr)-1]
+		var value interface{}
+		command := ""
 		switch key {
 		case variableRandomString:
-			newVal = utils.RandomStringWithLength(8)
+			value = utils.RandomStringWithLength(8)
 		case variableMsgTag:
-			newVal = msg.Tag
+			value = msg.Tag
 		case variableMsgID:
-			newVal = msg.ID
+			value = msg.ID
 		case variableNow:
-			newVal = utils.Clock.GetUTCNow().Format(time.RFC3339)
+			value = utils.Clock.GetUTCNow().Format(time.RFC3339)
 		case variableNowUnix:
-			newVal = utils.Clock.GetUTCNow().Unix()
+			value = utils.Clock.GetUTCNow().Unix()
 		default:
-			cmds = strings.Split(key, ":")
-			if len(cmds) == 2 {
-				switch cmds[0] {
-				case variableLower:
-					key = cmds[1]
-					isLower = true
-				case variableUpper:
-					key = cmds[1]
-					isUpper = true
-				}
+			if prefix, field, found := strings.Cut(key, ":"); found && (prefix == variableLower || prefix == variableUpper) {
+				command, key = prefix, field
 			}
-
-			if newVal, ok = msg.Message[key]; !ok {
-				// replace val from map
-				if strings.Contains(key, ".") {
-					newVal = GetValFromMap(msg.Message, key)
-				} else {
-					newVal = ""
-				}
+			var ok bool
+			if value, ok = msg.Message[key]; !ok {
+				value = GetValFromMap(msg.Message, key)
 			}
 		}
-
-		// fmt.Println("key", key)
-		// fmt.Println("isLower", isLower)
-		// fmt.Println("isUpper", isUpper)
-		// fmt.Println("newVal", newVal)
-
-		switch v := newVal.(type) {
-		case string:
-			if isLower {
-				newVal = strings.ToLower(v)
-			} else if isUpper {
-				newVal = strings.ToUpper(v)
-			}
-		case []byte:
-			if isLower {
-				newVal = bytes.ToLower(v)
-			} else if isUpper {
-				newVal = bytes.ToUpper(v)
-			}
+		text := ""
+		switch val := value.(type) {
 		case nil:
-			newVal = ""
+		case []byte:
+			text = string(val)
+		default:
+			text = fmt.Sprint(val)
 		}
-
-		keys[key] = struct{}{}
-		v = strings.ReplaceAll(v, grp[0], fmt.Sprint(newVal))
-	}
-
-	return v
+		switch command {
+		case variableLower:
+			text = strings.ToLower(text)
+		case variableUpper:
+			text = strings.ToUpper(text)
+		}
+		values[expr] = text
+		return text
+	})
 }
 
 // ParseAddCfg load auto config
 //
 // config file like:
-//   add:
-//     <tag>:
-//       - <key>: <val>
-//     app.{env}:
-//       - key: %{key2}-xx
+//
+//	add:
+//	  <tag>:
+//	    - <key>: <val>
+//	  app.{env}:
+//	    - key: %{key2}-xx
 func ParseAddCfg(env string, cfg interface{}) AddCfg {
 	ret := AddCfg{}
 	if cfg == nil {

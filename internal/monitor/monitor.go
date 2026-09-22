@@ -1,42 +1,48 @@
 package monitor
 
 import (
-	"net/http"
-
-	"gofluentd/library/log"
-
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 	jsoniter "github.com/json-iterator/go"
+	"gofluentd/library/log"
+	"net/http"
+	"sync"
 )
 
 var (
 	json         = jsoniter.ConfigCompatibleWithStandardLibrary
 	metricGetter = map[string]func() map[string]interface{}{}
+	metricMu     sync.RWMutex
 )
 
 func AddMetric(name string, metric func() map[string]interface{}) {
+	metricMu.Lock()
+	defer metricMu.Unlock()
 	metricGetter[name] = metric
 }
-
 func BindHTTP(srv *gin.Engine) {
-	var (
-		b   []byte
-		err error
-	)
 	srv.GET("/monitor", func(ctx *gin.Context) {
-		metrics := map[string]interface{}{
-			"ts": utils.Clock.GetTimeInRFC3339Nano(),
+		// Call user-supplied getters outside the registry lock: a getter can
+		// register another metric or acquire a component's own locks.
+		metricMu.RLock()
+		getters := make(map[string]func() map[string]interface{}, len(metricGetter))
+		for name, getter := range metricGetter {
+			getters[name] = getter
 		}
-		for k, getter := range metricGetter {
-			metrics[k] = getter()
+		metricMu.RUnlock()
+		metrics := map[string]interface{}{"ts": utils.Clock.GetTimeInRFC3339Nano()}
+		for name, getter := range getters {
+			if getter != nil {
+				metrics[name] = getter()
+			}
 		}
-		if b, err = json.Marshal(&metrics); err != nil {
-			log.Logger.Error("try to marshal metrics to json got error", zap.Error(err))
+		b, err := json.Marshal(metrics)
+		if err != nil {
+			log.Logger.Error("marshal metrics", zap.Error(err))
+			ctx.AbortWithStatus(http.StatusInternalServerError)
 			return
 		}
-
-		ctx.String(http.StatusOK, string(b))
+		ctx.Data(http.StatusOK, "application/json; charset=utf-8", b)
 	})
 }

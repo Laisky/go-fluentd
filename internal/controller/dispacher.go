@@ -34,7 +34,6 @@ type Dispatcher struct {
 func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 	d := &Dispatcher{
 		DispatcherCfg: cfg,
-		outChan:       make(chan *library.FluentMsg, cfg.OutChanSize),
 		tag2Concator:  &sync.Map{},
 		tag2Counter:   &sync.Map{},
 		tag2Cancel:    &sync.Map{},
@@ -44,6 +43,7 @@ func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 		log.Logger.Panic("config invalid", zap.Error(err))
 	}
 
+	d.outChan = make(chan *library.FluentMsg, cfg.OutChanSize)
 	log.Logger.Info("create Dispatcher",
 		zap.Int("n_fork", d.NFork),
 		zap.Int("out_chan_size", d.OutChanSize),
@@ -108,6 +108,7 @@ func (d *Dispatcher) Run(ctx context.Context) {
 								zap.Error(err),
 								zap.String("tag", msg.Tag))
 							cancel()
+							lock.Unlock()
 							continue
 						} else {
 							d.tag2Counter.Store(msg.Tag, utils.NewCounter())
@@ -136,6 +137,9 @@ func (d *Dispatcher) Run(ctx context.Context) {
 
 				// count
 				if counterI, ok = d.tag2Counter.Load(msg.Tag); !ok {
+					if ctx.Err() != nil {
+						return
+					}
 					log.Logger.Panic("counter must exists", zap.String("tag", msg.Tag))
 				}
 				counterI.(*utils.Counter).Count()

@@ -181,7 +181,7 @@ func (r *HTTPRecv) HTTPLogHandler(ctx *gin.Context) {
 		return
 	}
 
-	msg := r.msgPool.Get().(*library.FluentMsg)
+	msg := r.getMsg()
 	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, r.MaxBodySize)
 	msgData, err := ioutil.ReadAll(ctx.Request.Body)
 	if err != nil {
@@ -214,6 +214,17 @@ func (r *HTTPRecv) HTTPLogHandler(ctx *gin.Context) {
 	msg.Message[r.TagKey] = r.OrigTag + "." + env
 	msg.ID = r.counter.Count()
 	log.Logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.ID))
-	ctx.JSON(http.StatusOK, map[string]int64{"msgid": msg.ID})
-	r.asyncOutChan <- msg
+	id := msg.ID // the receiver must not read the message after handing it off
+	if ctx.Request.Context().Err() != nil {
+		r.msgPool.Put(msg)
+		ctx.AbortWithStatus(http.StatusRequestTimeout)
+		return
+	}
+	select {
+	case r.asyncOutChan <- msg:
+		ctx.JSON(http.StatusOK, map[string]int64{"msgid": id})
+	case <-ctx.Request.Context().Done():
+		r.msgPool.Put(msg)
+		ctx.AbortWithStatus(http.StatusRequestTimeout)
+	}
 }

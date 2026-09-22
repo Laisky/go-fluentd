@@ -47,6 +47,18 @@ func NewKafkaSender(cfg *KafkaSenderCfg) *KafkaSender {
 		panic(fmt.Errorf("brokers shoule not be empty"))
 	}
 
+	if cfg.NFork <= 0 {
+		cfg.NFork = 1
+	}
+	if cfg.BatchSize <= 0 {
+		cfg.BatchSize = 500
+	}
+	if cfg.MaxWait <= 0 {
+		cfg.MaxWait = 5 * time.Second
+	}
+	if cfg.InChanSize < 0 {
+		cfg.InChanSize = 0
+	}
 	s := &KafkaSender{
 		BaseSender: &BaseSender{
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
@@ -62,127 +74,49 @@ func (s *KafkaSender) GetName() string {
 }
 
 func (s *KafkaSender) Spawn(ctx context.Context) chan<- *library.FluentMsg {
-	log.Logger.Info("SpawnForTag")
-	inChan := make(chan *library.FluentMsg, s.InChanSize)
-
+	in := make(chan *library.FluentMsg, s.InChanSize)
 	for i := 0; i < s.NFork; i++ {
-		go func(i int) {
-			defer log.Logger.Info("kafka sender exit",
-				zap.String("name", s.GetName()),
-				zap.Int("i", i))
-			var (
-				jb                []byte
-				nRetry            int
-				maxRetry          = 3
-				msgBatch          = make([]*library.FluentMsg, s.BatchSize)
-				kmsgBatchDelivery = make([]*sarama.ProducerMessage, s.BatchSize)
-				msgBatchDelivery  []*library.FluentMsg
-				iBatch            = 0
-				lastT             = time.Unix(0, 0)
-				err               error
-				j                 int
-				msg               *library.FluentMsg
-				ok                bool
-				ticker            = time.NewTicker(s.MaxWait)
-			)
-			defer ticker.Stop()
-
-			for j = 0; j < s.BatchSize; j++ {
-				kmsgBatchDelivery[j] = &sarama.ProducerMessage{Topic: s.Topic}
-			}
-
-		RECONNECT:
-			producer, err := NewKafkaProducer(s.Brokers)
-			if err != nil {
-				log.Logger.Error("connect to kakfa broker got error", zap.Error(err))
-				goto RECONNECT
-			}
-			log.Logger.Info("connect to kafka brokers",
-				zap.Strings("brokers", s.Brokers))
-
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case msg, ok = <-inChan:
-					if !ok {
-						log.Logger.Info("inChan closed")
-						return
+		go func() {
+			var producer sarama.SyncProducer
+			defer func() {
+				if producer != nil {
+					if err := producer.Close(); err != nil {
+						log.Logger.Warn("close Kafka producer", zap.Error(err))
 					}
-					msgBatch[iBatch] = msg
-					iBatch++
-				case <-ticker.C:
-					if iBatch == 0 {
-						continue
+				}
+			}()
+			s.runBatches(ctx, in, s.BatchSize, s.MaxWait, func(ctx context.Context, msgs []*library.FluentMsg) error {
+				// Prepare every record before issuing any request. Reusing Sarama messages
+				// after a marshal error can resend a previous record as the current one.
+				encoded := make([]*sarama.ProducerMessage, len(msgs))
+				for i, msg := range msgs {
+					b, err := utils.JSON.Marshal(msg.Message)
+					if err != nil {
+						return fmt.Errorf("encode Kafka record %d: %w", i, err)
 					}
-					msg = msgBatch[iBatch-1]
+					encoded[i] = &sarama.ProducerMessage{Topic: s.Topic, Value: sarama.ByteEncoder(b)}
 				}
-
-				if iBatch < s.BatchSize &&
-					utils.Clock.GetUTCNow().Sub(lastT) < s.MaxWait {
-					continue
+				if err := ctx.Err(); err != nil {
+					return err
 				}
-
-				lastT = utils.Clock.GetUTCNow()
-				msgBatchDelivery = msgBatch[:iBatch]
-				iBatch = 0
-				nRetry = 0
-				for j, msg = range msgBatchDelivery {
-					if jb, err = utils.JSON.Marshal(&msg.Message); err != nil {
-						log.Logger.Error("marashal msg got error",
-							zap.Error(err),
-							zap.String("msg", fmt.Sprint(msg)))
-						// TODO(potential bug): should remove element in msgBatchDelivery
-						continue
+				if producer == nil {
+					var err error
+					producer, err = NewKafkaProducer(s.Brokers)
+					if err != nil {
+						return err
 					}
-
-					if utils.Settings.GetBool("dry") {
-						log.Logger.Info("send message to backend",
-							zap.ByteString("msg", jb))
-						s.successedChan <- msg
-						continue
-					}
-
-					kmsgBatchDelivery[j].Value = sarama.ByteEncoder(jb)
 				}
-
-				if utils.Settings.GetBool("dry") {
-					continue
+				if err := ctx.Err(); err != nil {
+					return err
 				}
-
-			SEND_MSG:
-				if err = producer.SendMessages(kmsgBatchDelivery[:len(msgBatchDelivery)]); err != nil {
-					nRetry++
-					if nRetry > maxRetry {
-						log.Logger.Error("try send kafka message got error", zap.Error(err))
-
-						log.Logger.Error("discard msg since of sender err",
-							zap.String("tag", msg.Tag),
-							zap.Int("num", len(msgBatchDelivery)))
-						for _, msg = range msgBatchDelivery {
-							s.failedChan <- msg
-						}
-
-						if err = producer.Close(); err != nil {
-							log.Logger.Error("try to close connection got error", zap.Error(err))
-						}
-						log.Logger.Info("connection closed, try to reconnect...")
-						goto RECONNECT
-					}
-
-					goto SEND_MSG
+				if err := producer.SendMessages(encoded); err != nil {
+					producer.Close()
+					producer = nil
+					return err
 				}
-				log.Logger.Debug("success sent messages to brokers",
-					zap.Int("batch", len(msgBatchDelivery)),
-					zap.String("topic", s.Topic),
-					zap.Strings("brokers", s.Brokers),
-					zap.String("tag", msg.Tag))
-				for _, msg = range msgBatchDelivery {
-					s.successedChan <- msg
-				}
-			}
-		}(i)
+				return nil
+			})
+		}()
 	}
-
-	return inChan
+	return in
 }

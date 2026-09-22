@@ -87,6 +87,8 @@ settings:
         wechat_mini_program_forward:
           # 指定插件类型
           type: http
+          # 等待本地 journal Sync 成功后才返回 HTTP 200；false 保留旧的队列接收语义。
+          require_durable_ack: false
 
           # 激活的环境，取决于命令行参数 `--env`
           active_env: *all-env

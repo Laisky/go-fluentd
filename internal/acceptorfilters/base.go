@@ -1,6 +1,7 @@
 package acceptorfilters
 
 import (
+	"errors"
 	"sync"
 
 	"gofluentd/library"
@@ -28,6 +29,7 @@ func (f *BaseFilter) SetMsgPool(msgPool *sync.Pool) {
 }
 
 func (f *BaseFilter) DiscardMsg(msg *library.FluentMsg) {
+	msg.CompleteAcceptance(errors.New("message rejected before persistence"))
 	msg.ExtIds = nil
 	f.msgPool.Put(msg)
 }

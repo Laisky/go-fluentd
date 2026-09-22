@@ -1,0 +1,38 @@
+name: Go
+
+on:
+  push:
+    branches: [master, develop, 'fix/go127-reliability']
+  pull_request:
+    branches: [master, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.x'
+          cache: true
+      - run: go version
+      - name: Compile all packages and tests
+        run: go test -mod=mod -run '^$' ./...
+      - name: Tests and race detector
+        run: go test -mod=mod -race -count=1 -timeout=120s ./...
+      - name: Module migration diagnostics
+        if: always()
+        run: |
+          cat go.mod
+          git diff -- go.sum

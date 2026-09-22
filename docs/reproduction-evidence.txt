@@ -1,0 +1,178 @@
+Actual fail-first execution excerpts; tests/fixtures were isolated before repair.
+Source checkpoints are retained in the test-first commits, not fabricated expectations.
+New fixture setup errors and subsequently repaired test assumptions are not product defects.
+
+=== library-red.log ===
+--- FAIL: TestBehaviorMessageTemplates (0.00s)
+    --- FAIL: TestBehaviorMessageTemplates/%{raw} (0.00s)
+        component_behavior_test.go:24: got "[65 98 67]", want "AbC"
+    --- FAIL: TestBehaviorMessageTemplates/%{@lower:raw}-%{@upper:raw} (0.00s)
+        component_behavior_test.go:24: got "", want "abc-ABC"
+    --- FAIL: TestBehaviorMessageTemplates/%{@lower:name}:%{name}:%{@upper:name}:%{name} (0.00s)
+        component_behavior_test.go:24: got "", want "abc:AbC:ABC:AbC"
+--- FAIL: TestBehaviorTemplateMissingValuesDoNotReusePreviousValue (0.00s)
+    component_behavior_test.go:38: "${a}/${missing}/${b}/${nil}" = "first/first/second/second"; want "first//second/"
+    component_behavior_test.go:43: custom regexp replacement="[[a]]/[[b]]"
+
+=== post-red.log ===
+--- FAIL: TestBehaviorDefaultFieldNormalization (0.00s)
+    component_behavior_test.go:18: normalized fields=map[string]interface {}{"":"remo", "a.b":[]uint8{0x61, 0x62, 0x63, 0x64}, "a__b":[]uint8{0x61, 0x62, 0x63, 0x64}, "n":42, "plain":[]uint8{0x61, 0x62, 0x63, 0x64}, "text":"abcd"}; want map[string]interface {}{"a__b":"abcd", "n":42, "plain":"abcd", "text":"abcd"}
+--- FAIL: TestBehaviorFieldsSelectionAndTemplates (0.00s)
+    --- FAIL: TestBehaviorFieldsSelectionAndTemplates/exclude (0.00s)
+        component_behavior_test.go:36: map[a:v joined:v/v level:info tag:origin]
+    --- FAIL: TestBehaviorFieldsSelectionAndTemplates/include (0.00s)
+--- FAIL: TestBehaviorESRoutingRejectsInvalidOriginWithoutChangingJournalTag (0.00s)
+    --- FAIL: TestBehaviorESRoutingRejectsInvalidOriginWithoutChangingJournalTag/invalid (0.00s)
+        component_behavior_test.go:62: malformed record panicked: interface conversion: interface {} is nil, not string
+    --- FAIL: TestBehaviorESRoutingRejectsInvalidOriginWithoutChangingJournalTag/invalid#01 (0.00s)
+        component_behavior_test.go:62: malformed record panicked: interface conversion: interface {} is int, not string
+    --- FAIL: TestBehaviorESRoutingRejectsInvalidOriginWithoutChangingJournalTag/invalid#03 (0.00s)
+        component_behavior_test.go:73: lost journal tag: ""
+    --- FAIL: TestBehaviorESRoutingRejectsInvalidOriginWithoutChangingJournalTag/invalid#04 (0.00s)
+        component_behavior_test.go:62: malformed record panicked: interface conversion: interface {} is []uint8, not string
+--- FAIL: TestBehaviorForwardTagRewriteUsesFinalEnvironment (0.00s)
+    --- FAIL: TestBehaviorForwardTagRewriteUsesFinalEnvironment/origin (0.00s)
+        component_behavior_test.go:100: origin=service.component.prod: tag="forward.component" want="forward.component.prod"
+    --- FAIL: TestBehaviorForwardTagRewriteUsesFinalEnvironment/origin#01 (0.00s)
+        component_behavior_test.go:100: origin=service.prod: tag="forward.prod" want="forward.component.prod"
+    --- FAIL: TestBehaviorForwardTagRewriteUsesFinalEnvironment/origin#02 (0.00s)
+        component_behavior_test.go:94: invalid origin panicked: interface conversion: interface {} is nil, not string
+    --- FAIL: TestBehaviorForwardTagRewriteUsesFinalEnvironment/origin#03 (0.00s)
+        component_behavior_test.go:94: invalid origin panicked: interface conversion: interface {} is int, not string
+    --- FAIL: TestBehaviorForwardTagRewriteUsesFinalEnvironment/origin#04 (0.00s)
+        component_behavior_test.go:94: invalid origin panicked: runtime error: index out of range [1] with length 1
+    --- FAIL: TestBehaviorForwardTagRewriteUsesFinalEnvironment/origin#05 (0.00s)
+        component_behavior_test.go:100: origin=service.: tag="forward." want="forward.component.sit"
+--- FAIL: TestBehaviorBigDataValidationAndDisposition (0.00s)
+    --- FAIL: TestBehaviorBigDataValidationAndDisposition/bad_time (0.00s)
+        component_behavior_test.go:127: rejection must have exactly one terminal disposition
+    --- FAIL: TestBehaviorBigDataValidationAndDisposition/missing_time (0.00s)
+        component_behavior_test.go:114: invalid data panicked: interface conversion: interface {} is nil, not string
+    --- FAIL: TestBehaviorBigDataValidationAndDisposition/missing_vin (0.00s)
+--- FAIL: TestBehaviorPostPipelineDefaults (0.00s)
+    component_behavior_test.go:181: defaults don't match channels: capacity=0 config=1000
+
+=== accept-red.log ===
+--- FAIL: TestBehaviorAcceptorPipelineDefaults (0.00s)
+    component_behavior_test.go:124: capacity=0 config=1000
+
+=== tag-red.log ===
+--- FAIL: TestBehaviorParserUnsupportedTagIsForwardedOnceUnchanged (0.00s)
+    component_behavior_test.go:42: unsupported tag changed or duplicated: outputs=2 commits=0 message=map[]
+--- FAIL: TestBehaviorParserAddWithoutTimeParsing (0.00s)
+    component_behavior_test.go:73: add configuration ignored without time_key
+--- FAIL: TestBehaviorParserJSONIsAtomic (0.00s)
+    --- FAIL: TestBehaviorParserJSONIsAtomic/{"app":"changed", (0.00s)
+        component_behavior_test.go:83: invalid JSON partially changed record: map[app:changed args:{"app":"changed",]
+    --- FAIL: TestBehaviorParserJSONIsAtomic/null (0.00s)
+        component_behavior_test.go:83: invalid JSON partially changed record: map[]
+--- FAIL: TestBehaviorParserTimeStringAndBytesEquivalent (0.00s)
+    component_behavior_test.go:103: timestamp []uint8: outputs=0 commits=1 msg=map[time:[50 48 50 48 45 48 49 45 48 49 32 48 56 58 48 48 58 48 48]]
+--- FAIL: TestBehaviorConcatorPreservesTailIDsUntilHeadAcknowledgement (0.00s)
+    component_behavior_test.go:144: tail acknowledged before merged head reached a sender: 1 ACKs
+    component_behavior_test.go:147: close lost pending head: got 1 messages want 2
+--- FAIL: TestBehaviorConcatorWorkersDoNotSharePendingMessages (0.00s)
+    component_behavior_test.go:171: pending state leaked between workers/tags
+
+=== controller-red.log ===
+--- FAIL: TestBehaviorDispatcherDefaultsMatchBuffers (0.00s)
+    component_behavior_test.go:46: declared capacity 1000, actual 0
+--- FAIL: TestBehaviorDispatcherRecoversAfterSpawnFailure (1.00s)
+    component_behavior_test.go:63: message did not arrive
+--- FAIL: TestBehaviorProducerCollectorCancellationWhileCommitBlocked (0.10s)
+    component_behavior_test.go:200: collector ignores cancellation while commit blocked
+
+=== monitor-race-red.log ===
+WARNING: DATA RACE
+
+=== recv-red.log ===
+--- FAIL: TestBehaviorKafkaDecodeAndOwnership (0.00s)
+    --- FAIL: TestBehaviorKafkaDecodeAndOwnership/raw (0.00s)
+        component_behavior_test.go:64: stale pooled metadata survived: &{Tag:destination Message:map[log:[104 101 108 108 111] tag:source] ID:1 ExtIds:[555]}
+        component_behavior_test.go:76: decoded log aliases a recycled Kafka input buffer
+    --- FAIL: TestBehaviorKafkaDecodeAndOwnership/object (0.00s)
+        component_behavior_test.go:64: stale pooled metadata survived: &{Tag:destination Message:map[origin:app.prod tag:app.prod value:3] ID:1 ExtIds:[555]}
+    --- FAIL: TestBehaviorKafkaDecodeAndOwnership/null (0.00s)
+        component_behavior_test.go:46: invalid Kafka payload panicked: assignment to entry in nil map
+--- FAIL: TestBehaviorHTTPValidationAndPoolReset (0.00s)
+    --- FAIL: TestBehaviorHTTPValidationAndPoolReset/valid (0.00s)
+        component_behavior_test.go:149: bad accepted record: &{Tag:forward.sit Message:map[nested__value:ok sig:[55 56 100 48 98 100 51 50 48 51 53 99 49 49 49 52 49 48 53 50 99 55 57 52 99 102 100 53 99 48 55 49] tag:app.prod time:[50 48 50 54 45 48 57 45 50 50 84 49 55 58 52 55 58 53 49 46 51 53 52 49 56 53 53 57 52 90]] ID:1 ExtIds:[555]}
+--- FAIL: TestBehaviorHTTPCancelledRequestCannotAcknowledgeUnqueuedMessage (0.10s)
+    component_behavior_test.go:168: cancelled HTTP request stuck on downstream channel
+    component_behavior_test.go:173: HTTP 200 returned before the message entered the queue
+--- FAIL: TestBehaviorFluentReceiverWireFormatsAndMalformedEntries (0.00s)
+    --- FAIL: TestBehaviorFluentReceiverWireFormatsAndMalformedEntries/message (0.00s)
+        component_behavior_test.go:251: stale record metadata: &{Tag:logs Message:map[tag:logs value:single] ID:1 ExtIds:[555]}
+    --- FAIL: TestBehaviorFluentReceiverWireFormatsAndMalformedEntries/forward (0.00s)
+        component_behavior_test.go:251: stale record metadata: &{Tag:logs Message:map[tag:logs value:first] ID:1 ExtIds:[555]}
+        component_behavior_test.go:251: stale record metadata: &{Tag:logs Message:map[tag:logs value:second] ID:2 ExtIds:[555]}
+    --- FAIL: TestBehaviorFluentReceiverWireFormatsAndMalformedEntries/packed (0.00s)
+        component_behavior_test.go:251: stale record metadata: &{Tag:logs Message:map[tag:logs value:packed] ID:1 ExtIds:[555]}
+    --- FAIL: TestBehaviorFluentReceiverWireFormatsAndMalformedEntries/wrong_entry (0.00s)
+        component_behavior_test.go:245: network input panicked: interface conversion: interface {} is int64, not []interface {}
+    --- FAIL: TestBehaviorFluentReceiverWireFormatsAndMalformedEntries/short_entry (0.00s)
+        component_behavior_test.go:245: network input panicked: runtime error: index out of range [1] with length 0
+--- FAIL: TestBehaviorFluentListenerFailureDoesNotPanic (0.00s)
+    component_behavior_test.go:291: bind error panicked instead of returning/retrying: runtime error: invalid memory address or nil pointer dereference
+--- FAIL: TestBehaviorFluentConcatenationIsolatesTags (0.00s)
+    component_behavior_test.go:321: cross-tag concatenation merged distinct records: outputs=1
+
+=== recv-idle-red.log ===
+--- FAIL: TestBehaviorFluentIdleConnectionCancellation (0.10s)
+    component_behavior_test.go:283: idle decoder did not observe cancellation
+
+=== sender-red.log ===
+--- FAIL: TestBehaviorHTTPAndESDrainPartialBatchOnClose (2.00s)
+    --- FAIL: TestBehaviorHTTPAndESDrainPartialBatchOnClose/false (1.00s)
+        component_behavior_test.go:80: sender did not report a terminal result
+    --- FAIL: TestBehaviorHTTPAndESDrainPartialBatchOnClose/true (1.00s)
+--- FAIL: TestBehaviorHTTPAndESCancellationReachesRequest (0.20s)
+    --- FAIL: TestBehaviorHTTPAndESCancellationReachesRequest/false (0.10s)
+        component_behavior_test.go:178: worker cancellation did not reach HTTP request
+    --- FAIL: TestBehaviorHTTPAndESCancellationReachesRequest/true (0.10s)
+--- FAIL: TestBehaviorBulkSenderConfigurationDefaults (0.00s)
+    component_behavior_test.go:188: HTTP defaults create no worker or panic
+    component_behavior_test.go:192: Kafka defaults create no worker or panic
+--- FAIL: TestBehaviorElasticsearchValidatesSuppliedItems (0.00s)
+    --- FAIL: TestBehaviorElasticsearchValidatesSuppliedItems/{"errors":false,"items":[{"index":{"status":429}}]} (0.00s)
+        component_behavior_test.go:210: response={"errors":false,"items":[{"index":{"status":429}}]} error=<nil> expected error=true
+    --- FAIL: TestBehaviorElasticsearchValidatesSuppliedItems/{"errors":false,"items":[{"index":{}}]} (0.00s)
+        component_behavior_test.go:210: response={"errors":false,"items":[{"index":{}}]} error=<nil> expected error=true
+    --- FAIL: TestBehaviorElasticsearchValidatesSuppliedItems/{"errors":false,"items":[null]} (0.00s)
+        component_behavior_test.go:210: response={"errors":false,"items":[null]} error=<nil> expected error=true
+--- FAIL: TestBehaviorKafkaEncodingFailureNeverSendsStalePayload (0.00s)
+    component_behavior_test.go:242: unencodable message was acknowledged with stale/empty Kafka payload
+
+=== round2-red.log ===
+--- FAIL: TestBehaviorRsyslogTransform (0.00s)
+    rsyslog_behavior_test.go:23: same-key rename lost a field: &{Tag:syslog.prod Message:map[hostname:node tag:syslog.prod] ID:1 ExtIds:[]}
+--- FAIL: TestBehaviorRsyslogInvalidTimeRejected (0.00s)
+    rsyslog_behavior_test.go:33: invalid timestamp was forwarded: &{Tag:logs Message:map[message:x timestamp:<nil>] ID:1 ExtIds:[]}
+    rsyslog_behavior_test.go:33: invalid timestamp was forwarded: &{Tag:logs Message:map[message:x timestamp:3] ID:2 ExtIds:[]}
+    rsyslog_behavior_test.go:33: invalid timestamp was forwarded: &{Tag:logs Message:map[message:x timestamp:not-time] ID:3 ExtIds:[]}
+--- FAIL: TestBehaviorRsyslogRenameUsesOriginalValues (0.00s)
+    rsyslog_behavior_test.go:43: rename order/self-rename damaged data: map[c:A ts:2026-09-22T17:58:59Z]
+--- FAIL: TestBehaviorRsyslogPartialBindReleasesUDP (0.00s)
+    rsyslog_behavior_test.go:59: failed TCP startup leaked its UDP socket: listen udp 127.0.0.1:36325: bind: address already in use
+--- FAIL: TestBehaviorJournalDefaultBuffers (0.00s)
+    journal_behavior_test.go:21: journal configured/actual capacities differ: 0/10000 0/50000
+--- FAIL: TestBehaviorParserCancellationWhenOutputBlocked (0.10s)
+    lifecycle_behavior_test.go:91: parser ignores cancellation on blocked output
+--- FAIL: TestBehaviorLoadBalancerClosesOwnedWorkerInputs (0.00s)
+    lifecycle_behavior_test.go:109: worker input left open after upstream close
+
+=== tag-metric-red.log ===
+WARNING: DATA RACE
+--- FAIL: TestBehaviorTagPipelineMetricsConcurrentWithSpawn (0.05s)
+
+=== round3-red.log ===
+--- FAIL: TestBehaviorSyslogBootFailureDoesNotPanic (0.00s)
+    rsyslog_lifecycle_test.go:45: boot error caused panic: runtime error: invalid memory address or nil pointer dereference
+--- FAIL: TestBehaviorSyslogDialBackoffCancellation (0.30s)
+    rsyslog_lifecycle_test.go:72: cancelled receiver remains asleep in retry backoff
+--- FAIL: TestBehaviorSyslogBlockedHandoffCancellation (0.30s)
+    rsyslog_lifecycle_test.go:91: cancelled receiver blocked publishing to downstream
+--- FAIL: TestBehaviorJournalMaintenanceCancellation (0.30s)
+    journal_flow_behavior_test.go:28: journal maintenance ignores cancellation while sleeping
+--- FAIL: TestBehaviorJournalBypassCancellation (0.30s)
+    journal_flow_behavior_test.go:43: journal bypass blocked after cancellation

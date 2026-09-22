@@ -1,0 +1,235 @@
+name: Component core reproductions
+on:
+  push:
+    branches: [test/component-behavior-20260922]
+    paths: [.github/workflows/component-core-tests.yml]
+permissions:
+  contents: write
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.27.x
+      - name: Install behavioral tests without production changes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          files = {}
+          files['internal/controller/components_test.go'] = r'''package controller
+
+          import (
+              "context"
+              "fmt"
+              "sync"
+              "testing"
+              "time"
+              "gofluentd/internal/senders"
+              "gofluentd/library"
+          )
+
+          func componentRecv(t *testing.T, ch <-chan *library.FluentMsg) *library.FluentMsg {
+              t.Helper()
+              select { case m:=<-ch: return m; case <-time.After(time.Second): t.Fatal("message delivery timed out"); return nil }
+          }
+          func componentWait(t *testing.T, pred func() bool) {
+              t.Helper()
+              deadline:=time.Now().Add(time.Second)
+              for !pred() { if time.Now().After(deadline) { t.Fatal("state transition timed out") }; time.Sleep(time.Millisecond) }
+          }
+          func TestComponentDefaultChannelCapacities(t *testing.T) {
+              a:=NewAcceptor(&AcceptorCfg{})
+              if cap(a.GetSyncOutChan())!=a.SyncOutChanSize || cap(a.GetAsyncOutChan())!=a.AsyncOutChanSize { t.Errorf("acceptor effective channel capacities do not match normalized config: %d/%d",cap(a.GetSyncOutChan()),cap(a.GetAsyncOutChan())) }
+              d:=NewDispatcher(&DispatcherCfg{})
+              if cap(d.GetOutChan())!=d.OutChanSize { t.Errorf("dispatcher capacity=%d config=%d",cap(d.GetOutChan()),d.OutChanSize) }
+          }
+          type componentPipeline struct { mu sync.Mutex; counts map[string]int; calls chan string }
+          func (p *componentPipeline) Spawn(ctx context.Context, tag string, out chan<- *library.FluentMsg)(chan<- *library.FluentMsg,error) {
+              p.mu.Lock(); p.counts[tag]++; p.mu.Unlock()
+              if p.calls!=nil {p.calls<-tag}
+              if tag=="bad" {return nil,fmt.Errorf("injected spawn failure")}; return out,nil
+          }
+          func TestComponentDispatcherSpawnFailureDoesNotDeadlock(t *testing.T) {
+              ctx,cancel:=context.WithCancel(context.Background());defer cancel()
+              pipe:=&componentPipeline{counts:map[string]int{},calls:make(chan string,3)}
+              in:=make(chan *library.FluentMsg,2)
+              d:=NewDispatcher(&DispatcherCfg{InChan:in,TagPipeline:pipe,NFork:1,OutChanSize:4});d.Run(ctx)
+              in<-&library.FluentMsg{Tag:"bad"};in<-&library.FluentMsg{Tag:"good",ID:2}
+              if got:=componentRecv(t,d.GetOutChan());got.ID!=2 {t.Fatalf("unrelated tag did not survive failed pipeline: %+v",got)}
+              close(in)
+          }
+          func TestComponentDispatcherRoutesAndCachesByTag(t *testing.T) {
+              ctx,cancel:=context.WithCancel(context.Background());defer cancel()
+              pipe:=&componentPipeline{counts:map[string]int{}}
+              in:=make(chan *library.FluentMsg,64)
+              d:=NewDispatcher(&DispatcherCfg{InChan:in,TagPipeline:pipe,NFork:4,OutChanSize:128});d.Run(ctx)
+              for i:=0;i<64;i++ {in<-&library.FluentMsg{Tag:fmt.Sprintf("tag-%d",i%3),ID:int64(i)}}
+              seen:=map[int64]bool{}
+              for i:=0;i<64;i++ {m:=componentRecv(t,d.GetOutChan());if seen[m.ID] {t.Errorf("duplicate %d",m.ID)};seen[m.ID]=true}
+              pipe.mu.Lock();defer pipe.mu.Unlock()
+              for tag,n:=range pipe.counts {if n!=1 {t.Errorf("tag %s spawned %d times",tag,n)}}
+              close(in)
+          }
+          type componentSender struct {senders.BaseSender;name string;in chan *library.FluentMsg;good,bad chan<- *library.FluentMsg}
+          func (s *componentSender) GetName()string{return s.name}
+          func (s *componentSender) Spawn(context.Context)chan<- *library.FluentMsg{return s.in}
+          func (s *componentSender) SetSuccessedChan(ch chan<- *library.FluentMsg){s.good=ch}
+          func (s *componentSender) SetFailedChan(ch chan<- *library.FluentMsg){s.bad=ch}
+          func newComponentSender(name string)*componentSender{s:=&componentSender{name:name,in:make(chan *library.FluentMsg,8)};s.SetSupportedTags([]string{"logs","other"});return s}
+          func TestComponentProducerRequiresAllSenders(t *testing.T) {
+              for _,fail:=range []bool{false,true} {t.Run(fmt.Sprint(fail),func(t *testing.T){
+                  ctx,cancel:=context.WithCancel(context.Background());defer cancel()
+                  a,b:=newComponentSender("a"),newComponentSender("b")
+                  in,commit:=make(chan *library.FluentMsg,8),make(chan *library.FluentMsg,8)
+                  p,err:=NewProducer(&ProducerCfg{NFork:1,InChan:in,CommitChan:commit,MsgPool:&sync.Pool{},DistributeKey:"node"},a,b);if err!=nil{t.Fatal(err)};p.Run(ctx)
+                  m:=&library.FluentMsg{Tag:"logs",ID:42,Message:map[string]interface{}{}};in<-m
+                  if componentRecv(t,a.in)!=m || componentRecv(t,b.in)!=m {t.Fatal("fanout lost identity")}
+                  if m.Message["msgid"]!="node-42" {t.Fatalf("distribution id=%v",m.Message["msgid"])}
+                  a.good<-m
+                  componentWait(t,func()bool{_,ok:=p.discardMsgCountMap.Load(m);return ok})
+                  if len(commit)!=0 {t.Fatal("committed before all downstream results")}
+                  if fail {b.bad<-m;componentWait(t,func()bool{_,ok:=p.discardMsgCountMap.Load(m);return !ok});if len(commit)!=0{t.Fatal("failed fanout was committed")}} else {b.good<-m;if componentRecv(t,commit)!=m{t.Fatal("wrong committed instance")}}
+                  close(in)
+              })}
+          }
+          func TestComponentProducerReplayInstancesAndUnsupportedPolicy(t *testing.T) {
+              ctx,cancel:=context.WithCancel(context.Background());defer cancel()
+              s:=newComponentSender("a");in,commit:=make(chan *library.FluentMsg,8),make(chan *library.FluentMsg,8)
+              p,err:=NewProducer(&ProducerCfg{NFork:1,InChan:in,CommitChan:commit,MsgPool:&sync.Pool{}},s);if err!=nil{t.Fatal(err)};p.Run(ctx)
+              first:=&library.FluentMsg{Tag:"logs",ID:1,Message:map[string]interface{}{}}
+              second:=&library.FluentMsg{Tag:"logs",ID:1,Message:map[string]interface{}{}}
+              in<-first;in<-second
+              x,y:=componentRecv(t,s.in),componentRecv(t,s.in);s.good<-y;s.good<-x
+              got:=map[*library.FluentMsg]bool{componentRecv(t,commit):true,componentRecv(t,commit):true}
+              if !got[first]||!got[second]{t.Fatal("same ID conflated distinct replay instances")}
+              for i:=0;i<2;i++ {m:=&library.FluentMsg{Tag:"unsupported",Message:map[string]interface{}{}};in<-m;if componentRecv(t,commit)!=m{t.Fatal("unsupported-tag terminal discard policy changed")}}
+              close(in)
+          }
+          '''
+          files['internal/tagfilters/components_test.go'] = r'''package tagfilters
+
+          import (
+              "context"
+              "fmt"
+              "net/http/httptest"
+              "reflect"
+              "regexp"
+              "sync"
+              "testing"
+              "time"
+              "gofluentd/internal/monitor"
+              "gofluentd/library"
+              "github.com/cespare/xxhash"
+              "github.com/gin-gonic/gin"
+          )
+          func componentRunParser(cfg *ParserFactCfg,m *library.FluentMsg)([]*library.FluentMsg,[]*library.FluentMsg) {
+              cfg.Tags=[]string{"logs"};f:=NewParserFact(cfg)
+              in,out,commit:=make(chan *library.FluentMsg,1),make(chan *library.FluentMsg,4),make(chan *library.FluentMsg,4)
+              f.SetWaitCommitChan(commit);in<-m;close(in);f.StartNewParser(context.Background(),out,in)
+              var delivered,discarded []*library.FluentMsg
+              for len(out)>0 {delivered=append(delivered,<-out)};for len(commit)>0{discarded=append(discarded,<-commit)};return delivered,discarded
+          }
+          func TestComponentParserUnsupportedTagIsUntouchedOnce(t *testing.T) {
+              m:=&library.FluentMsg{Tag:"other",Message:map[string]interface{}{"log":"hello"}}
+              out,drop:=componentRunParser(&ParserFactCfg{MsgKey:"log",IsRemoveOrigLog:true},m)
+              if len(out)!=1||len(drop)!=0||m.Message["log"]!="hello" {t.Fatalf("unsupported tag processed or delivered more than once: out=%d drop=%d message=%v",len(out),len(drop),m.Message)}
+          }
+          func TestComponentParserAddWithoutTimeConversion(t *testing.T) {
+              m:=&library.FluentMsg{Tag:"logs",ID:7,Message:map[string]interface{}{}}
+              out,drop:=componentRunParser(&ParserFactCfg{AddCfg:library.AddCfg{"logs":{{"id":"%{@id}"}}}},m)
+              if len(out)!=1||len(drop)!=0||m.Message["id"]!="7" {t.Fatalf("add was skipped without TimeKey: %+v",m.Message)}
+          }
+          func TestComponentParserTimeStringAndBytesAgree(t *testing.T) {
+              for _,value:=range []interface{}{"2026-09-22 12:30:00",[]byte("2026-09-22 12:30:00")} {t.Run(fmt.Sprintf("%T",value),func(t *testing.T){
+                  m:=&library.FluentMsg{Tag:"logs",Message:map[string]interface{}{"ts":value}}
+                  out,drop:=componentRunParser(&ParserFactCfg{TimeKey:"ts",TimeFormat:"2006-01-02 15:04:05 -0700",AppendTimeZone:"+0800",NewTimeFormat:time.RFC3339},m)
+                  if len(out)!=1||len(drop)!=0||m.Message["@timestamp"]!="2026-09-22T04:30:00Z"{t.Fatalf("time parse differs by input representation: out=%d drop=%d msg=%v",len(out),len(drop),m.Message)}
+              })}
+          }
+          func TestComponentParserInvalidJSONDoesNotEraseOrPartiallyMutate(t *testing.T) {
+              for _,value:=range []string{"null",`{"keep":"corrupted",`,"[]","123"} {t.Run(value,func(t *testing.T){
+                  m:=&library.FluentMsg{Tag:"logs",Message:map[string]interface{}{"keep":"original","args":value}}
+                  out,drop:=componentRunParser(&ParserFactCfg{ParseJSONKey:"args"},m)
+                  if len(out)!=1||len(drop)!=0||m.Message["keep"]!="original"||m.Message["args"]!=value{t.Fatalf("bad JSON changed original message: %+v",m.Message)}
+              })}
+          }
+          func TestComponentParserBehaviorMatrix(t *testing.T) {
+              cases:=[]struct{name string;cfg ParserFactCfg;msg map[string]interface{};drop bool;want map[string]interface{}}{
+                  {"regex",ParserFactCfg{MsgKey:"log",Regexp:regexp.MustCompile(`^(?P<level>INFO) (?P<body>.*)$`),IsRemoveOrigLog:true},map[string]interface{}{"log":"INFO hello"},false,map[string]interface{}{"level":[]byte("INFO"),"body":[]byte("hello")}},
+                  {"regex mismatch",ParserFactCfg{MsgKey:"log",Regexp:regexp.MustCompile(`^INFO`)},map[string]interface{}{"log":"bad"},true,nil},
+                  {"missing required",ParserFactCfg{MustInclude:"tenant"},map[string]interface{}{},true,nil},
+                  {"invalid time",ParserFactCfg{TimeKey:"ts",TimeFormat:time.RFC3339},map[string]interface{}{"ts":42},true,nil},
+                  {"bad time text",ParserFactCfg{TimeKey:"ts",TimeFormat:time.RFC3339},map[string]interface{}{"ts":"bad"},true,nil},
+                  {"JSON flatten",ParserFactCfg{ParseJSONKey:"args"},map[string]interface{}{"args":`{"a":{"b":2}}`},false,map[string]interface{}{"a__b":float64(2)}},
+                  {"missing log",ParserFactCfg{MsgKey:"log"},map[string]interface{}{"untouched":true},false,map[string]interface{}{"untouched":true}},
+              }
+              for _,tc:=range cases{t.Run(tc.name,func(t *testing.T){m:=&library.FluentMsg{Tag:"logs",ID:42,Message:tc.msg};out,drop:=componentRunParser(&tc.cfg,m);if tc.drop {if len(drop)!=1||drop[0]!=m||len(out)!=0{t.Fatal("discard ownership is incorrect")}}else if len(out)!=1||len(drop)!=0||!reflect.DeepEqual(m.Message,tc.want){t.Fatalf("out=%d drop=%d got=%#v want=%#v",len(out),len(drop),m.Message,tc.want)}})}
+          }
+          func componentTake(t *testing.T,ch <-chan *library.FluentMsg)*library.FluentMsg{t.Helper();select{case m:=<-ch:return m;case <-time.After(time.Second):t.Fatal("component timed out");return nil}}
+          func componentConcator(t *testing.T, max int)(*ConcatorFactory,*ConcatorCfg,chan *library.FluentMsg){t.Helper();cfg:=&ConcatorCfg{MsgKey:"log",Identifier:"source",Regexp:regexp.MustCompile(`^HEAD`)};f:=NewConcatorFact(&ConcatorFactCfg{NFork:1,MaxLen:max,Plugins:map[string]*ConcatorCfg{"a":cfg,"b":cfg}});commits:=make(chan *library.FluentMsg,16);f.SetWaitCommitChan(commits);f.SetMsgPool(&sync.Pool{});return f,cfg,commits}
+          func componentLine(tag,text string,id int64)*library.FluentMsg{return &library.FluentMsg{Tag:tag,ID:id,Message:map[string]interface{}{"source":"same-source","log":text}}}
+          func TestComponentConcatorTailIsNotAcknowledgedBeforeHead(t *testing.T){
+              f,cfg,commits:=componentConcator(t,10000);in,out:=make(chan *library.FluentMsg,4),make(chan *library.FluentMsg,4)
+              head,tail:=componentLine("a","HEAD one\n",1),componentLine("a"," tail\n",2);head.ExtIds=[]int64{9};tail.ExtIds=[]int64{8}
+              in<-head;in<-tail;in<-componentLine("a","HEAD two\n",3);close(in);f.StartNewConcator(context.Background(),cfg,out,in)
+              m:=componentTake(t,out);if m!=head||string(m.Message["log"].([]byte))!="HEAD one\n tail\n"{t.Fatal("concatenation payload/identity wrong")}
+              if !reflect.DeepEqual(m.ExtIds,[]int64{9,2,8}){t.Errorf("original acknowledgement IDs lost: %v",m.ExtIds)}
+              if len(commits)!=0{t.Fatalf("tail was committed before downstream acknowledgement of the head: %d",len(commits))}
+          }
+          func TestComponentConcatorDrainsClosedInput(t *testing.T){f,cfg,_:=componentConcator(t,10000);in,out:=make(chan *library.FluentMsg,1),make(chan *library.FluentMsg,2);m:=componentLine("a","HEAD last",1);in<-m;close(in);f.StartNewConcator(context.Background(),cfg,out,in);if len(out)!=1||<-out!=m{t.Fatal("closed input lost the last pending record")}}
+          func TestComponentConcatorSeparatesWorkerState(t *testing.T){
+              f,cfg,_:=componentConcator(t,10000);ctx,cancel:=context.WithCancel(context.Background());defer cancel()
+              inA,inB,outA,outB:=make(chan *library.FluentMsg),make(chan *library.FluentMsg),make(chan *library.FluentMsg,4),make(chan *library.FluentMsg,4)
+              var wg sync.WaitGroup;wg.Add(2);go func(){defer wg.Done();f.StartNewConcator(ctx,cfg,outA,inA)}();go func(){defer wg.Done();f.StartNewConcator(ctx,cfg,outB,inB)}();defer func(){cancel();wg.Wait()}()
+              barrier:=func(tag string)*library.FluentMsg{return &library.FluentMsg{Tag:tag,ID:999,Message:map[string]interface{}{"log":"barrier"}}}
+              inA<-componentLine("a","HEAD A",1);inA<-barrier("a");if componentTake(t,outA).ID!=999{t.Fatal("first worker failed barrier")}
+              inB<-componentLine("b","HEAD B",2);inB<-barrier("b");if m:=componentTake(t,outB);m.ID!=999{t.Fatalf("worker B emitted another worker's pending record: tag=%s id=%d",m.Tag,m.ID)}
+          }
+          func TestComponentConcatorMaximumLengthAndBypass(t *testing.T){f,cfg,_:=componentConcator(t,8);in,out:=make(chan *library.FluentMsg,4),make(chan *library.FluentMsg,4);in<-componentLine("a","orphan",0);in<-componentLine("a","HEAD",1);in<-componentLine("a"," tail",2);close(in);f.StartNewConcator(context.Background(),cfg,out,in);if m:=componentTake(t,out);m.ID!=0{t.Fatal("orphan continuation not bypassed")};if m:=componentTake(t,out);m.ID!=1||string(m.Message["log"].([]byte))!="HEAD tail"{t.Fatal("length flush failed")}}
+          func TestComponentLoadBalancerStableRouting(t *testing.T){f:=&BaseTagFilterFactory{};in:=make(chan *library.FluentMsg,5);chans:=[]chan *library.FluentMsg{make(chan *library.FluentMsg,5),make(chan *library.FluentMsg,5),make(chan *library.FluentMsg,5)};values:=[]interface{}{"tenant",[]byte("tenant"),nil,42};for i,v:=range values{in<-&library.FluentMsg{ID:int64(i),Message:map[string]interface{}{"key":v}}};close(in);f.runLB(context.Background(),"key",in,chans);for idx,ch:=range chans{for len(ch)>0{m:=<-ch;key:="";if m.ID<2{key="tenant"};if int(xxhash.Sum64String(key)%3)!=idx{t.Fatalf("unstable route for %d",m.ID)}}}}
+          type componentFactory struct{BaseTagFilterFactory; name string; skip bool}
+          func(f *componentFactory)GetName()string{return f.name}
+          func(f *componentFactory)IsTagSupported(tag string)bool{return !f.skip&&tag!="bypass"}
+          func(f *componentFactory)Spawn(ctx context.Context,tag string,out chan<- *library.FluentMsg)chan<- *library.FluentMsg{in:=make(chan *library.FluentMsg,64);go func(){for{select{case <-ctx.Done():return;case m,ok:=<-in:if !ok{return};m.Message["order"]=fmt.Sprint(m.Message["order"])+f.name;select{case out<-m:case <-ctx.Done():return}}}}();return in}
+          func TestComponentTagPipelineOrderAndBypass(t *testing.T){ctx,cancel:=context.WithCancel(context.Background());defer cancel();p:=NewTagPipeline(ctx,&TagPipelineCfg{InternalChanSize:64},&componentFactory{name:"a"},&componentFactory{name:"x",skip:true},&componentFactory{name:"b"});out:=make(chan *library.FluentMsg,4);in,err:=p.Spawn(ctx,"logs",out);if err!=nil{t.Fatal(err)};in<-&library.FluentMsg{Tag:"logs",Message:map[string]interface{}{"order":""}};if m:=componentTake(t,out);m.Message["order"]!="ab"{t.Fatalf("filter order=%v",m.Message)};bypass,err:=p.Spawn(ctx,"bypass",out);if err!=nil||bypass!=out{t.Fatal("no-filter path must return downstream channel")}}
+          func TestComponentTagPipelineConcurrentMetrics(t *testing.T){ctx,cancel:=context.WithCancel(context.Background());defer cancel();p:=NewTagPipeline(ctx,&TagPipelineCfg{InternalChanSize:64},&componentFactory{name:"a"});engine:=gin.New();monitor.BindHTTP(engine);var wg sync.WaitGroup;for n:=0;n<8;n++{wg.Add(1);go func(n int){defer wg.Done();for i:=0;i<10;i++{p.Spawn(ctx,fmt.Sprintf("tag-%d-%d",n,i),make(chan *library.FluentMsg,1));r:=httptest.NewRecorder();engine.ServeHTTP(r,httptest.NewRequest("GET","/monitor",nil));if r.Code!=200{t.Errorf("monitor status=%d",r.Code)}}}(n)};wg.Wait()}
+          '''
+          files['internal/monitor/components_test.go'] = r'''package monitor
+          import("encoding/json";"fmt";"net/http/httptest";"strings";"sync";"testing";"github.com/gin-gonic/gin")
+          func TestComponentMonitorJSONAndReplacement(t *testing.T){name:=t.Name();AddMetric(name,func()map[string]interface{}{return map[string]interface{}{"n":1}});AddMetric(name,func()map[string]interface{}{return map[string]interface{}{"n":2}});e:=gin.New();BindHTTP(e);w:=httptest.NewRecorder();e.ServeHTTP(w,httptest.NewRequest("GET","/monitor",nil));var result map[string]interface{};if err:=json.Unmarshal(w.Body.Bytes(),&result);err!=nil{t.Fatal(err)};if result[name].(map[string]interface{})["n"]!=float64(2){t.Fatal("registry replacement failed")};if !strings.HasPrefix(w.Header().Get("Content-Type"),"application/json"){t.Fatalf("monitor is JSON but content-type=%q",w.Header().Get("Content-Type"))}}
+          func TestComponentMonitorSerializationFailure(t *testing.T){name:=t.Name();AddMetric(name,func()map[string]interface{}{return map[string]interface{}{"bad":make(chan int)}});defer AddMetric(name,func()map[string]interface{}{return nil});e:=gin.New();BindHTTP(e);w:=httptest.NewRecorder();e.ServeHTTP(w,httptest.NewRequest("GET","/monitor",nil));if w.Code!=500{t.Fatalf("serialization failure reported HTTP %d",w.Code)}}
+          func TestComponentMonitorConcurrentRegistrationAndReads(t *testing.T){e:=gin.New();BindHTTP(e);var wg sync.WaitGroup;for n:=0;n<8;n++{wg.Add(1);go func(n int){defer wg.Done();for i:=0;i<50;i++{AddMetric(fmt.Sprintf("concurrent-%d",n),func()map[string]interface{}{return map[string]interface{}{"ok":true}});w:=httptest.NewRecorder();e.ServeHTTP(w,httptest.NewRequest("GET","/monitor",nil));if !json.Valid(w.Body.Bytes()){t.Errorf("invalid concurrent snapshot: %q",w.Body.String());return}}}(n)};wg.Wait()}
+          '''
+          for name,text in files.items():
+              p=Path(name);assert not p.exists();p.write_text(text)
+          PY
+          gofmt -w internal/controller/components_test.go internal/tagfilters/components_test.go internal/monitor/components_test.go
+          go test -mod=readonly -run '^$' ./...
+          git config user.name Laisky
+          git config user.email public@laisky.com
+          git add internal/controller/components_test.go internal/tagfilters/components_test.go internal/monitor/components_test.go
+          git commit -m 'test: cover dispatch, fanout, parser, concatenation, routing and metric contracts'
+          git push origin HEAD:refs/heads/test/component-behavior-20260922
+      - name: Capture fail-first behavior and independent controls
+        run: |
+          python3 - <<'PY'
+          import subprocess,json
+          for package in ['controller','tagfilters','monitor']:
+              p=subprocess.run(['go','test','-mod=readonly','-json','-count=1','-timeout=45s','-run','^TestComponent','./internal/'+package],capture_output=True,text=True)
+              print('PACKAGE',package,'EXIT',p.returncode)
+              for line in p.stdout.splitlines():
+                  try:e=json.loads(line)
+                  except ValueError: print(line);continue
+                  if e.get('Action') in ['pass','fail']:print(e.get('Action'),e.get('Test',e.get('Package')))
+                  text=e.get('Output','')
+                  if '_test.go:' in text or 'fatal error:' in text or 'panic:' in text:print(text.rstrip())
+              print(p.stderr)
+          PY
+      - name: Race reproductions
+        run: |
+          go test -mod=readonly -race -count=1 -timeout=60s -run 'TestComponentMonitorConcurrent|TestComponentTagPipelineConcurrent' ./internal/monitor ./internal/tagfilters

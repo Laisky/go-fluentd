@@ -1,0 +1,23 @@
+name: Delivery workspace
+on:
+  push:
+    branches: [test/end-to-end-delivery-20260922]
+    paths: [.github/workflows/delivery-workspace.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: |
+          git bundle create /tmp/delivery-source.bundle --all
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: delivery-source
+          path: /tmp/delivery-source.bundle
+          retention-days: 3

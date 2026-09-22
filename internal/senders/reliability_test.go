@@ -76,7 +76,7 @@ func regressionHTTP(t *testing.T, zeroContext bool) {
 	}
 }
 
-func TestRegressionHTTPZeroBulkContext(t *testing.T) { regressionHTTP(t, true) }
+func TestRegressionHTTPZeroBulkContext(t *testing.T)          { regressionHTTP(t, true) }
 func TestRegressionHTTPCompleteGzipAndCloseBody(t *testing.T) { regressionHTTP(t, false) }
 
 func TestRegressionHTTPFailureIsReturned(t *testing.T) {
@@ -100,8 +100,8 @@ func regressionES() *ElasticSearchSender {
 func TestRegressionElasticsearchResponse(t *testing.T) {
 	for _, tc := range []struct {
 		name, body string
-		status int
-		wantErr bool
+		status     int
+		wantErr    bool
 	}{
 		{"success", `{"errors":false,"items":[{"index":{"status":201}}]}`, 200, false},
 		{"partial_failure", `{"errors":true,"items":[{"index":{"status":429}}]}`, 200, true},
@@ -154,8 +154,18 @@ func TestRegressionElasticsearchMetadataEscapesIndex(t *testing.T) {
 	index := "logs\"\\test"
 	s.TagIndexMap["logs"] = index
 	b, err := s.getMsgStarting(&library.FluentMsg{Tag: "logs"})
-	if err != nil { t.Fatal(err) }
-	var got struct { Index struct { Name string `json:"_index"` } `json:"index"` }
-	if err := json.Unmarshal(b, &got); err != nil { t.Fatalf("invalid bulk metadata %q: %v", b, err) }
-	if got.Index.Name != index { t.Errorf("index=%q, want %q", got.Index.Name, index) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Index struct {
+			Name string `json:"_index"`
+		} `json:"index"`
+	}
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("invalid bulk metadata %q: %v", b, err)
+	}
+	if got.Index.Name != index {
+		t.Errorf("index=%q, want %q", got.Index.Name, index)
+	}
 }

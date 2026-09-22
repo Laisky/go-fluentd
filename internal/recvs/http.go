@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -176,16 +177,22 @@ func (r *HTTPRecv) HTTPLogHandler(ctx *gin.Context) {
 
 	if ctx.Request.ContentLength > r.MaxBodySize {
 		log.Logger.Warn("content size too big", zap.Int64("size", ctx.Request.ContentLength))
-		r.BadRequest(ctx, fmt.Sprintf("content size must less than %d bytes", r.MaxBodySize))
+		ctx.AbortWithStatus(http.StatusRequestEntityTooLarge)
 		return
 	}
 
 	msg := r.msgPool.Get().(*library.FluentMsg)
+	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, r.MaxBodySize)
 	msgData, err := ioutil.ReadAll(ctx.Request.Body)
 	if err != nil {
 		log.Logger.Warn("try to read log got error", zap.Error(err))
 		r.msgPool.Put(msg)
-		r.BadRequest(ctx, "can not load request body")
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			ctx.AbortWithStatus(http.StatusRequestEntityTooLarge)
+		} else {
+			r.BadRequest(ctx, "can not load request body")
+		}
 		return
 	}
 

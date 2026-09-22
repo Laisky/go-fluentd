@@ -642,7 +642,13 @@ func (j *Journal) runJournalMaintenance(ctx context.Context, interval time.Durat
 		default:
 		}
 		action()
-		time.Sleep(interval)
+		timer := time.NewTimer(interval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
 	}
 }
 
@@ -655,7 +661,11 @@ func (j *Journal) runSkipDump(ctx context.Context, input <-chan *library.FluentM
 			if !ok {
 				return
 			}
-			j.outChan <- msg
+			select {
+			case j.outChan <- msg:
+			case <-ctx.Done():
+				return
+			}
 		}
 	}
 }

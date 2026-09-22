@@ -78,73 +78,79 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 }
 
 func (r *RsyslogRecv) run(ctx context.Context) {
-	defer log.Logger.Info("rsyslog reciver exit", zap.String("name", r.GetName()))
-	var (
-		ok      bool
-		msg     *library.FluentMsg
-		logPart format.LogParts
-		ctx2Srv context.Context
-		cancel  func()
-	)
-SERVER_LOOP:
-	for {
+	defer log.Logger.Info("rsyslog receiver exit", zap.String("name", r.GetName()))
+	factory := r.newServer
+	if factory == nil {
+		factory = func(addr string) (syslogServer, syslog.LogPartsChannel, error) { return NewRsyslogSrv(addr) }
+	}
+	retry := func() bool {
+		timer := time.NewTimer(defaultRetryWait)
+		defer timer.Stop()
 		select {
 		case <-ctx.Done():
-			break SERVER_LOOP
-		default:
+			return false
+		case <-timer.C:
+			return true
 		}
-
-		factory := r.newServer
-		if factory == nil {
-			factory = func(addr string) (syslogServer, syslog.LogPartsChannel, error) { return NewRsyslogSrv(addr) }
+	}
+	for {
+		if ctx.Err() != nil {
+			return
 		}
-		srv, inchan, err := factory(r.Addr)
+		srv, input, err := factory(r.Addr)
 		if err != nil {
-			log.Logger.Error("new rsyslog server", zap.String("addr", r.Addr), zap.Error(err))
-			time.Sleep(defaultRetryWait)
-			continue SERVER_LOOP
-		}
-		log.Logger.Info("listening rsyslog", zap.String("addr", r.Addr))
-		if err = srv.Boot(&syslog.BLBCfg{
-			ACK: []byte{},
-			SYN: "hello",
-		}); err != nil {
-			log.Logger.Error("try to start rsyslog server got error", zap.Error(err))
-			cancel()
+			log.Logger.Error("new syslog server", zap.Error(err))
+			if !retry() {
+				return
+			}
 			continue
 		}
-
-		ctx2Srv, cancel = context.WithCancel(ctx)
-		go func(srv syslogServer, cancel func()) {
-			srv.Wait()
-			cancel()
-		}(srv, cancel)
-
-	LOG_LOOP:
-		for {
-			select {
-			case <-ctx2Srv.Done():
-				log.Logger.Info("try to reconnect rsyslog server")
-				break LOG_LOOP
-			case logPart, ok = <-inchan:
-				if !ok {
-					log.Logger.Info("rsyslog channel closed")
-					cancel()
-					break LOG_LOOP
+		if err := srv.Boot(&syslog.BLBCfg{ACK: []byte{}, SYN: "hello"}); err != nil {
+			log.Logger.Error("start syslog server", zap.Error(err))
+			// A failed Boot has no live child context to cancel, but may own sockets.
+			if err := srv.Kill(); err != nil {
+				log.Logger.Error("close failed syslog server", zap.Error(err))
+			}
+			if !retry() {
+				return
+			}
+			continue
+		}
+		serverCtx, stop := context.WithCancel(ctx)
+		go func() { srv.Wait(); stop() }()
+		func() {
+			defer stop()
+			defer func() {
+				if err := srv.Kill(); err != nil {
+					log.Logger.Error("close syslog server", zap.Error(err))
+				}
+			}()
+			for {
+				select {
+				case <-serverCtx.Done():
+					return
+				case part, ok := <-input:
+					if !ok {
+						return
+					}
+					msg := r.parseLogPart(part)
+					if msg == nil {
+						continue
+					}
+					select {
+					case r.asyncOutChan <- msg:
+					case <-serverCtx.Done():
+						r.msgPool.Put(msg)
+						return
+					}
 				}
 			}
-
-			msg = r.parseLogPart(logPart)
-			if msg == nil {
-				continue
-			}
-
-			log.Logger.Debug("receive new msg", zap.String("tag", r.Tag), zap.Int64("id", msg.ID))
-			r.asyncOutChan <- msg
+		}()
+		if ctx.Err() != nil {
+			return
 		}
-
-		if err = srv.Kill(); err != nil {
-			log.Logger.Error("stop rsyslog got error", zap.Error(err))
+		if !retry() {
+			return
 		}
 	}
 }

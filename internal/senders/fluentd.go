@@ -24,6 +24,7 @@ type FluentSenderCfg struct {
 }
 
 type FluentSender struct {
+	dialContext func(context.Context, string, string) (net.Conn, error)
 	*BaseSender
 	*FluentSenderCfg
 }
@@ -122,7 +123,7 @@ func (s *FluentSender) spawnChildSenderForTag(ctx context.Context, tag string, i
 
 RECONNECT: // reconnect to downstream
 	for {
-		if conn, err = net.DialTimeout("tcp", s.Addr, 10*time.Second); err != nil {
+		if conn, err = s.dialConnection(ctx, "tcp", s.Addr); err != nil {
 			logger.Error("connect to fluentd server",
 				zap.Error(err), zap.String("tag", tag))
 			time.Sleep(time.Second)
@@ -206,4 +207,11 @@ RECONNECT: // reconnect to downstream
 			}
 		}
 	}
+}
+
+func (s *FluentSender) dialConnection(ctx context.Context, network, address string) (net.Conn, error) {
+	if s.dialContext != nil {
+		return s.dialContext(ctx, network, address)
+	}
+	return net.DialTimeout(network, address, 10*time.Second)
 }

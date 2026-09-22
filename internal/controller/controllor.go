@@ -112,6 +112,7 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 			case "http":
 				receivers = append(receivers, recvs.NewHTTPRecv(&recvs.HTTPRecvCfg{ // wechat mini program
 					Name:               name,
+					RequireDurableAck:  gutils.Settings.GetBool("settings.acceptor.recvs.plugins." + name + ".require_durable_ack"),
 					HTTPSrv:            server,
 					Env:                env,
 					MsgKey:             gutils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".msg_key"),

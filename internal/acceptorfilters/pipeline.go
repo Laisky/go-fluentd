@@ -118,6 +118,7 @@ func (f *AcceptorPipeline) registerMonitor() {
 }
 
 func (f *AcceptorPipeline) DiscardMsg(msg *library.FluentMsg) {
+	msg.CompleteAcceptance(errors.New("message rejected before persistence"))
 	msg.ExtIds = nil
 	f.MsgPool.Put(msg)
 }
@@ -167,6 +168,16 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 					}
 				}
 
+				if msg.DurableAck != nil {
+					select {
+					case outChan <- msg:
+					case <-ctx.Done():
+						msg.CompleteAcceptance(ctx.Err())
+						f.MsgPool.Put(msg)
+						return
+					}
+					continue
+				}
 				select {
 				case outChan <- msg:
 				default:
@@ -218,7 +229,13 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 					}
 				}
 
-				outChan <- msg
+				select {
+				case outChan <- msg:
+				case <-ctx.Done():
+					msg.CompleteAcceptance(ctx.Err())
+					f.MsgPool.Put(msg)
+					return
+				}
 			}
 
 		}()

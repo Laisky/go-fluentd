@@ -32,3 +32,22 @@ The journal's two-generation committed-ID cache retains its non-destructive look
 ## Legacy image boundary
 
 The normal runtime and test Dockerfiles are self-contained. `forward.Dockerfile` retains the deployment-owned MooseFS runtime and requires an externally supplied `startApp.sh`; that script is not in this repository. CI builds its `gobin` stage only. `golang-stretch.Dockerfile` keeps its historical filename for compatibility but now builds on Go 1.27.1 / Debian Bookworm.
+
+
+## Reliable HTTP acceptance and executable-level qualification
+
+HTTP receiver plugins may enable `require_durable_ack: true`. In that mode a
+successful response waits for a completed local journal write and `Sync()`;
+pre-persistence queues backpressure instead of bypassing the journal, and write
+errors or pre-persistence filter rejection return 503. The default remains false
+for compatibility. A client timeout has an unknown outcome and retries may
+produce duplicates. This is local durable ownership, not an immediate downstream
+ACK, and it has an intentional sync cost.
+
+See [the external delivery contracts](../tests/delivery/README.md) for actual
+executable/SIGKILL/restart tests, external ledgers, seeded fault schedules and
+old-binary/new-binary controls. The journal reserves IDs from retained data as
+well as ACK files and includes the newest sealed segment in first-pass recovery.
+Interrupted newest appends retain `.incomplete` evidence rather than erasing
+source bytes. Arbitrary corruption still fails closed; physical power-loss,
+real-cluster and exactly-once guarantees are not inferred.

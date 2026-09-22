@@ -7,6 +7,9 @@ type FluentMsg struct {
 	// JournalTag is local acknowledgement provenance, not a routing tag. It is
 	// set by the journal writer/replayer and never sent to downstream services.
 	JournalTag string `msg:"-" json:"-"`
+	// DurableAck is an optional one-shot acceptance receipt owned by the pipeline.
+	// It is not a downstream delivery ACK and is never persisted or transmitted.
+	DurableAck chan error `msg:"-" json:"-"`
 	Tag        string
 	Message    map[string]interface{}
 	ID         int64

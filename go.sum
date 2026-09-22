@@ -11,6 +11,8 @@ github.com/Laisky/go-journal v1.1.7-0.20260922164307-3ed625db57b2 h1:0yVGS3otp36
 github.com/Laisky/go-journal v1.1.7-0.20260922164307-3ed625db57b2/go.mod h1:8wjz86nBGSDCpnS/zpdNY/jkz48qUz24/UDszLbbUsY=
 github.com/Laisky/go-journal v1.1.7-0.20260922164955-86ddbb3d3069 h1:ZuFKWPu+5BVWUrgYvEy6Ye9o34CDgYKjjqygXwj0q2M=
 github.com/Laisky/go-journal v1.1.7-0.20260922164955-86ddbb3d3069/go.mod h1:8wjz86nBGSDCpnS/zpdNY/jkz48qUz24/UDszLbbUsY=
+github.com/Laisky/go-journal v1.1.7-0.20260922221748-5e9621527726 h1:wisvy1VHZaudC72GtWI479c/aXrDsjNLqbYhL5n55Wo=
+github.com/Laisky/go-journal v1.1.7-0.20260922221748-5e9621527726/go.mod h1:8wjz86nBGSDCpnS/zpdNY/jkz48qUz24/UDszLbbUsY=
 github.com/Laisky/go-kafka v1.0.1 h1:DNMBLshSMUUedH9nmBhGrpEf0FLGIAQfPlbQBkFcCfw=
 github.com/Laisky/go-kafka v1.0.1/go.mod h1:AksqzI2+yDSX6MtQikP6aTg9om52pSdropjst0oqeZE=
 github.com/Laisky/go-syslog v2.3.3+incompatible h1:TSHhP3iadAPDzC5efyYLPnGkv2pvUtuUInm7poVRkFA=

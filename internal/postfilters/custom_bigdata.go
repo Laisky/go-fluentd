@@ -57,15 +57,22 @@ func (f *CustomBigDataFilter) Filter(msg *library.FluentMsg) *library.FluentMsg 
 		return msg
 	}
 
-	if t, err = time.Parse(timeFormat, msg.Message[tsKey].(string)); err != nil {
+	timestamp, validTime := textField(msg.Message[tsKey])
+	vin, validVIN := textField(msg.Message["vin"])
+	if !validTime || !validVIN || vin == "" {
+		f.DiscardMsg(msg)
+		return nil
+	}
+	if t, err = time.Parse(timeFormat, timestamp); err != nil {
 		log.Logger.Error("unknown format of @timestamp for bigdata",
 			zap.String("tag", msg.Tag),
 			zap.String(tsKey, fmt.Sprint(msg.Message[tsKey])),
 			zap.Error(err),
 		)
+		f.DiscardMsg(msg)
 		return nil
 	}
 
-	msg.Message["rowkey"] = msg.Message["vin"].(string) + "_" + strconv.FormatInt(t.Unix(), 10)
+	msg.Message["rowkey"] = vin + "_" + strconv.FormatInt(t.Unix(), 10)
 	return msg
 }

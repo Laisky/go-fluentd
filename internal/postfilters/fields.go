@@ -45,7 +45,10 @@ func getIncludeMap(include []string) map[string]struct{} {
 		return im
 	}
 
-	for _, k := range append(include, library.MustIncludeFileds...) {
+	for _, k := range include {
+		im[k] = struct{}{}
+	}
+	for _, k := range library.MustIncludeFileds {
 		im[k] = struct{}{}
 	}
 	return im

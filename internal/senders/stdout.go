@@ -78,6 +78,7 @@ func (s *StdoutSender) GetName() string {
 
 func (s *StdoutSender) startStats(ctx context.Context) {
 	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -123,10 +124,8 @@ func (s *StdoutSender) Spawn(ctx context.Context) chan<- *library.FluentMsg {
 						zap.String("msg", fmt.Sprint(msg.Message)))
 				}
 
-				if s.IsCommit {
-					s.successedChan <- msg
-				} else {
-					s.failedChan <- msg
+				if !s.reportBatch(ctx, []*library.FluentMsg{msg}, s.IsCommit) {
+					return
 				}
 			}
 		}()

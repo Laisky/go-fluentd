@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -41,15 +42,25 @@ func RunServer(ctx context.Context, addr string) {
 	middlewares.BindPrometheus(server)
 
 	log.Logger.Info("listening on http", zap.String("addr", addr))
-	go func() {
-		log.Logger.Panic("server exit", zap.Error(httpSrv.ListenAndServe()))
-	}()
-
-	<-ctx.Done()
-	srvCtx, cancel := context.WithTimeout(ctx, defaultGraceShutdownWait)
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- httpSrv.ListenAndServe() }()
+	select {
+	case err := <-serveErr:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Logger.Error("HTTP server stopped", zap.Error(err))
+		}
+		return
+	case <-ctx.Done():
+	}
+	// The parent has already been canceled. Draining active requests requires
+	// an independent bounded context, not a child of the canceled parent.
+	srvCtx, cancel := context.WithTimeout(context.Background(), defaultGraceShutdownWait)
 	defer cancel()
 	if err := httpSrv.Shutdown(srvCtx); err != nil {
 		log.Logger.Error("shutdown monitor server", zap.Error(err))
+		httpSrv.Close()
 	}
-
+	if err := <-serveErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Logger.Error("HTTP server stopped", zap.Error(err))
+	}
 }

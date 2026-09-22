@@ -311,10 +311,10 @@ func (p *Producer) Run(ctx context.Context) {
 					case sc.inchan <- msg:
 					default:
 						if sc.sender.DiscardWhenBlocked() {
-							p.successedChan <- msg
 							log.Logger.Warn("skip sender and discard msg since of its inchan is full",
-								zap.String("name", s.GetName()),
+								zap.String("name", sc.sender.GetName()),
 								zap.String("tag", msg.Tag))
+							p.successedChan <- msg
 						} else {
 							p.failedChan <- msg
 							// p.Debug("skip sender and not discard msg since of its inchan is full",

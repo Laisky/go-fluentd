@@ -39,6 +39,16 @@ func NewHTTPSender(cfg *HTTPSenderCfg) *HTTPSender {
 		panic(fmt.Errorf("addr should not be empty: %v", cfg.Addr))
 	}
 
+	if cfg.NFork <= 0 {
+		cfg.NFork = 1
+	}
+	if cfg.BatchSize <= 0 {
+		cfg.BatchSize = 500
+	}
+	if cfg.MaxWait <= 0 {
+		cfg.MaxWait = 5 * time.Second
+	}
+
 	s := &HTTPSender{
 		BaseSender: &BaseSender{
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
@@ -61,99 +71,39 @@ func (s *HTTPSender) GetName() string {
 }
 
 func (s *HTTPSender) Spawn(ctx context.Context) chan<- *library.FluentMsg {
-	log.Logger.Info("SpawnForTag")
-	inChan := make(chan *library.FluentMsg, s.InChanSize) // for each tag
-
-	for i := 0; i < s.NFork; i++ { // parallel to each tag
-		go func(i int) {
-			defer log.Logger.Info("producer exits",
-				zap.Int("i", i),
-				zap.String("name", s.GetName()))
-
-			var (
-				ok               bool
-				nRetry           int
-				maxRetry         = 3
-				msg              *library.FluentMsg
-				msgBatch         = make([]*library.FluentMsg, s.BatchSize)
-				msgBatchDelivery []*library.FluentMsg
-				iBatch           = 0
-				lastT            = time.Unix(0, 0)
-				bulkCtx          = &bulkOpCtx{}
-				err              error
-				ticker           = time.NewTicker(s.MaxWait)
-			)
-			defer ticker.Stop()
-
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case msg, ok = <-inChan:
-					if !ok {
-						log.Logger.Info("inChan closed")
-						return
-					}
-					msgBatch[iBatch] = msg
-					iBatch++
-				case <-ticker.C:
-					if iBatch == 0 {
-						continue
-					}
-					msg = msgBatch[iBatch-1]
+	in := make(chan *library.FluentMsg, s.InChanSize)
+	for i := 0; i < s.NFork; i++ {
+		go func() {
+			bulk := &bulkOpCtx{}
+			runBatchWorker(ctx, in, s.BatchSize, s.MaxWait, func(msgs []*library.FluentMsg) bool {
+				if ctx.Err() != nil {
+					return false
 				}
-
-				if iBatch < s.BatchSize &&
-					utils.Clock.GetUTCNow().Sub(lastT) < s.MaxWait {
-					continue
-				}
-				lastT = utils.Clock.GetUTCNow()
-				msgBatchDelivery = msgBatch[:iBatch]
-				iBatch = 0
-
-				nRetry = 0
 				if utils.Settings.GetBool("dry") {
-					log.Logger.Info("send message to backend",
-						zap.Int("batch", len(msgBatchDelivery)),
-						zap.String("log", fmt.Sprint(msgBatch[0].Message)))
-					for _, msg = range msgBatchDelivery {
-						s.successedChan <- msg
+					return s.reportBatch(ctx, msgs, true)
+				}
+				var err error
+				for attempt := 0; attempt < 4; attempt++ {
+					if ctx.Err() != nil {
+						return false
 					}
-					continue
-				}
-
-			SEND_MSG:
-				if err = s.SendBulkMsgs(bulkCtx, msgBatchDelivery); err != nil {
-					nRetry++
-					if nRetry > maxRetry {
-						log.Logger.Error("discard msg since of sender err",
-							zap.Error(err),
-							zap.String("tag", msg.Tag),
-							zap.Int("num", len(msgBatchDelivery)))
-						for _, msg = range msgBatchDelivery {
-							s.failedChan <- msg
-						}
-
-						continue
+					err = s.sendBulkMsgs(ctx, bulk, msgs)
+					if err == nil {
+						break
 					}
-					goto SEND_MSG
 				}
-
-				log.Logger.Debug("success sent message to backend",
-					zap.String("backend", s.Addr),
-					zap.Int("batch", len(msgBatchDelivery)),
-					zap.String("tag", msg.Tag))
-				for _, msg = range msgBatchDelivery {
-					s.successedChan <- msg
-				}
-			}
-		}(i)
+				return s.reportBatch(ctx, msgs, err == nil)
+			})
+		}()
 	}
-
-	return inChan
+	return in
 }
 
 func (s *HTTPSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*library.FluentMsg) error {
+	return s.sendBulkMsgs(context.Background(), bulkCtx, msgs)
+}
+
+func (s *HTTPSender) sendBulkMsgs(ctx context.Context, bulkCtx *bulkOpCtx, msgs []*library.FluentMsg) error {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -179,7 +129,7 @@ func (s *HTTPSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*library.FluentMsg)
 	if err = bulkCtx.gzWriter.Close(); err != nil {
 		return errors.Wrap(err, "finish gzip HTTP batch")
 	}
-	req, err := http.NewRequest("POST", s.Addr, bulkCtx.buf)
+	req, err := http.NewRequestWithContext(ctx, "POST", s.Addr, bulkCtx.buf)
 	if err != nil {
 		return errors.Wrap(err, "create HTTP request")
 	}

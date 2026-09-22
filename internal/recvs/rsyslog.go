@@ -32,6 +32,7 @@ func NewRsyslogSrv(addr string) (*syslog.Server, syslog.LogPartsChannel, error) 
 	}
 	if err = server.ListenTCP(addr); err != nil {
 		log.Logger.Error("listen tcp", zap.Error(err), zap.String("addr", addr))
+		server.Kill()
 		return nil, nil, err
 	}
 	return server, inchan, nil
@@ -68,12 +69,11 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 	go func() {
 		defer log.Logger.Info("rsyslog reciver exit", zap.String("name", r.GetName()))
 		var (
-			ok                        bool
-			msg                       *library.FluentMsg
-			logPart                   format.LogParts
-			ctx2Srv                   context.Context
-			cancel                    func()
-			rewriteKey, rewriteNewKey string
+			ok      bool
+			msg     *library.FluentMsg
+			logPart format.LogParts
+			ctx2Srv context.Context
+			cancel  func()
 		)
 	SERVER_LOOP:
 		for {
@@ -86,7 +86,13 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 			srv, inchan, err := NewRsyslogSrv(r.Addr)
 			if err != nil {
 				log.Logger.Error("new rsyslog server", zap.String("addr", r.Addr), zap.Error(err))
-				time.Sleep(defaultRetryWait)
+				retry := time.NewTimer(defaultRetryWait)
+				select {
+				case <-ctx.Done():
+					retry.Stop()
+					return
+				case <-retry.C:
+				}
 				continue SERVER_LOOP
 			}
 			log.Logger.Info("listening rsyslog", zap.String("addr", r.Addr))
@@ -95,7 +101,7 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 				SYN: "hello",
 			}); err != nil {
 				log.Logger.Error("try to start rsyslog server got error", zap.Error(err))
-				cancel()
+				srv.Kill()
 				continue
 			}
 
@@ -119,33 +125,15 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 					}
 				}
 
-				switch t := logPart[r.TimeKey].(type) {
-				case time.Time:
-					logPart[r.NewTimeKey] = t.Add(r.TimeShift).UTC().Format(r.NewTimeFormat)
-					delete(logPart, r.TimeKey)
-				default:
-					log.Logger.Error("discard log since unknown timestamp format")
+				msg = r.parseLogPart(logPart)
+				if msg == nil {
+					continue
 				}
-
-				// rename to message because of the elasticsearch default query field is `message`
-				logPart["message"] = logPart[r.MsgKey]
-				delete(logPart, r.MsgKey)
-
-				msg = r.msgPool.Get().(*library.FluentMsg)
-				// log.Logger.Info(fmt.Sprintf("got %p", msg))
-				msg.ID = r.counter.Count()
-				msg.Tag = r.Tag
-				msg.Message = logPart
-				for rewriteKey, rewriteNewKey = range r.RewriteTags { // rewrite key
-					msg.Message[rewriteNewKey] = msg.Message[rewriteKey]
-					delete(msg.Message, rewriteKey)
+				select {
+				case r.asyncOutChan <- msg:
+				case <-ctx2Srv.Done():
+					break LOG_LOOP
 				}
-				if r.TagKey != "" { // reset tag
-					msg.Message[r.TagKey] = r.Tag
-				}
-
-				log.Logger.Debug("receive new msg", zap.String("tag", r.Tag), zap.Int64("id", msg.ID))
-				r.asyncOutChan <- msg
 			}
 
 			if err = srv.Kill(); err != nil {
@@ -153,4 +141,44 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+func (r *RsyslogRecv) parseLogPart(logPart format.LogParts) *library.FluentMsg {
+	switch t := logPart[r.TimeKey].(type) {
+	case time.Time:
+		logPart[r.NewTimeKey] = t.Add(r.TimeShift).UTC().Format(r.NewTimeFormat)
+		if r.TimeKey != r.NewTimeKey {
+			delete(logPart, r.TimeKey)
+		}
+	default:
+		log.Logger.Error("discard log since unknown timestamp format")
+		return nil
+	}
+
+	// rename to message because of the elasticsearch default query field is `message`
+	if r.MsgKey != "message" {
+		logPart["message"] = logPart[r.MsgKey]
+		delete(logPart, r.MsgKey)
+	}
+
+	msg := r.newMsg()
+	// log.Logger.Info(fmt.Sprintf("got %p", msg))
+	msg.ID = r.counter.Count()
+	msg.Tag = r.Tag
+	msg.Message = logPart
+	for rewriteKey, rewriteNewKey := range r.RewriteTags { // rewrite key
+		if rewriteKey == rewriteNewKey {
+			continue
+		}
+		if value, exists := msg.Message[rewriteKey]; exists {
+			msg.Message[rewriteNewKey] = value
+			delete(msg.Message, rewriteKey)
+		}
+	}
+	if r.TagKey != "" { // reset tag
+		msg.Message[r.TagKey] = r.Tag
+	}
+
+	log.Logger.Debug("receive new msg", zap.String("tag", r.Tag), zap.Int64("id", msg.ID))
+	return msg
 }

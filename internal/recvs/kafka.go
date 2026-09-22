@@ -31,9 +31,11 @@ type KafkaCommitCfg struct {
 	IntervalDuration time.Duration
 }
 
-/*KafkaCfg kafka client configuration
+/*
+KafkaCfg kafka client configuration
 
 Args:
+
 	IsJSONFormat: unmarshal json into `msg.Message`
 	MsgKey: put kafka msg body into `msg.Message[MsgKey]`
 	TagKey: set tag into `msg.Message[TagKey]`
@@ -207,7 +209,7 @@ func (r *KafkaRecv) Run(ctx context.Context) {
 
 // parse2Msg parse kafkamsg to fluentdmsg
 func (r *KafkaRecv) parse2Msg(kmsg *kafka.KafkaMsg) (msg *library.FluentMsg, err error) {
-	msg = r.msgPool.Get().(*library.FluentMsg)
+	msg = r.newMsg()
 	msg.ID = r.counter.Count()
 	msg.Tag = r.Tag
 
@@ -218,6 +220,11 @@ func (r *KafkaRecv) parse2Msg(kmsg *kafka.KafkaMsg) (msg *library.FluentMsg, err
 		if err = json.Unmarshal(kmsg.Message, &msg.Message); err != nil {
 			r.msgPool.Put(msg)
 			return nil, errors.Wrap(err, "try to unmarshal kmsg got error")
+		}
+
+		if msg.Message == nil {
+			r.msgPool.Put(msg)
+			return nil, errors.New("Kafka JSON must be an object")
 		}
 
 		if r.JSONTagKey != "" { // load msg.Tag from json

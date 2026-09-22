@@ -35,7 +35,12 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *librar
 		}
 
 		if !cf.IsTagSupported(msg.Tag) {
-			outChan <- msg
+			select {
+			case outChan <- msg:
+			case <-ctx.Done():
+				return
+			}
+			continue
 		}
 
 		if cf.MsgKey != "" {
@@ -48,7 +53,11 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *librar
 					zap.String("tag", msg.Tag),
 					zap.String("msg", fmt.Sprint(msg.Message)),
 					zap.String("msg_key", cf.MsgKey))
-				outChan <- msg
+				select {
+				case outChan <- msg:
+				case <-ctx.Done():
+					return
+				}
 				continue
 			}
 
@@ -58,7 +67,11 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *librar
 					log.Logger.Warn("discard message since format not matched",
 						zap.String("tag", msg.Tag),
 						zap.ByteString("log", msg.Message[cf.MsgKey].([]byte)))
-					cf.DiscardMsg(msg)
+					select {
+					case cf.waitCommitChan <- msg:
+					case <-ctx.Done():
+						return
+					}
 					continue
 				}
 			}
@@ -69,39 +82,21 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *librar
 			}
 		}
 
-		// parse json
-		ok = false
+		// Decode into a temporary map. Invalid or null JSON must not erase
+		// or partially overwrite fields in the original record.
 		if cf.ParseJSONKey != "" {
-			switch msgData := msg.Message[cf.ParseJSONKey].(type) {
+			var payload []byte
+			switch value := msg.Message[cf.ParseJSONKey].(type) {
 			case string:
-				if err = json.UnmarshalFromString(msgData, &msg.Message); err != nil {
-					log.Logger.Warn("json unmarshal JSON args got error",
-						zap.String("tag", msg.Tag),
-						zap.Error(err),
-						zap.Int64s("ext-ids", msg.ExtIds),
-						zap.Int64("id", msg.ID),
-						zap.String("args", msgData))
-				} else {
-					ok = true
-				}
+				payload = []byte(value)
 			case []byte:
-				if err = json.Unmarshal(msgData, &msg.Message); err != nil {
-					log.Logger.Warn("json unmarshal JSON args got error",
-						zap.String("tag", msg.Tag),
-						zap.Error(err),
-						zap.Int64s("ext-ids", msg.ExtIds),
-						zap.Int64("id", msg.ID),
-						zap.ByteString("args", msgData))
-				} else {
-					ok = true
-				}
-			case nil:
-				log.Logger.Warn("json key does not exists", zap.String("tag", msg.Tag))
-			default:
-				log.Logger.Warn("unknown args type", zap.String("tag", msg.Tag))
+				payload = value
 			}
-
-			if ok { // if failed to parse json, reserve origin args
+			var parsed map[string]interface{}
+			if len(payload) > 0 && json.Unmarshal(payload, &parsed) == nil && parsed != nil {
+				for key, value := range parsed {
+					msg.Message[key] = value
+				}
 				delete(msg.Message, cf.ParseJSONKey)
 			}
 		}
@@ -112,7 +107,11 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *librar
 		if cf.MustInclude != "" {
 			if _, ok = msg.Message[cf.MustInclude]; !ok {
 				log.Logger.Warn("dicard since of missing key", zap.String("key", cf.MustInclude))
-				cf.DiscardMsg(msg)
+				select {
+				case cf.waitCommitChan <- msg:
+				case <-ctx.Done():
+					return
+				}
 				continue
 			}
 		}
@@ -122,7 +121,7 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *librar
 			switch ts := msg.Message[cf.TimeKey].(type) {
 			case []byte:
 				if cf.AppendTimeZone != "" {
-					v = string(ts) + cf.AppendTimeZone
+					v = string(ts) + " " + cf.AppendTimeZone
 				} else {
 					v = string(ts)
 				}
@@ -140,7 +139,11 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *librar
 					zap.String("time_key", cf.TimeKey),
 					zap.String("time_format", cf.TimeFormat),
 					zap.String("append_time_zone", cf.AppendTimeZone))
-				cf.DiscardMsg(msg)
+				select {
+				case cf.waitCommitChan <- msg:
+				case <-ctx.Done():
+					return
+				}
 				continue
 			}
 
@@ -153,7 +156,11 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *librar
 					zap.String("time_key", cf.TimeKey),
 					zap.String("time_format", cf.TimeFormat),
 					zap.String("append_time_zone", cf.AppendTimeZone))
-				cf.DiscardMsg(msg)
+				select {
+				case cf.waitCommitChan <- msg:
+				case <-ctx.Done():
+					return
+				}
 				continue
 			}
 
@@ -163,11 +170,14 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *librar
 
 			msg.Message[cf.NewTimeKey] = t.UTC().Format(cf.NewTimeFormat)
 
-			// process `add` at the end of parser
-			library.ProcessAdd(cf.AddCfg, msg)
 		}
 
-		outChan <- msg
+		library.ProcessAdd(cf.AddCfg, msg)
+		select {
+		case outChan <- msg:
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 

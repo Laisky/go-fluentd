@@ -71,11 +71,12 @@ func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 		tag2IDsCounter:      &sync.Map{},
 		tag2DataCounter:     &sync.Map{},
 	}
-	j.commitChan = make(chan *library.FluentMsg, cfg.CommitIDChanLen)
-	j.outChan = make(chan *library.FluentMsg, cfg.JournalOutChanLen)
 	if err := j.valid(); err != nil {
 		log.Logger.Panic("invalid", zap.Error(err))
 	}
+
+	j.commitChan = make(chan *library.FluentMsg, cfg.CommitIDChanLen)
+	j.outChan = make(chan *library.FluentMsg, cfg.JournalOutChanLen)
 
 	j.initLegacyJJ(ctx)
 	j.registerMonitor()
@@ -282,7 +283,7 @@ func (j *Journal) processLegacyMsg(ctx context.Context, out chan *library.Fluent
 					innerMax = data.ID
 				}
 				msg := j.MsgPool.Get().(*library.FluentMsg)
-				*msg = library.FluentMsg{ID: data.ID, Tag: storedTag, Message: message}
+				*msg = library.FluentMsg{ID: data.ID, Tag: storedTag, JournalTag: tag, Message: message}
 				select {
 				case out <- msg:
 				case <-ctx.Done():
@@ -429,6 +430,9 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 				}
 			}
 
+			// Routing filters may change Tag after persistence. Keep the journal
+			// owner separately so all acknowledgements return to this writer.
+			msg.JournalTag = tag
 			data.ID = msg.ID
 			data.Data["message"] = msg.Message
 			data.Data["tag"] = msg.Tag
@@ -599,9 +603,14 @@ func (j *Journal) startCommitRunner(ctx context.Context) {
 			log.Logger.Debug("try to commit msg",
 				zap.String("tag", msg.Tag),
 				zap.Int64("id", msg.ID))
-			if chani, ok = j.tag2JJCommitChanMap.Load(msg.Tag); !ok {
-				j.createJournalRunner(ctx, msg.Tag)
-				chani, _ = j.tag2JJCommitChanMap.Load(msg.Tag)
+			commitTag := msg.JournalTag
+			if commitTag == "" {
+				// Explicit skip-dump paths have no persisted journal owner.
+				commitTag = msg.Tag
+			}
+			if chani, ok = j.tag2JJCommitChanMap.Load(commitTag); !ok {
+				j.createJournalRunner(ctx, commitTag)
+				chani, _ = j.tag2JJCommitChanMap.Load(commitTag)
 			}
 
 			select {

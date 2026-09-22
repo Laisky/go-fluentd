@@ -47,3 +47,11 @@ func (r *BaseRecv) SetMsgPool(msgPool *sync.Pool) {
 func (r *BaseRecv) SetCounter(counter library.CounterIft) {
 	r.counter = counter
 }
+
+// newMsg starts a new receiver-owned record. Pool contents may come from failed
+// deliveries or concatenation and must never carry acknowledgement IDs forward.
+func (r *BaseRecv) newMsg() *library.FluentMsg {
+	msg := r.msgPool.Get().(*library.FluentMsg)
+	*msg = library.FluentMsg{}
+	return msg
+}

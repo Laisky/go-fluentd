@@ -1,6 +1,7 @@
 package postfilters
 
 import (
+	"sort"
 	"strings"
 
 	"gofluentd/library"
@@ -52,36 +53,38 @@ func (f *DefaultFilter) valid() error {
 }
 
 func (f *DefaultFilter) Filter(msg *library.FluentMsg) *library.FluentMsg {
-	for k, v := range msg.Message {
-		if k == "" {
-			delete(msg.Message, k)
+	// Normalize from a stable snapshot: inserting renamed keys while ranging
+	// can revisit them or resurrect the old key. Existing canonical keys win.
+	original := msg.Message
+	normalized := make(map[string]interface{}, len(original))
+	keys := make([]string, 0, len(original))
+	for key := range original {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if key == "" {
+			continue
 		}
-
-		if strings.Contains(k, ".") {
-			msg.Message[strings.Replace(k, ".", "__", -1)] = msg.Message[k]
-			delete(msg.Message, k)
-		}
-
-		switch v := v.(type) {
-		case []byte: // convert all bytes fields to string
-			msg.Message[k] = string(v)
-		case string:
-			msg.Message[k] = v
-		}
-
-		if f.MaxLen != 0 {
-			switch v := v.(type) {
-			case string:
-				if len(v) > f.MaxLen {
-					msg.Message[k] = v[:f.MaxLen]
-				}
-			case []byte:
-				if len(v) > f.MaxLen {
-					msg.Message[k] = v[:f.MaxLen]
-				}
+		target := strings.ReplaceAll(key, ".", "__")
+		if target != key {
+			if _, exists := original[target]; exists {
+				continue
+			}
+			if _, exists := normalized[target]; exists {
+				continue
 			}
 		}
+		value := original[key]
+		if raw, ok := value.([]byte); ok {
+			value = string(raw)
+		}
+		if text, ok := value.(string); ok && f.MaxLen > 0 && len(text) > f.MaxLen {
+			value = text[:f.MaxLen]
+		}
+		normalized[target] = value
 	}
+	msg.Message = normalized
 
 	library.ProcessAdd(f.AddCfg, msg)
 	return msg

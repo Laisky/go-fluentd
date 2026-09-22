@@ -1,0 +1,90 @@
+name: Delivery publication verification
+on:
+  push:
+    branches: [test/end-to-end-delivery-20260922]
+    paths: [.github/workflows/delivery-import.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.x'
+      - name: Reconstruct the hash-verified locally tested sources
+        run: |
+          python3 - <<'PY'
+          import base64,gzip,json,hashlib,subprocess
+          from pathlib import Path
+          encoded=''.join(Path(f'.delivery-patch-{i}.b64').read_text().strip() for i in range(4))
+          raw=gzip.decompress(base64.b64decode(encoded,validate=True))
+          assert hashlib.sha256(raw).hexdigest()=='05d1eb1ed33a96859a848277ea650901d6e400301e660c00e4c4b5c40da68098'
+          obj=json.loads(raw)
+          patch=Path('/tmp/delivery.patch');patch.write_text(obj['patch'])
+          subprocess.run(['git','apply','--check',str(patch)],check=True)
+          subprocess.run(['git','apply',str(patch)],check=True)
+          for name,text in obj['files'].items():
+              p=Path(name)
+              assert not p.is_absolute() and '..' not in p.parts and '.git' not in p.parts
+              assert not p.exists(),name
+              p.parent.mkdir(parents=True,exist_ok=True)
+              p.write_text(text)
+          for name,expected in obj['sha256'].items():
+              assert hashlib.sha256(Path(name).read_bytes()).hexdigest()==expected,name
+          Path('/tmp/delivery-paths').write_text('\n'.join(obj['sha256']))
+          PY
+          git diff --check
+      - name: Pin the independently verified journal commit using Go tooling
+        run: |
+          go get github.com/Laisky/go-journal@5e962152772689a6c8762888d9788d88a1f53146
+          go mod verify
+          go build -mod=readonly ./...
+          go vet -mod=readonly ./...
+          go test -mod=readonly -race -count=1 -timeout=180s -coverprofile=/tmp/delivery-coverage.out ./...
+          python3 .scripts/check_component_coverage.py /tmp/delivery-coverage.out
+          go build -mod=readonly -race -o /tmp/go-fluentd-after .
+      - name: Compile the unchanged baseline executable
+        run: |
+          git worktree add --detach /tmp/delivery-before dc768b2ec84625f71bc9119fa20641d0673160c3
+          cd /tmp/delivery-before
+          go build -mod=readonly -o /tmp/go-fluentd-before .
+      - name: Require named old failures and independent passing controls
+        run: |
+          python3 .scripts/verify_delivery_regressions.py --before /tmp/go-fluentd-before --after /tmp/go-fluentd-after --artifacts /tmp/delivery-evidence/contrast
+      - name: Run all external contracts against the race-instrumented executable
+        run: |
+          python3 tests/delivery/run.py --binary /tmp/go-fluentd-after --artifacts /tmp/delivery-evidence/seed-127 --seed 127
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('/tmp/delivery-evidence/seed-127/results.json').read_text())
+          assert r['passed'] and r['run']==r['expected']==21,r
+          PY
+          go test -mod=readonly -race -count=5 -shuffle=on -timeout=180s ./...
+      - name: Publish only verified source, tests and dependency checksums
+        run: |
+          git config user.name Laisky
+          git config user.email public@laisky.com
+          python3 - <<'PY'
+          import subprocess
+          from pathlib import Path
+          paths=Path('/tmp/delivery-paths').read_text().splitlines()+['go.mod','go.sum']
+          subprocess.run(['git','add','--',*paths],check=True)
+          PY
+          git diff --cached --check
+          git commit -m 'test: verify end-to-end durable delivery and fix crash recovery boundaries'
+          git push origin HEAD:refs/heads/test/end-to-end-delivery-20260922
+      - name: Retain source manifests, peer ledgers, fault logs and results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: delivery-publication-evidence
+          path: /tmp/delivery-evidence
+          retention-days: 14
+          if-no-files-found: warn

@@ -128,7 +128,13 @@ func (s *ElasticSearchSender) getMsgStarting(msg *library.FluentMsg) ([]byte, er
 		return nil, fmt.Errorf("tag `%v` not exists in indices", tag)
 	}
 
-	return []byte("{\"index\": {\"_index\": \"" + index + "\", \"_type\": \"logs\"}}\n"), nil
+	metadata, err := utils.JSON.Marshal(map[string]interface{}{
+		"index": map[string]string{"_index": index, "_type": "logs"},
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "encode bulk metadata")
+	}
+	return append(metadata, '\n'), nil
 }
 
 func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*library.FluentMsg) (err error) {
@@ -140,13 +146,11 @@ func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*library.F
 	var b []byte
 	for _, bulkCtx.msg = range msgs {
 		if bulkCtx.starting, err = s.getMsgStarting(bulkCtx.msg); err != nil {
-			s.logger.Warn("try to generate bulk index", zap.Error(err))
-			continue
+			return errors.Wrap(err, "prepare bulk index")
 		}
 
 		if b, err = utils.JSON.Marshal(bulkCtx.msg.Message); err != nil {
-			s.logger.Warn("try to marshal messages", zap.Error(err))
-			continue
+			return errors.Wrap(err, "marshal bulk message")
 		}
 
 		s.logger.Debug("prepare bulk content send to es",
@@ -161,13 +165,14 @@ func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*library.F
 		return nil
 	}
 
-	bulkCtx.buf.Reset()
-	bulkCtx.gzWriter.Reset(bulkCtx.buf)
+	bulkCtx.reset()
 	if _, err = bulkCtx.gzWriter.Write(bulkCtx.cnt); err != nil {
 		return errors.Wrap(err, "try to compress messages")
 	}
 
-	bulkCtx.gzWriter.Close()
+	if err = bulkCtx.gzWriter.Close(); err != nil {
+		return errors.Wrap(err, "finish gzip bulk batch")
+	}
 	req, err := http.NewRequest("POST", s.Addr, bulkCtx.buf)
 	if err != nil {
 		return errors.Wrap(err, "try to init es request")
@@ -208,45 +213,28 @@ func isStatusCodeOk(s int) bool {
 	return s/100 == 2
 }
 
-func (s *ElasticSearchSender) checkResp(resp *http.Response) (err error) {
-	if !isStatusCodeOk(resp.StatusCode) {
-		err = fmt.Errorf("server return error code %v", resp.StatusCode)
-	}
-
-	ret := &ESResp{}
-	bb, err2 := ioutil.ReadAll(resp.Body)
-	if err2 != nil {
-		s.logger.Error("try to read es resp body",
-			zap.Error(err2),
-			zap.Error(err))
-		return errors.Wrap(err2, "try to read es resp body")
-	}
+func (s *ElasticSearchSender) checkResp(resp *http.Response) error {
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return errors.Wrap(err, string(bb))
+		return errors.Wrap(err, "read Elasticsearch response")
 	}
-	s.logger.Debug("got es response", zap.ByteString("resp", bb))
-
-	if err = utils.JSON.Unmarshal(bb, ret); err != nil {
-		s.logger.Error("try to unmarshal body, body",
-			zap.Error(err),
-			zap.ByteString("body", bb))
-		return nil
+	if !isStatusCodeOk(resp.StatusCode) {
+		return fmt.Errorf("Elasticsearch returned status %d: %s", resp.StatusCode, body)
 	}
-
-	// if ret.Errors {
-	// 	// // ignore mapping type conflict & fileds number exceeds
-	// 	// if bytes.Contains(bb, []byte("mapper_parsing_exception")) ||
-	// 	// 	bytes.Contains(bb, []byte("Limit of total fields")) {
-	// 	// 	s.logger.Warn("rejected by es", zap.ByteString("error", bb))
-	// 	// 	return nil
-	// 	// }
-
-	// 	// thread pool exceeds
-	// 	if bytes.Contains(bb, []byte("EsThreadPool")) {
-	// 		return fmt.Errorf("es return error: %v", string(bb))
-	// 	}
-	// }
-
+	// A missing result is not evidence of successful delivery. Keep accepting
+	// filter_path=errors responses, but require an explicit boolean result.
+	var result struct {
+		Errors *bool `json:"errors"`
+	}
+	if err = utils.JSON.Unmarshal(body, &result); err != nil {
+		return errors.Wrap(err, "decode Elasticsearch response")
+	}
+	if result.Errors == nil {
+		return fmt.Errorf("Elasticsearch response is missing the errors result")
+	}
+	if *result.Errors {
+		return fmt.Errorf("Elasticsearch rejected one or more bulk items: %s", body)
+	}
 	return nil
 }
 

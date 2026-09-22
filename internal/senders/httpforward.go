@@ -3,6 +3,7 @@ package senders
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -152,37 +153,52 @@ func (s *HTTPSender) Spawn(ctx context.Context) chan<- *library.FluentMsg {
 	return inChan
 }
 
-func (s *HTTPSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*library.FluentMsg) (err error) {
-	msgCnts := make([]map[string]interface{}, len(msgs))
-	for i, m := range msgs {
-		msgCnts[i] = m.Message
+func (s *HTTPSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*library.FluentMsg) error {
+	if len(msgs) == 0 {
+		return nil
 	}
-
-	bulkCtx.buf.Reset()
-	bulkCtx.gzWriter.Reset(bulkCtx.buf)
-	var jb []byte
-	if jb, err = utils.JSON.Marshal(msgCnts); err != nil {
-		return errors.Wrap(err, "try to marshal messages got error")
+	if bulkCtx == nil {
+		return fmt.Errorf("nil bulk context")
 	}
-
-	if _, err = bulkCtx.gzWriter.Write(jb); err != nil {
-		return errors.Wrap(err, "try to compress messages got error")
+	records := make([]map[string]interface{}, 0, len(msgs))
+	for _, msg := range msgs {
+		if msg == nil {
+			return fmt.Errorf("nil message in HTTP batch")
+		}
+		records = append(records, msg.Message)
 	}
-
-	bulkCtx.gzWriter.Flush()
+	data, err := utils.JSON.Marshal(records)
+	if err != nil {
+		return errors.Wrap(err, "marshal HTTP batch")
+	}
+	bulkCtx.reset()
+	if _, err = bulkCtx.gzWriter.Write(data); err != nil {
+		return errors.Wrap(err, "compress HTTP batch")
+	}
+	// Flush alone does not write the gzip trailer.
+	if err = bulkCtx.gzWriter.Close(); err != nil {
+		return errors.Wrap(err, "finish gzip HTTP batch")
+	}
 	req, err := http.NewRequest("POST", s.Addr, bulkCtx.buf)
 	if err != nil {
-		return errors.Wrap(err, "try to init es request got error")
+		return errors.Wrap(err, "create HTTP request")
 	}
-	req.Header.Set("Content-encoding", "gzip")
+	req.Header.Set("Content-Encoding", "gzip")
+	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return errors.Wrap(err, "try to request es got error")
+		return errors.Wrap(err, "send HTTP batch")
 	}
-	if err = utils.CheckResp(resp); err != nil {
-		return errors.Wrap(err, "request es got error")
+	defer resp.Body.Close()
+	// Bound diagnostic bodies; do not let a failing peer exhaust memory.
+	if resp.StatusCode/100 != 2 {
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+		if readErr != nil {
+			return errors.Wrap(readErr, "read HTTP error response")
+		}
+		return fmt.Errorf("HTTP batch returned status %d: %s", resp.StatusCode, body)
 	}
-
-	log.Logger.Debug("httpforward bulk all done", zap.Int("batch", len(msgs)))
-	return nil
+	// Drain small successful responses for connection reuse, but always close.
+	_, err = io.Copy(io.Discard, io.LimitReader(resp.Body, 64*1024))
+	return errors.Wrap(err, "read HTTP response")
 }

@@ -1,0 +1,75 @@
+name: Component publication verification
+on:
+  push:
+    branches: [test/component-behavior-20260922]
+    paths: [.github/workflows/component-import.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.x'
+      - name: Reconstruct exactly the locally tested source files
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, json, lzma, subprocess
+          from pathlib import Path
+          encoded = ''.join(Path(f'.github/component-import.{i:02}.b64').read_text().strip() for i in range(1,5))
+          data = lzma.decompress(base64.b64decode(encoded, validate=True))
+          assert hashlib.sha256(data).hexdigest() == '24ad6733d04a5049e164459f78699a946922d68464b30a8ae458df38a3dbbaff'
+          payload = json.loads(data)
+          subprocess.run(['git','merge-base','--is-ancestor',payload['base_commit'],'HEAD'], check=True)
+          paths = []
+          for item in payload['files']:
+              p = Path(item['path'])
+              assert not p.is_absolute() and '..' not in p.parts
+              assert p.parts[0] in ['internal','library','docs','.scripts']
+              assert p.exists() == item['exists'], str(p)
+              old = p.read_text() if p.exists() else ''
+              assert hashlib.sha256(old.encode()).hexdigest() == item['old_sha256'], str(p)
+              lines = old.splitlines(keepends=True)
+              for start,end,replacement in reversed(item['edits']):
+                  assert 0 <= start <= end <= len(lines)
+                  lines[start:end] = [replacement]
+              content = ''.join(lines)
+              assert hashlib.sha256(content.encode()).hexdigest() == item['new_sha256'], str(p)
+              p.parent.mkdir(parents=True,exist_ok=True)
+              p.write_text(content)
+              paths.append(str(p))
+          subprocess.run(['git','add','--',*paths],check=True)
+          print('Verified source files:',len(paths))
+          PY
+          git diff --cached --check
+          git config user.name Laisky
+          git config user.email public@laisky.com
+          git commit -m 'fix: cover critical components and preserve delivery, cancellation and journal invariants'
+      - name: Complete build, vet and coverage validation
+        run: |
+          go version
+          go mod verify
+          go build -mod=readonly ./...
+          go vet -mod=readonly ./...
+          go test -mod=readonly -count=1 -timeout=180s -coverprofile=/tmp/component.cover ./...
+          python3 .scripts/check_component_coverage.py /tmp/component.cover
+          go tool cover -func=/tmp/component.cover | tail -1
+      - name: Require old-behavior failures and passing controls
+        run: python3 .scripts/verify_component_regressions.py
+      - name: Repeated randomized race verification
+        run: |
+          go test -mod=readonly -race -count=5 -shuffle=on -timeout=180s ./...
+          go test -mod=readonly -race -count=10 -shuffle=on -timeout=180s -run 'Test(Regression|Component)' ./...
+          git diff --exit-code -- go.mod go.sum
+      - name: Publish validated source without overwriting concurrent changes
+        run: |
+          git push origin HEAD:refs/heads/test/component-behavior-20260922
+          git rev-parse HEAD

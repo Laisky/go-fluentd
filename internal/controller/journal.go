@@ -471,58 +471,15 @@ func (j *Journal) ConvertMsg2Buf(msg *library.FluentMsg, data *map[string]interf
 }
 
 func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan, skipDumpChan chan *library.FluentMsg) chan *library.FluentMsg {
-	// deal with legacy
-	go func() {
-		defer log.Logger.Info("legacy processor exit")
-		var err error
-		for { // try to starting legacy loading
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				if _, err = j.processLegacyMsg(ctx, j.outChan); err != nil {
-					log.Logger.Error("process legacy got error", zap.Error(err))
-				}
-				time.Sleep(intervalToStartingLegacy)
-			}
+	// Each helper owns its blocking work, so cancellation can be tested without
+	// relying on global goroutine counts or a production filesystem.
+	go j.runJournalMaintenance(ctx, intervalToStartingLegacy, func() {
+		if _, err := j.processLegacyMsg(ctx, j.outChan); err != nil {
+			log.Logger.Error("process legacy", zap.Error(err))
 		}
-	}()
-
-	// start periodic gc
-	go func() {
-		defer log.Logger.Info("gc runner exit")
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				utils.ForceGCBlocking()
-				time.Sleep(j.GCIntervalSec)
-			}
-		}
-	}()
-
-	// deal with msgs that skip dump
-	go func() {
-		var (
-			msg *library.FluentMsg
-			ok  bool
-		)
-		defer log.Logger.Info("skipDumpChan goroutine exit", zap.String("msg", fmt.Sprint(msg)))
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case msg, ok = <-skipDumpChan:
-				if !ok {
-					log.Logger.Info("skipDumpChan closed")
-					return
-				}
-
-				j.outChan <- msg
-			}
-		}
-	}()
+	})
+	go j.runJournalMaintenance(ctx, j.GCIntervalSec, utils.ForceGCBlocking)
+	go j.runSkipDump(ctx, skipDumpChan)
 
 	// deal with msgs that need dump
 	go func() {
@@ -675,4 +632,30 @@ func writeCommittedID(write func(int64) error, id int64) (err error) {
 		}
 	}
 	return err
+}
+
+func (j *Journal) runJournalMaintenance(ctx context.Context, interval time.Duration, action func()) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		action()
+		time.Sleep(interval)
+	}
+}
+
+func (j *Journal) runSkipDump(ctx context.Context, input <-chan *library.FluentMsg) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg, ok := <-input:
+			if !ok {
+				return
+			}
+			j.outChan <- msg
+		}
+	}
 }

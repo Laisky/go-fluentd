@@ -247,26 +247,35 @@ func (j *Journal) processLegacyMsg(ctx context.Context, out chan *library.Fluent
 			if !jj.LockLegacy() {
 				return
 			}
-			defer jj.UnLockLegacy()
+			ownsLegacy := true
+			defer func() {
+				if ownsLegacy {
+					jj.UnLockLegacy()
+				}
+			}()
 			for {
 				if replayErr = ctx.Err(); replayErr != nil {
 					return
 				}
 				data := &journal.Data{Data: map[string]interface{}{}}
-				if err := jj.LoadLegacyBuf(data); err == io.EOF {
+				if err := jj.LoadLegacyBuf(data); err != nil {
+					// The backend has already released our lock. A deferred
+					// unlock here could steal a concurrent rotation's lock.
+					ownsLegacy = false
+					if err != io.EOF {
+						replayErr = err
+					}
 					return
-				} else if err != nil {
-					replayErr = err
+				}
+				// Preserve even malformed records before rejecting them. The
+				// reader has advanced, so a later replay may reach cleanup.
+				if replayErr = jj.WriteData(data); replayErr != nil {
 					return
 				}
 				storedTag, tagOK := data.Data["tag"].(string)
 				message, messageOK := data.Data["message"].(map[string]interface{})
 				if !tagOK || !messageOK {
 					replayErr = fmt.Errorf("invalid persisted message %d", data.ID)
-					return
-				}
-				// No asynchronous queue can stand in for a durable copy.
-				if replayErr = jj.WriteData(data); replayErr != nil {
 					return
 				}
 				if data.ID > innerMax {

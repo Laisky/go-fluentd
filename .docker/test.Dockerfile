@@ -1,12 +1,8 @@
-# docker build . -f ./.docker/test.Dockerfile -t ppcelery/go-fluentd-test:v1
-# docker push ppcelery/go-fluentd-test:v1
-FROM ppcelery/gobase:1.14.0-alpine3.11
-ENV GO111MODULE=on
+# docker build -f .docker/test.Dockerfile -t go-fluentd-test .
+FROM golang:1.27.1-bookworm
 
-WORKDIR /go-fluentd
-COPY go.mod .
-COPY go.sum .
+WORKDIR /src
+COPY go.mod go.sum ./
 RUN go mod download
-
-ADD . .
-CMD go test -coverprofile=coverage.txt -covermode=atomic ./...
+COPY . .
+CMD ["go", "test", "-mod=readonly", "-race", "-count=1", "-timeout=180s", "-coverprofile=coverage.txt", "-covermode=atomic", "./..."]

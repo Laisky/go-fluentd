@@ -2,7 +2,7 @@ name: Go
 
 on:
   push:
-    branches: [master, develop, 'fix/go127-reliability']
+    branches: [master, develop]
   pull_request:
     branches: [master, develop]
   workflow_dispatch:
@@ -19,23 +19,35 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: '1.27.x'
-          cache: true
       - run: go version
-      - name: Focused regression behavior
-        run: go test -mod=mod -count=1 -v -run TestRegression ./internal/senders ./library
-      - name: Compile all packages and tests
-        if: always()
-        run: go test -mod=mod -run '^$' ./...
-      - name: Tests and race detector
-        run: go test -mod=mod -race -count=1 -timeout=120s ./...
-      - name: Module migration diagnostics
-        if: always()
+      - run: go mod verify
+      - run: go build -mod=readonly ./...
+      - run: go vet -mod=readonly ./...
+      - run: go test -mod=readonly -count=1 -timeout=180s ./...
+      - run: go test -mod=readonly -race -count=1 -timeout=180s ./...
+      - run: go test -mod=readonly -race -count=10 -timeout=180s -run TestRegression ./...
+      - run: git diff --exit-code -- go.mod go.sum
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Build and smoke-test the runtime image
         run: |
-          cat go.mod
-          git diff -- go.sum
+          docker build -f .docker/Dockerfile -t go-fluentd:ci .
+          docker run --rm go-fluentd:ci --help
+      - name: Run the test image
+        run: |
+          docker build -f .docker/test.Dockerfile -t go-fluentd-test:ci .
+          docker run --rm go-fluentd-test:ci
+      - name: Validate the legacy forward Go build stage
+        run: docker build --target gobin -f .docker/forward.Dockerfile -t go-fluentd-forward-build:ci .

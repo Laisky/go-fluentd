@@ -54,6 +54,14 @@ func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan c
 			zap.Int("inchans_len", len(inchans)))
 	}
 
+	// This router is the only sender to its private worker inputs. Closing
+	// them lets each worker drain on a normal upstream close.
+	defer func() {
+		for _, in := range inchans {
+			close(in)
+		}
+	}()
+
 	var (
 		nfork          = len(inchans)
 		hashkey        uint64

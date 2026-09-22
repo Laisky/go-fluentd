@@ -3,7 +3,6 @@ package library
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -97,7 +96,11 @@ func TemplateWithMapAndRegexp(tplReg *regexp.Regexp, tpl string, data map[string
 		k, vs string
 	)
 	for _, kg := range tplReg.FindAllStringSubmatch(tpl, -1) {
+		if len(kg) < 2 {
+			continue
+		}
 		k = kg[1]
+		vs = ""
 		switch v := data[k].(type) {
 		case string:
 			vs = v
@@ -110,7 +113,7 @@ func TemplateWithMapAndRegexp(tplReg *regexp.Regexp, tpl string, data map[string
 		case float64:
 			vs = strconv.FormatFloat(v, 'f', -1, 64)
 		}
-		tpl = strings.ReplaceAll(tpl, fmt.Sprintf("${%v}", k), vs)
+		tpl = strings.ReplaceAll(tpl, kg[0], vs)
 	}
 
 	return tpl

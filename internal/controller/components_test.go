@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"gofluentd/internal/recvs"
 	"gofluentd/internal/senders"
 	"gofluentd/library"
 	"sync"
@@ -187,4 +188,50 @@ func TestComponentProducerReplayInstancesAndUnsupportedPolicy(t *testing.T) {
 		}
 	}
 	close(in)
+}
+
+// componentReceiver observes the binding contract without opening a transport.
+type componentReceiver struct {
+	recvs.BaseRecv
+	syncOut, asyncOut chan<- *library.FluentMsg
+	pool              *sync.Pool
+	count             library.CounterIft
+}
+
+func (*componentReceiver) GetName() string                                { return "component-receiver" }
+func (r *componentReceiver) SetSyncOutChan(ch chan<- *library.FluentMsg)  { r.syncOut = ch }
+func (r *componentReceiver) SetAsyncOutChan(ch chan<- *library.FluentMsg) { r.asyncOut = ch }
+func (r *componentReceiver) SetMsgPool(p *sync.Pool)                      { r.pool = p }
+func (r *componentReceiver) SetCounter(c library.CounterIft)              { r.count = c }
+func (r *componentReceiver) Run(ctx context.Context) {
+	for _, out := range []chan<- *library.FluentMsg{r.asyncOut, r.syncOut} {
+		m := &library.FluentMsg{Tag: "logs", ID: r.count.Count(), Message: map[string]interface{}{}}
+		select {
+		case out <- m:
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+func TestComponentAcceptorBindsReceiversAndRestartsAboveJournalMaximum(t *testing.T) {
+	j, _, _ := regressionReplayJournal(t, true)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	a, b := &componentReceiver{}, &componentReceiver{}
+	pool := &sync.Pool{New: func() interface{} { return &library.FluentMsg{} }}
+	acceptor := NewAcceptor(&AcceptorCfg{Journal: j, MsgPool: pool, AsyncOutChanSize: 4, SyncOutChanSize: 4}, a, b)
+	acceptor.Run(ctx)
+	seen := map[int64]bool{}
+	for _, ch := range []chan *library.FluentMsg{acceptor.GetAsyncOutChan(), acceptor.GetSyncOutChan()} {
+		for i := 0; i < 2; i++ {
+			m := componentRecv(t, ch)
+			if m.ID <= 42 || seen[m.ID] {
+				t.Fatalf("reused persisted/parallel ID %d", m.ID)
+			}
+			seen[m.ID] = true
+		}
+	}
+	if a.pool != pool || b.pool != pool {
+		t.Fatal("receivers were not bound to the shared pool")
+	}
 }

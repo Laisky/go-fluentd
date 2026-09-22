@@ -31,14 +31,14 @@ type Acceptor struct {
 // NewAcceptor create new Acceptor
 func NewAcceptor(cfg *AcceptorCfg, recvs ...recvs.AcceptorRecvItf) *Acceptor {
 	a := &Acceptor{
-		AcceptorCfg:  cfg,
-		syncOutChan:  make(chan *library.FluentMsg, cfg.SyncOutChanSize),
-		asyncOutChan: make(chan *library.FluentMsg, cfg.AsyncOutChanSize),
-		recvs:        recvs,
+		AcceptorCfg: cfg,
+		recvs:       recvs,
 	}
 	if err := a.valid(); err != nil {
 		log.Logger.Panic("new acceptor", zap.Error(err))
 	}
+	a.syncOutChan = make(chan *library.FluentMsg, cfg.SyncOutChanSize)
+	a.asyncOutChan = make(chan *library.FluentMsg, cfg.AsyncOutChanSize)
 
 	log.Logger.Info("create acceptor",
 		zap.Int64("max_rotate_id", a.MaxRotateID),

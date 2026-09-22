@@ -33,12 +33,12 @@ func NewAcceptorPipeline(ctx context.Context, cfg *AcceptorPipelineCfg, filters 
 	a = &AcceptorPipeline{
 		AcceptorPipelineCfg: cfg,
 		filters:             filters,
-		reEnterChan:         make(chan *library.FluentMsg, cfg.ReEnterChanSize),
 		counter:             utils.NewCounter(),
 	}
 	if err := a.valid(); err != nil {
 		log.Logger.Panic("invalid cfg for acceptor pipeline")
 	}
+	a.reEnterChan = make(chan *library.FluentMsg, cfg.ReEnterChanSize)
 
 	a.registerMonitor()
 	for _, filter := range a.filters {

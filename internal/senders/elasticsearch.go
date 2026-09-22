@@ -137,7 +137,11 @@ func (s *ElasticSearchSender) getMsgStarting(msg *library.FluentMsg) ([]byte, er
 	return append(metadata, '\n'), nil
 }
 
-func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*library.FluentMsg) (err error) {
+func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*library.FluentMsg) error {
+	return s.sendBulkMsgs(context.Background(), bulkCtx, msgs)
+}
+
+func (s *ElasticSearchSender) sendBulkMsgs(ctx context.Context, bulkCtx *bulkOpCtx, msgs []*library.FluentMsg) (err error) {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -173,7 +177,7 @@ func (s *ElasticSearchSender) SendBulkMsgs(bulkCtx *bulkOpCtx, msgs []*library.F
 	if err = bulkCtx.gzWriter.Close(); err != nil {
 		return errors.Wrap(err, "finish gzip bulk batch")
 	}
-	req, err := http.NewRequest("POST", s.Addr, bulkCtx.buf)
+	req, err := http.NewRequestWithContext(ctx, "POST", s.Addr, bulkCtx.buf)
 	if err != nil {
 		return errors.Wrap(err, "try to init es request")
 	}
@@ -239,99 +243,30 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) error {
 }
 
 func (s *ElasticSearchSender) Spawn(ctx context.Context) chan<- *library.FluentMsg {
-	s.logger.Info("spawn elasticsearch sender")
-	inChan := make(chan *library.FluentMsg, s.InChanSize) // for each tag
-
-	for i := 0; i < s.NFork; i++ { // parallel to each tag
-		go func(i int) {
-			var (
-				maxRetry         = 3
-				msg              *library.FluentMsg
-				msgBatch         = make([]*library.FluentMsg, s.BatchSize)
-				msgBatchDelivery []*library.FluentMsg
-				iBatch           = 0
-				lastT            = time.Unix(0, 0)
-				err              error
-				bulkCtx          = &bulkOpCtx{
-					cnt: []byte{},
+	in := make(chan *library.FluentMsg, s.InChanSize)
+	for i := 0; i < s.NFork; i++ {
+		go func() {
+			bulk := &bulkOpCtx{}
+			runBatchWorker(ctx, in, s.BatchSize, s.MaxWait, func(msgs []*library.FluentMsg) bool {
+				if ctx.Err() != nil {
+					return false
 				}
-				nRetry, j int
-				ok        bool
-				ticker    = time.NewTicker(s.MaxWait)
-			)
-			defer ticker.Stop()
-			defer s.logger.Info("producer exits",
-				zap.Int("i", i),
-				zap.String("name", s.GetName()))
-
-			bulkCtx.buf = &bytes.Buffer{}
-			bulkCtx.gzWriter = gzip.NewWriter(bulkCtx.buf)
-
-		NEW_MSG_LOOP:
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case msg, ok = <-inChan:
-					if !ok {
-						s.logger.Info("inChan closed")
-						return
-					}
-					msgBatch[iBatch] = msg
-					iBatch++
-				case <-ticker.C:
-					if iBatch == 0 {
-						continue
-					}
-					msg = msgBatch[iBatch-1]
-				}
-
-				if iBatch < s.BatchSize &&
-					utils.Clock.GetUTCNow().Sub(lastT) < s.MaxWait {
-					continue
-				}
-				lastT = utils.Clock.GetUTCNow()
-				msgBatchDelivery = msgBatch[:iBatch]
-				iBatch = 0
-				nRetry = 0
 				if utils.Settings.GetBool("dry") {
-					for j, msg = range msgBatchDelivery {
-						s.logger.Info("send message to backend",
-							zap.String("log", fmt.Sprint(msgBatch[j].Message)))
-						s.successedChan <- msg
+					return s.reportBatch(ctx, msgs, true)
+				}
+				var err error
+				for attempt := 0; attempt < 4; attempt++ {
+					if ctx.Err() != nil {
+						return false
 					}
-					continue
-				}
-
-				for {
-					if err = s.SendBulkMsgs(bulkCtx, msgBatchDelivery); err != nil {
-						nRetry++
-						if nRetry > maxRetry {
-							s.logger.Error("try send message",
-								zap.Error(err),
-								// zap.ByteString("content", bulkCtx.cnt),
-								zap.Int("num", len(msgBatchDelivery)))
-							for _, msg = range msgBatchDelivery {
-								s.failedChan <- msg
-							}
-							continue NEW_MSG_LOOP
-						}
-						continue
+					err = s.sendBulkMsgs(ctx, bulk, msgs)
+					if err == nil {
+						break
 					}
-
-					break
 				}
-
-				s.logger.Debug("success sent message to backend",
-					zap.String("backend", s.Addr),
-					zap.Int("batch", len(msgBatchDelivery)),
-					zap.String("tag", msg.Tag))
-				for _, msg = range msgBatchDelivery {
-					s.successedChan <- msg
-				}
-			}
-		}(i)
+				return s.reportBatch(ctx, msgs, err == nil)
+			})
+		}()
 	}
-
-	return inChan
+	return in
 }

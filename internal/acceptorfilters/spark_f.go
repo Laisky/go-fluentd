@@ -46,7 +46,9 @@ func (f *SparkFilter) Filter(msg *library.FluentMsg) *library.FluentMsg {
 		return msg
 	}
 
-	switch msg.Message[f.MsgKey].(type) {
+	switch value := msg.Message[f.MsgKey].(type) {
+	case string:
+		msg.Message[f.MsgKey] = []byte(value)
 	case []byte:
 	default:
 		return msg

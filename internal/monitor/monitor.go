@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"net/http"
+	"sync"
 
 	"gofluentd/library/log"
 
@@ -13,30 +14,38 @@ import (
 
 var (
 	json         = jsoniter.ConfigCompatibleWithStandardLibrary
+	metricMu     sync.RWMutex
 	metricGetter = map[string]func() map[string]interface{}{}
 )
 
 func AddMetric(name string, metric func() map[string]interface{}) {
+	metricMu.Lock()
+	defer metricMu.Unlock()
 	metricGetter[name] = metric
 }
 
 func BindHTTP(srv *gin.Engine) {
-	var (
-		b   []byte
-		err error
-	)
 	srv.GET("/monitor", func(ctx *gin.Context) {
-		metrics := map[string]interface{}{
-			"ts": utils.Clock.GetTimeInRFC3339Nano(),
+		// Snapshot callbacks under the lock, but execute them outside it. A getter
+		// may itself register a metric, or take locks owned by another component.
+		metricMu.RLock()
+		getters := make(map[string]func() map[string]interface{}, len(metricGetter))
+		for name, getter := range metricGetter {
+			getters[name] = getter
 		}
-		for k, getter := range metricGetter {
-			metrics[k] = getter()
+		metricMu.RUnlock()
+		metrics := map[string]interface{}{"ts": utils.Clock.GetTimeInRFC3339Nano()}
+		for name, getter := range getters {
+			if getter != nil {
+				metrics[name] = getter()
+			}
 		}
-		if b, err = json.Marshal(&metrics); err != nil {
-			log.Logger.Error("try to marshal metrics to json got error", zap.Error(err))
+		b, err := json.Marshal(metrics)
+		if err != nil {
+			log.Logger.Error("marshal metrics", zap.Error(err))
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "cannot encode metrics"})
 			return
 		}
-
-		ctx.String(http.StatusOK, string(b))
+		ctx.Data(http.StatusOK, "application/json; charset=utf-8", b)
 	})
 }

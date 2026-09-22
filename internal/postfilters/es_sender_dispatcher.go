@@ -54,20 +54,15 @@ func (f *ESDispatcherFilter) Filter(msg *library.FluentMsg) *library.FluentMsg {
 		return msg
 	}
 
-	if msg.Message[f.TagKey].(string) == "" {
-		log.Logger.Warn("discard log since tag is empty", zap.String("msg", fmt.Sprint(msg)))
+	origin, valid := textField(msg.Message[f.TagKey])
+	target, configured := f.ReTagMap[origin]
+	if !valid || origin == "" || !configured || target == "" {
+		log.Logger.Warn("discard log with invalid route", zap.String("tag", fmt.Sprint(msg.Message[f.TagKey])))
+		// Keep the original journal route until the rejected record is committed.
 		f.DiscardMsg(msg)
 		return nil
 	}
+	msg.Tag = target
 
-	if msg.Tag, ok = f.ReTagMap[msg.Message[f.TagKey].(string)]; !ok {
-		log.Logger.Warn("discard log since tag not exists in retagmap", zap.String("tag", msg.Message[f.TagKey].(string)))
-		f.DiscardMsg(msg)
-		return nil
-	}
-
-	log.Logger.Debug("change msg tag",
-		zap.String("old_tag", msg.Message[f.TagKey].(string)),
-		zap.String("new_tag", msg.Tag))
 	return msg
 }

@@ -3,25 +3,23 @@ package recvs
 import (
 	"crypto/md5"
 	"encoding/hex"
-	"fmt"
+	"net/http/httptest"
 	"regexp"
 	"testing"
 	"time"
 
 	"gofluentd/library"
-	"gofluentd/library/log"
 
 	"github.com/Laisky/go-utils"
-	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 )
 
 var (
-	httpsrv = gin.New()
-	salt    = []byte("2ji3r32r932r32j932jf92")
+	salt = []byte("2ji3r32r932r32j932jf92")
 )
 
 func TestHTTPRecv(t *testing.T) {
+	httpsrv := gin.New()
 	var (
 		err          error
 		syncOutChan  = make(chan *library.FluentMsg, 1000)
@@ -53,21 +51,11 @@ func TestHTTPRecv(t *testing.T) {
 	httprecv.SetAsyncOutChan(asyncOutChan)
 	httprecv.SetSyncOutChan(syncOutChan)
 
-	port := 24888
-	addr := fmt.Sprintf("localhost:%v", port)
-	go func() {
-		for {
-			if err := httpsrv.Run(addr); err != nil {
-				log.Logger.Error("try to run server got error", zap.Error(err))
-				port++
-				addr = fmt.Sprintf("localhost:%v", port)
-			}
-		}
-	}()
+	srv := httptest.NewServer(httpsrv)
+	defer srv.Close()
 
-	time.Sleep(100 * time.Millisecond)
 	resp := map[string]interface{}{}
-	if err = utils.RequestJSON("post", "http://"+addr+"/api/v1/log/wechat/sit", &utils.RequestData{Data: fakeReq()}, &resp); err != nil {
+	if err = utils.RequestJSON("post", srv.URL+"/api/v1/log/wechat/sit", &utils.RequestData{Data: fakeReq()}, &resp); err != nil {
 		t.Fatalf("got error: %+v", err)
 	}
 

@@ -207,7 +207,10 @@ func (j *Journal) LoadMaxID() (maxID int64, err error) {
 	return maxID, err
 }
 
-func (j *Journal) ProcessLegacyMsg(dumpChan chan *library.FluentMsg) (maxID int64, err2 error) {
+func (j *Journal) ProcessLegacyMsg(dumpChan chan *library.FluentMsg) (int64, error) {
+	return j.processLegacyMsg(context.Background(), dumpChan)
+}
+func (j *Journal) processLegacyMsg(ctx context.Context, dumpChan chan *library.FluentMsg) (maxID int64, err2 error) {
 	if !j.legacyLock.TryLock() {
 		return 0, fmt.Errorf("another legacy is running")
 	}
@@ -354,8 +357,6 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 		var (
 			mid             int64
 			err             error
-			nRetry          int
-			maxRetry        = 2
 			msg             *library.FluentMsg
 			ok              bool
 			chani, counteri interface{}
@@ -385,28 +386,16 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 			}
 
 			counter.Count()
-			nRetry = 0
-			for nRetry < maxRetry {
-				if err = jj.WriteId(msg.ID); err != nil {
-					nRetry++
-				}
-				break
-			}
-			if err != nil && nRetry == maxRetry {
+			err = writeCommittedID(jj.WriteId, msg.ID)
+			if err != nil {
 				log.Logger.Error("try to write id to journal got error", zap.Error(err))
 			}
 
 			if msg.ExtIds != nil {
 				for _, mid = range msg.ExtIds {
-					nRetry = 0
-					for nRetry < maxRetry {
-						if err = jj.WriteId(mid); err != nil {
-							nRetry++
-						}
-						break
-					}
+					err = writeCommittedID(jj.WriteId, mid)
 					counter.Count()
-					if err != nil && nRetry == maxRetry {
+					if err != nil {
 						log.Logger.Error("try to write id to journal got error", zap.Error(err))
 					}
 				}
@@ -687,4 +676,16 @@ func (j *Journal) registerMonitor() {
 		}
 		return result
 	})
+}
+
+// writeCommittedID centralizes acknowledgement-write retry handling.
+func writeCommittedID(write func(int64) error, id int64) (err error) {
+	nRetry := 0
+	for nRetry < 2 {
+		if err = write(id); err != nil {
+			nRetry++
+		}
+		break
+	}
+	return err
 }

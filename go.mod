@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/Laisky/gin-middlewares v1.1.1
-	github.com/Laisky/go-journal v1.1.6
+	github.com/Laisky/go-journal v1.1.7-0.20260922164307-3ed625db57b2
 	github.com/Laisky/go-kafka v1.0.1
 	github.com/Laisky/go-syslog v2.3.3+incompatible
 	github.com/Laisky/go-utils v1.14.6
@@ -53,6 +53,7 @@ require (
 	github.com/mitchellh/mapstructure v1.1.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
+	github.com/mschoch/smat v0.0.0-20160514031455-90eadee771ae // indirect
 	github.com/pelletier/go-toml v1.6.0 // indirect
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pierrec/lz4 v2.4.1+incompatible // indirect
@@ -69,15 +70,19 @@ require (
 	github.com/spf13/viper v1.6.3 // indirect
 	github.com/subosito/gotenv v1.2.0 // indirect
 	github.com/ugorji/go/codec v1.1.7 // indirect
+	github.com/willf/bitset v1.1.10 // indirect
 	github.com/zsais/go-gin-prometheus v0.1.0 // indirect
 	go.uber.org/atomic v1.6.0 // indirect
 	go.uber.org/multierr v1.5.0 // indirect
 	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad // indirect
+	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
 	golang.org/x/net v0.0.0-20201224014010-6772e930b67b // indirect
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a // indirect
 	golang.org/x/sys v0.0.0-20201119102817-f84b799fce68 // indirect
 	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1 // indirect
 	golang.org/x/text v0.3.3 // indirect
+	golang.org/x/tools v0.0.0-20200317043434-63da46f3035e // indirect
+	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df // indirect
 	gopkg.in/ini.v1 v1.55.0 // indirect
 	gopkg.in/jcmturner/aescts.v1 v1.0.1 // indirect

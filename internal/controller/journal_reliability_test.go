@@ -26,6 +26,7 @@ func regressionReplayJournal(t *testing.T, committed bool) (*Journal, *journal.J
 	if err = backend.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(backend.Close)
 	data := &journal.Data{ID: 42, Data: map[string]interface{}{"tag": "logs", "message": map[string]interface{}{"payload": "must-survive"}}}
 	if err = backend.WriteData(data); err != nil {
 		t.Fatal(err)

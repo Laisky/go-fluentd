@@ -7,6 +7,8 @@ github.com/Laisky/go-chaining v0.0.0-20180507092046-43dcdc5a21be h1:7Rxhm6IjOtDA
 github.com/Laisky/go-chaining v0.0.0-20180507092046-43dcdc5a21be/go.mod h1:1mdzaETo0kjvCQICPSePsoaatJN4l7JvEA1200lyevo=
 github.com/Laisky/go-journal v1.1.6 h1:vnhmxowJ5aUltF7cM3+eISi2L5dkPFBJVRzVUPne+HM=
 github.com/Laisky/go-journal v1.1.6/go.mod h1:6302T+Uo0+xYp5O9Z+GalHnl+R3hmRyw0aa11IqNX90=
+github.com/Laisky/go-journal v1.1.7-0.20260922164307-3ed625db57b2 h1:0yVGS3otp36zcxB48FiCLcf40xioNcJb4L8Yy3jgubg=
+github.com/Laisky/go-journal v1.1.7-0.20260922164307-3ed625db57b2/go.mod h1:8wjz86nBGSDCpnS/zpdNY/jkz48qUz24/UDszLbbUsY=
 github.com/Laisky/go-kafka v1.0.1 h1:DNMBLshSMUUedH9nmBhGrpEf0FLGIAQfPlbQBkFcCfw=
 github.com/Laisky/go-kafka v1.0.1/go.mod h1:AksqzI2+yDSX6MtQikP6aTg9om52pSdropjst0oqeZE=
 github.com/Laisky/go-syslog v2.3.3+incompatible h1:TSHhP3iadAPDzC5efyYLPnGkv2pvUtuUInm7poVRkFA=

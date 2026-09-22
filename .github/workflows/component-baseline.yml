@@ -1,0 +1,24 @@
+name: Component baseline
+on:
+  push:
+    branches: [test/component-behavior-20260922]
+    paths: [.github/workflows/component-baseline.yml]
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: 1.27.x
+      - name: Inventory and baseline
+        run: |
+          go version
+          git ls-files '*AGENTS.md' '*.go'
+          go test -mod=readonly -count=1 -timeout=180s -coverprofile=/tmp/baseline.cover ./...
+          go tool cover -func=/tmp/baseline.cover

@@ -14,6 +14,9 @@ concurrency:
   group: go-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  GOTOOLCHAIN: local
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -30,8 +33,21 @@ jobs:
       - run: go build -mod=readonly ./...
       - run: go vet -mod=readonly ./...
       - run: go test -mod=readonly -count=1 -timeout=180s ./...
-      - run: go test -mod=readonly -race -count=1 -timeout=180s ./...
-      - run: go test -mod=readonly -race -count=10 -timeout=180s -run TestRegression ./...
+      - name: Race detection with shuffled, repeated behavior tests
+        run: go test -mod=readonly -race -shuffle=on -count=10 -timeout=180s ./...
+      - name: Measure statement coverage
+        run: go test -mod=readonly -race -covermode=atomic -coverprofile=coverage.out -count=1 -timeout=180s ./...
+      - name: Enforce whole-profile and component coverage floors
+        run: |
+          python3 -m unittest discover -s .scripts -p 'test_*.py'
+          python3 .scripts/check_coverage.py coverage.out
+          go tool cover -func=coverage.out
+      - name: Fuzz Fluent message round trips
+        run: go test -mod=readonly ./library -run '^$' -fuzz '^FuzzBehaviorFluentMessageRoundTrip$' -fuzztime=5s -parallel=2
+      - name: Fuzz template literal handling
+        run: go test -mod=readonly ./library -run '^$' -fuzz '^FuzzBehaviorTemplateLiteralSafety$' -fuzztime=5s -parallel=2
+      - name: Fuzz Kafka JSON decoding
+        run: go test -mod=readonly ./internal/recvs -run '^$' -fuzz '^FuzzBehaviorKafkaJSONObject$' -fuzztime=5s -parallel=2
       - run: git diff --exit-code -- go.mod go.sum
 
   docker:

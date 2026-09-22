@@ -1,24 +1,16 @@
-# docker build . -f ./.docker/forward.Dockerfile -t ppcelery/go-fluentd-forward:666
-# docker run -it --rm --cap-add SYS_ADMIN --device /dev/fuse -e MFS_MASTER=mfs-master.sit.ptcloud.t.home -e TZ=Asia/Shanghai -v /opt/configs/go-fluentd/forward:/forward ppcelery/go-fluentd-forward:666 /bin/sh
-# sh startApp.sh
-# cp /forward/settings.yml /data/Sit/go-fluentd/settings/.
-FROM ppcelery/golang:1.13.6-stretch AS gobin
+# Legacy MooseFS integration: the runtime image and startApp.sh are deployment-owned.
+# CI validates the Go build stage without requiring that external runtime.
+# docker build --target gobin -f .docker/forward.Dockerfile -t go-fluentd-forward-build .
+FROM golang:1.27.1-bookworm AS gobin
 
-ENV GO111MODULE=on
 WORKDIR /go-fluentd
-COPY go.mod .
-COPY go.sum .
+COPY go.mod go.sum ./
 RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -mod=readonly -trimpath -ldflags='-s -w' -o main .
 
-# static build
-ADD . .
-RUN go build -a --ldflags '-extldflags "-static"' entrypoints/main.go
-
-# copy executable file and certs to a pure container
 FROM ppcelery/mfs-stretch:20190116
-
 COPY --from=gobin /etc/ssl/certs /etc/ssl/certs
-COPY --from=gobin /go-fluentd/main go-fluentd
-ADD ./startApp.sh .
-
-CMD ["sh", "startApp.sh"]
+COPY --from=gobin /go-fluentd/main /go-fluentd
+COPY startApp.sh /startApp.sh
+CMD ["sh", "/startApp.sh"]

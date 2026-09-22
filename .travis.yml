@@ -1,14 +1,7 @@
 language: go
 
-sudo: false
-
 go:
-  - 1.12.x
-  - 1.13.x
-  - 1.14.x
-
-env:
-  - GO111MODULE=on
+  - 1.27.x
 
 install: true
 
@@ -19,13 +12,10 @@ cache:
   directories:
     - $HOME/.cache/go-build
     - $GOPATH/pkg/mod
-    # - $GOPATH/src
-
 
 script:
-  - git checkout $TRAVIS_COMMIT .  # travis.ci will overwrite to master branch
   - go mod download
-  - go test -race -coverprofile=coverage.txt -covermode=atomic ./...
-
-after_script:
-  - bash <(curl -s https://codecov.io/bash)
+  - go mod verify
+  - go build -mod=readonly ./...
+  - go vet -mod=readonly ./...
+  - go test -mod=readonly -race -count=1 -timeout=180s -coverprofile=coverage.txt -covermode=atomic ./...

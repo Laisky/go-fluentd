@@ -207,103 +207,95 @@ func (j *Journal) LoadMaxID() (maxID int64, err error) {
 	return maxID, err
 }
 
-func (j *Journal) ProcessLegacyMsg(dumpChan chan *library.FluentMsg) (maxID int64, err2 error) {
+func (j *Journal) ProcessLegacyMsg(dumpChan chan *library.FluentMsg) (int64, error) {
+	return j.processLegacyMsg(context.Background(), dumpChan)
+}
+
+// processLegacyMsg writes each retained record before publishing its in-memory
+// copy. go-journal synchronizes replacement files before legacy cleanup.
+// LoadLegacyBuf releases the legacy lock itself on EOF or error.
+type legacyJournal interface {
+	LockLegacy() bool
+	UnLockLegacy() bool
+	LoadLegacyBuf(*journal.Data) error
+	WriteData(*journal.Data) error
+}
+
+func (j *Journal) processLegacyMsg(ctx context.Context, out chan *library.FluentMsg) (maxID int64, resultErr error) {
 	if !j.legacyLock.TryLock() {
 		return 0, fmt.Errorf("another legacy is running")
 	}
 	defer j.legacyLock.ForceRelease()
-
-	log.Logger.Debug("starting to process legacy data...")
-	var (
-		wg = &sync.WaitGroup{}
-		l  = &sync.Mutex{}
-	)
-
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 	j.tag2JMap.Range(func(k, v interface{}) bool {
 		wg.Add(1)
-		go func(tag string, jj *journal.Journal) {
+		go func(tag string, jj legacyJournal) {
 			defer wg.Done()
-			var (
-				innerMaxID int64
-				err        error
-				msg        *library.FluentMsg
-				data       = &journal.Data{Data: map[string]interface{}{}}
-			)
-
-			if !jj.LockLegacy() { // avoid rotate
+			var innerMax int64
+			var replayErr error
+			defer func() {
+				mu.Lock()
+				defer mu.Unlock()
+				if innerMax > maxID {
+					maxID = innerMax
+				}
+				if replayErr != nil && resultErr == nil {
+					resultErr = errors.Wrapf(replayErr, "replay tag %s", tag)
+				}
+			}()
+			if !jj.LockLegacy() {
 				return
 			}
-
-			startTs := utils.Clock.GetUTCNow()
-		NEXT_LEGACY_MSG:
+			ownsLegacy := true
+			defer func() {
+				if ownsLegacy {
+					jj.UnLockLegacy()
+				}
+			}()
 			for {
-				// msgp will overwrite new data to old map without
-				// create new map to avoid old data contaminate
-				msg = j.MsgPool.Get().(*library.FluentMsg)
-				data.Data["message"] = nil
-				if err = jj.LoadLegacyBuf(data); err == io.EOF {
-					log.Logger.Debug("load legacy buf done",
-						zap.Float64("sec", utils.Clock.GetUTCNow().Sub(startTs).Seconds()),
-					)
-					j.MsgPool.Put(msg)
-
-					l.Lock()
-					if innerMaxID > maxID {
-						maxID = innerMaxID
-					}
-					l.Unlock()
+				if replayErr = ctx.Err(); replayErr != nil {
 					return
-				} else if err != nil {
-					log.Logger.Error("load legacy data got error", zap.Error(err))
-					j.MsgPool.Put(msg)
-					if !jj.LockLegacy() {
-						l.Lock()
-						if innerMaxID > maxID {
-							maxID = innerMaxID
-						}
-						err2 = err
-						l.Unlock()
-						return
+				}
+				data := &journal.Data{Data: map[string]interface{}{}}
+				if err := jj.LoadLegacyBuf(data); err != nil {
+					// The backend has already released our lock. A deferred
+					// unlock here could steal a concurrent rotation's lock.
+					ownsLegacy = false
+					if err != io.EOF {
+						replayErr = err
 					}
-					continue
+					return
 				}
-
-				if data.Data["message"] == nil {
-					log.Logger.Warn("lost message")
+				// Preserve even malformed records before rejecting them. The
+				// reader has advanced, so a later replay may reach cleanup.
+				if replayErr = jj.WriteData(data); replayErr != nil {
+					return
+				}
+				storedTag, tagOK := data.Data["tag"].(string)
+				message, messageOK := data.Data["message"].(map[string]interface{})
+				if !tagOK || !messageOK {
+					replayErr = fmt.Errorf("invalid persisted message %d", data.ID)
+					return
+				}
+				if data.ID > innerMax {
+					innerMax = data.ID
+				}
+				msg := j.MsgPool.Get().(*library.FluentMsg)
+				*msg = library.FluentMsg{ID: data.ID, Tag: storedTag, Message: message}
+				select {
+				case out <- msg:
+				case <-ctx.Done():
 					j.MsgPool.Put(msg)
-					continue
-				}
-
-				msg.ID = data.ID
-				msg.Tag = string(data.Data["tag"].(string))
-				msg.Message = data.Data["message"].(map[string]interface{})
-				if msg.ID > innerMaxID {
-					innerMaxID = msg.ID
-				}
-				log.Logger.Debug("load msg from legacy",
-					zap.String("tag", msg.Tag),
-					zap.Int64("id", msg.ID))
-
-				// rewrite data into journal
-				// only committed id can really remove a msg
-				for {
-					select {
-					case dumpChan <- msg:
-						continue NEXT_LEGACY_MSG
-					default:
-						// do not block dumpchan
-						time.Sleep(defaultJournalLegacyWait)
-					}
+					replayErr = ctx.Err()
+					return
 				}
 			}
-		}(k.(string), v.(*journal.Journal))
-
+		}(k.(string), v.(legacyJournal))
 		return true
 	})
-
 	wg.Wait()
-	log.Logger.Debug("process legacy done")
-	return
+	return maxID, resultErr
 }
 
 // createJournalRunner create journal for a tag,
@@ -354,8 +346,6 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 		var (
 			mid             int64
 			err             error
-			nRetry          int
-			maxRetry        = 2
 			msg             *library.FluentMsg
 			ok              bool
 			chani, counteri interface{}
@@ -385,28 +375,16 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 			}
 
 			counter.Count()
-			nRetry = 0
-			for nRetry < maxRetry {
-				if err = jj.WriteId(msg.ID); err != nil {
-					nRetry++
-				}
-				break
-			}
-			if err != nil && nRetry == maxRetry {
+			err = writeCommittedID(jj.WriteId, msg.ID)
+			if err != nil {
 				log.Logger.Error("try to write id to journal got error", zap.Error(err))
 			}
 
 			if msg.ExtIds != nil {
 				for _, mid = range msg.ExtIds {
-					nRetry = 0
-					for nRetry < maxRetry {
-						if err = jj.WriteId(mid); err != nil {
-							nRetry++
-						}
-						break
-					}
+					err = writeCommittedID(jj.WriteId, mid)
 					counter.Count()
-					if err != nil && nRetry == maxRetry {
+					if err != nil {
 						log.Logger.Error("try to write id to journal got error", zap.Error(err))
 					}
 				}
@@ -502,7 +480,7 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 			case <-ctx.Done():
 				return
 			default:
-				if _, err = j.ProcessLegacyMsg(dumpChan); err != nil {
+				if _, err = j.processLegacyMsg(ctx, j.outChan); err != nil {
 					log.Logger.Error("process legacy got error", zap.Error(err))
 				}
 				time.Sleep(intervalToStartingLegacy)
@@ -687,4 +665,14 @@ func (j *Journal) registerMonitor() {
 		}
 		return result
 	})
+}
+
+// writeCommittedID centralizes acknowledgement-write retry handling.
+func writeCommittedID(write func(int64) error, id int64) (err error) {
+	for attempt := 0; attempt < 2; attempt++ {
+		if err = write(id); err == nil {
+			return nil
+		}
+	}
+	return err
 }

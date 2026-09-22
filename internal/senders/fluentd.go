@@ -3,15 +3,13 @@ package senders
 import (
 	"context"
 	"fmt"
+	"github.com/Laisky/go-utils"
+	"github.com/Laisky/zap"
+	"gofluentd/library"
+	"gofluentd/library/log"
 	"net"
 	"sync"
 	"time"
-
-	"gofluentd/library"
-	"gofluentd/library/log"
-
-	"github.com/Laisky/go-utils"
-	"github.com/Laisky/zap"
 )
 
 type FluentSenderCfg struct {
@@ -22,188 +20,207 @@ type FluentSenderCfg struct {
 	IsDiscardWhenBlocked         bool
 	ConcatCfg                    map[string]interface{}
 }
-
 type FluentSender struct {
 	*BaseSender
 	*FluentSenderCfg
+	// Test seam; configure before starting workers.
+	dialContext func(context.Context, string, string) (net.Conn, error)
 }
 
 func NewFluentSender(cfg *FluentSenderCfg) *FluentSender {
-	log.Logger.Info("new fluent sender",
-		zap.String("addr", cfg.Addr),
-		zap.Strings("tags", cfg.Tags))
-
 	if cfg.Addr == "" {
 		log.Logger.Panic("addr should not be empty")
 	}
-
-	s := &FluentSender{
-		BaseSender: &BaseSender{
-			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
-		},
-		FluentSenderCfg: cfg,
+	if cfg.NFork <= 0 {
+		cfg.NFork = 1
 	}
+	if cfg.BatchSize <= 0 {
+		cfg.BatchSize = 500
+	}
+	if cfg.InChanSize < 0 {
+		cfg.InChanSize = 0
+	}
+	if cfg.MaxWait <= 0 {
+		cfg.MaxWait = time.Second
+	}
+	s := &FluentSender{BaseSender: &BaseSender{IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked}, FluentSenderCfg: cfg}
 	s.SetSupportedTags(cfg.Tags)
 	return s
 }
-
-func (s *FluentSender) GetName() string {
-	return s.Name
+func (s *FluentSender) GetName() string { return s.Name }
+func (s *FluentSender) dialConnection(ctx context.Context, network, address string) (net.Conn, error) {
+	if s.dialContext != nil {
+		return s.dialContext(ctx, network, address)
+	}
+	d := net.Dialer{Timeout: 10 * time.Second}
+	return d.DialContext(ctx, network, address)
 }
 
+// report preserves the explicit lossy configuration, but a transport error
+// must never be reported as success. Cancellation must not block shutdown.
+func (s *FluentSender) report(ctx context.Context, msg *library.FluentMsg, success bool) bool {
+	ch := s.failedChan
+	if success {
+		ch = s.successedChan
+	}
+	select {
+	case ch <- msg:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
 func (s *FluentSender) Spawn(ctx context.Context) chan<- *library.FluentMsg {
-	log.Logger.Info("spawn fluentd sender")
-	var (
-		inChan       = make(chan *library.FluentMsg, s.InChanSize)
-		childInChan  chan *library.FluentMsg // for each tag
-		ok           bool
-		childInChani interface{}
-
-		tag2childInChan = &sync.Map{}
-		mutex           = &sync.Mutex{}
-	)
-
-	for i := 0; i < s.NFork; i++ { // parallel to each tag
+	in := make(chan *library.FluentMsg, s.InChanSize)
+	var children sync.Map
+	var createMu sync.Mutex
+	var workers sync.WaitGroup
+	workers.Add(s.NFork)
+	for i := 0; i < s.NFork; i++ {
 		go func() {
-			for msg := range inChan {
-				if childInChani, ok = tag2childInChan.Load(msg.Tag); !ok {
-					mutex.Lock()
-					// double check
-					if childInChani, ok = tag2childInChan.Load(msg.Tag); !ok {
-						// create child sender
-						childInChan = make(chan *library.FluentMsg, s.InChanSize)
-						go s.spawnChildSenderForTag(ctx, msg.Tag, childInChan)
-						tag2childInChan.Store(msg.Tag, childInChan)
-					} else {
-						childInChan = childInChani.(chan *library.FluentMsg)
-					}
-					mutex.Unlock()
-				} else {
-					childInChan = childInChani.(chan *library.FluentMsg)
-				}
-
+			defer workers.Done()
+			for {
+				var msg *library.FluentMsg
 				select {
-				case childInChan <- msg:
+				case <-ctx.Done():
+					return
+				case m, ok := <-in:
+					if !ok {
+						return
+					}
+					msg = m
+				}
+				// All lookup temporaries are worker-local; only the map and its
+				// create lock are shared between dispatch workers.
+				child, ok := children.Load(msg.Tag)
+				if !ok {
+					createMu.Lock()
+					child, ok = children.Load(msg.Tag)
+					if !ok {
+						ch := make(chan *library.FluentMsg, s.InChanSize)
+						child = ch
+						children.Store(msg.Tag, ch)
+						go s.spawnChildSenderForTag(ctx, msg.Tag, ch)
+					}
+					createMu.Unlock()
+				}
+				select {
+				case child.(chan *library.FluentMsg) <- msg:
 				default:
-					if s.DiscardWhenBlocked() {
-						s.successedChan <- msg
-						log.Logger.Warn("skip sender and discard msg since of its inchan is full",
-							zap.String("name", s.GetName()),
-							zap.String("tag", msg.Tag))
-					} else {
-						s.failedChan <- msg
+					if !s.report(ctx, msg, s.DiscardWhenBlocked()) {
+						return
 					}
 				}
 			}
 		}()
 	}
-
-	return inChan
+	go func() {
+		workers.Wait()
+		children.Range(func(_, v interface{}) bool { close(v.(chan *library.FluentMsg)); return true })
+	}()
+	return in
 }
-
-func (s *FluentSender) spawnChildSenderForTag(ctx context.Context, tag string, inChan chan *library.FluentMsg) {
+func waitFluentRetry(ctx context.Context) bool {
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+func (s *FluentSender) spawnChildSenderForTag(ctx context.Context, tag string, in chan *library.FluentMsg) {
 	logger := log.Logger.With(zap.String("tag", tag), zap.String("addr", s.Addr))
-	logger.Info("spawn fluentd child sender")
-	var (
-		nRetry           int
-		maxRetry         = 3
-		msg              *library.FluentMsg
-		msgBatch         = make([]*library.FluentMsg, s.BatchSize)
-		msgBatchDelivery []*library.FluentMsg
-		iBatch           = 0
-		lastT            = time.Unix(0, 0)
-		encoder          *library.FluentEncoder
-		conn             net.Conn
-		err              error
-		ok               bool
-	)
-	ticker := time.NewTicker(s.MaxWait)
-	defer ticker.Stop()
-
-RECONNECT: // reconnect to downstream
-	for {
-		if conn, err = net.DialTimeout("tcp", s.Addr, 10*time.Second); err != nil {
-			logger.Error("connect to fluentd server",
-				zap.Error(err), zap.String("tag", tag))
-			time.Sleep(time.Second)
-			continue RECONNECT
+	var conn net.Conn
+	var encoder *library.FluentEncoder
+	var stopCancel func() bool
+	closeConn := func() {
+		if stopCancel != nil {
+			stopCancel()
+			stopCancel = nil
 		}
-
-		logger.Info("connected to backend",
-			zap.String("backend", conn.RemoteAddr().String()),
-			zap.String("tag", tag))
-
-		encoder = library.NewFluentEncoder(conn) // one encoder for each connection
-	NEW_MSG:
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case msg, ok = <-inChan:
-				if !ok {
-					logger.Info("inchan closed")
-					return
-				}
-
-				msgBatch[iBatch] = msg
-				iBatch++
-			case <-ticker.C:
-				if iBatch == 0 {
-					continue NEW_MSG
-				}
+		if conn != nil {
+			conn.Close()
+			conn = nil
+			encoder = nil
+		}
+	}
+	defer closeConn()
+	send := func(batch []*library.FluentMsg) bool {
+		if utils.Settings.GetBool("dry") {
+			logger.Info("dry send", zap.String("message", fmt.Sprint(batch[0].Message)))
+			return true
+		}
+		for attempt := 0; attempt < 3; attempt++ {
+			if ctx.Err() != nil {
+				return false
 			}
-
-			if iBatch < s.BatchSize &&
-				utils.Clock.GetUTCNow().Sub(lastT) < s.MaxWait {
-				continue NEW_MSG
-			}
-
-			lastT = utils.Clock.GetUTCNow()
-			msgBatchDelivery = msgBatch[:iBatch]
-			iBatch = 0
-			if utils.Settings.GetBool("dry") {
-				logger.Info("send message to backend",
-					zap.String("log", fmt.Sprint(msgBatch[0].Message)))
-				for _, msg = range msgBatchDelivery {
-					s.successedChan <- msg
-				}
-
-				continue NEW_MSG
-			}
-
-			nRetry = 0
-			for {
-				if err = encoder.EncodeBatch(tag, msgBatchDelivery); err != nil {
-					logger.Error("encode msg batch", zap.Error(err))
-					nRetry++
-					// resend too many times, try reconnect
-					if nRetry >= maxRetry {
-						logger.Error("discard msg since of sender err",
-							zap.Int("num", len(msgBatchDelivery)))
-						for _, msg = range msgBatchDelivery {
-							s.failedChan <- msg
-						}
-
-						if err = conn.Close(); err != nil {
-							logger.Error("try to close connection got error", zap.Error(err))
-						}
-
-						logger.Info("connection closed, try to reconnect...")
-						continue RECONNECT
+			if conn == nil {
+				next, err := s.dialConnection(ctx, "tcp", s.Addr)
+				if err != nil {
+					logger.Warn("connect to Fluent downstream", zap.Error(err))
+					if attempt < 2 && !waitFluentRetry(ctx) {
+						return false
 					}
-
 					continue
 				}
-
-				break
+				conn = next
+				// Capture this connection, not the variable reused on reconnect.
+				stopCancel = context.AfterFunc(ctx, func() { next.Close() })
+				encoder = library.NewFluentEncoder(conn)
 			}
-
-			encoder.Flush()
-			logger.Debug("successed send message to backend",
-				zap.Int("batch", len(msgBatchDelivery)))
-			for _, msg = range msgBatchDelivery {
-				s.successedChan <- msg
+			err := conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err == nil {
+				err = encoder.EncodeBatch(tag, batch)
+			}
+			if err == nil {
+				err = encoder.Flush()
+			}
+			if err == nil {
+				return true
+			}
+			logger.Warn("send Fluent batch", zap.Error(err))
+			// A partial write leaves framing uncertain: retry on a fresh
+			// connection, never append another batch to the damaged stream.
+			closeConn()
+		}
+		return false
+	}
+	batch := make([]*library.FluentMsg, 0, s.BatchSize)
+	flush := func() {
+		if len(batch) == 0 {
+			return
+		}
+		success := send(batch)
+		for i, msg := range batch {
+			s.report(ctx, msg, success)
+			batch[i] = nil
+		}
+		batch = batch[:0]
+	}
+	ticker := time.NewTicker(s.MaxWait)
+	defer ticker.Stop()
+	lastFlush := time.Time{}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg, ok := <-in:
+			if !ok {
+				flush()
+				return
+			}
+			batch = append(batch, msg)
+			if len(batch) < s.BatchSize && time.Since(lastFlush) < s.MaxWait {
+				continue
+			}
+		case <-ticker.C:
+			if len(batch) == 0 {
+				continue
 			}
 		}
+		lastFlush = time.Now()
+		flush()
 	}
 }

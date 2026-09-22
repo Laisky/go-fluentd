@@ -22,6 +22,7 @@ type TinyFluentRecord struct {
 }
 
 type FluentEncoder struct {
+	batchEntries    []*[]interface{}
 	wrap, batchWrap FluentBatchMsg
 	writer          *msgp.Writer
 	msgBuf          *bytes.Buffer
@@ -47,23 +48,27 @@ func (e *FluentEncoder) Encode(msg *FluentMsg) error {
 	return e.wrap.EncodeMsg(e.writer)
 }
 
+// EncodeBatch borrows distinct wrappers and returns each original pool object once.
+// Message references are cleared before returning wrappers to the shared pool.
 func (e *FluentEncoder) EncodeBatch(tag string, msgBatch []*FluentMsg) (err error) {
 	e.batchWrap[1] = e.batchWrap[1].([]interface{})[:0]
-	var tmpWrap []interface{}
-	for _, tmpMsg := range msgBatch {
-		tmpWrap = *fluentdWrapMsgPool.Get().(*[]interface{})
-		tmpWrap[1] = tmpMsg.Message
-		e.batchWrap[1] = append(e.batchWrap[1].([]interface{}), tmpWrap)
+	e.batchEntries = e.batchEntries[:0]
+	for _, msg := range msgBatch {
+		entry := fluentdWrapMsgPool.Get().(*[]interface{})
+		(*entry)[1] = msg.Message
+		e.batchEntries = append(e.batchEntries, entry)
+		e.batchWrap[1] = append(e.batchWrap[1].([]interface{}), *entry)
 	}
 	e.batchWrap[0] = tag
 	err = e.batchWrap.EncodeMsg(e.writer)
-
-	// recycle
-	for _, tmpWrapI := range e.batchWrap[1].([]interface{}) {
-		tmpWrap = tmpWrapI.([]interface{})
-		fluentdWrapMsgPool.Put(&tmpWrap)
+	for i, entry := range e.batchEntries {
+		(*entry)[1] = nil
+		fluentdWrapMsgPool.Put(entry)
+		e.batchEntries[i] = nil
+		e.batchWrap[1].([]interface{})[i] = nil
 	}
-
+	e.batchEntries = e.batchEntries[:0]
+	e.batchWrap[1] = e.batchWrap[1].([]interface{})[:0]
 	return err
 }
 

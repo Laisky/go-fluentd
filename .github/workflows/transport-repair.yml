@@ -1,0 +1,400 @@
+name: Transport repair
+on:
+  push:
+    branches: [fix/go127-reliability]
+    paths: [.github/workflows/transport-repair.yml]
+permissions:
+  contents: write
+jobs:
+  repair:
+    if: github.repository == 'Laisky/go-fluentd' && github.ref == 'refs/heads/fix/go127-reliability'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.27.x'
+      - name: Add behavior tests and a behavior-preserving dial seam
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('internal/senders/fluentd.go')
+          s = p.read_text()
+          assert 'dialContext func' not in s
+          s = s.replace('type FluentSender struct {', 'type FluentSender struct {\n\tdialContext func(context.Context, string, string) (net.Conn, error)')
+          assert 'net.DialTimeout("tcp", s.Addr, 10*time.Second)' in s
+          s = s.replace('net.DialTimeout("tcp", s.Addr, 10*time.Second)', 's.dialConnection(ctx, "tcp", s.Addr)')
+          s += '''
+          func (s *FluentSender) dialConnection(ctx context.Context, network, address string) (net.Conn, error) {
+              if s.dialContext != nil { return s.dialContext(ctx, network, address) }
+              return net.DialTimeout(network, address, 10*time.Second)
+          }
+          '''
+          p.write_text(s)
+          Path('internal/senders/fluentd_reliability_test.go').write_text(r'''package senders
+
+          import (
+              "bytes"
+              "context"
+              "fmt"
+              "io"
+              "net"
+              "sync"
+              "sync/atomic"
+              "testing"
+              "time"
+              "gofluentd/library"
+              "github.com/tinylib/msgp/msgp"
+          )
+
+          type regressionConn struct {
+              write func([]byte) (int, error)
+              closed atomic.Bool
+          }
+          func (c *regressionConn) Read([]byte) (int,error) { return 0, io.EOF }
+          func (c *regressionConn) Write(p []byte) (int,error) {
+              if c.closed.Load() { return 0, net.ErrClosed }
+              if c.write != nil { return c.write(p) }
+              return len(p), nil
+          }
+          func (c *regressionConn) Close() error { c.closed.Store(true); return nil }
+          func (*regressionConn) LocalAddr() net.Addr { return &net.TCPAddr{} }
+          func (*regressionConn) RemoteAddr() net.Addr { return &net.TCPAddr{} }
+          func (*regressionConn) SetDeadline(time.Time) error { return nil }
+          func (*regressionConn) SetReadDeadline(time.Time) error { return nil }
+          func (*regressionConn) SetWriteDeadline(time.Time) error { return nil }
+
+          func regressionFluent() (*FluentSender, chan *library.FluentMsg, chan *library.FluentMsg) {
+              s := NewFluentSender(&FluentSenderCfg{Name:"test", Addr:"unused:1", BatchSize:1, InChanSize:1024, NFork:8, MaxWait:time.Hour})
+              ok, fail := make(chan *library.FluentMsg,1024), make(chan *library.FluentMsg,1024)
+              s.SetSuccessedChan(ok); s.SetFailedChan(fail)
+              return s,ok,fail
+          }
+          func regressionChild(s *FluentSender, ctx context.Context) (chan *library.FluentMsg, <-chan struct{}) {
+              in, done := make(chan *library.FluentMsg,16), make(chan struct{})
+              go func(){ defer close(done); s.spawnChildSenderForTag(ctx,"logs",in) }()
+              return in,done
+          }
+          func regressionMessage() *library.FluentMsg { return &library.FluentMsg{ID:42, Tag:"logs", Message:map[string]interface{}{"message":"hello"}} }
+
+          func TestRegressionFluentFailedFlushNotAcknowledged(t *testing.T) {
+              s,ok,fail := regressionFluent()
+              var writes atomic.Int64
+              s.dialContext = func(context.Context,string,string)(net.Conn,error) {
+                  return &regressionConn{write:func([]byte)(int,error){ writes.Add(1); return 0,io.ErrClosedPipe }},nil
+              }
+              ctx,cancel := context.WithCancel(context.Background()); defer cancel()
+              in,_ := regressionChild(s,ctx); in <- regressionMessage()
+              select {
+              case <-ok: t.Error("failed TCP Flush was acknowledged as successful")
+              case <-fail:
+              case <-time.After(2*time.Second): t.Error("missing delivery outcome")
+              }
+              if writes.Load()==0 { t.Error("test did not exercise an actual write") }
+          }
+          func TestRegressionFluentSuccess(t *testing.T) {
+              s,ok,fail := regressionFluent()
+              s.dialContext = func(context.Context,string,string)(net.Conn,error){ return &regressionConn{},nil }
+              ctx,cancel := context.WithCancel(context.Background()); defer cancel()
+              in,_ := regressionChild(s,ctx); want:=regressionMessage(); in<-want
+              select { case got:=<-ok: if got!=want {t.Error("wrong message acknowledged")}; case <-fail: t.Error("successful write failed"); case <-time.After(time.Second): t.Error("missing success") }
+          }
+          func TestRegressionFluentConnectionClosedOnCancel(t *testing.T) {
+              s,ok,_ := regressionFluent(); conn:=&regressionConn{}
+              s.dialContext = func(context.Context,string,string)(net.Conn,error){ return conn,nil }
+              ctx,cancel := context.WithCancel(context.Background()); defer cancel()
+              in,done := regressionChild(s,ctx); in<-regressionMessage()
+              select { case <-ok: case <-time.After(time.Second): t.Fatal("missing success") }
+              cancel()
+              select { case <-done: case <-time.After(time.Second): t.Fatal("sender did not stop") }
+              if !conn.closed.Load() {t.Error("TCP connection leaked after cancellation")}
+          }
+          func TestRegressionFluentReconnectCancellation(t *testing.T) {
+              s,_,_ := regressionFluent(); started:=make(chan struct{}); var once sync.Once
+              s.dialContext = func(context.Context,string,string)(net.Conn,error){ once.Do(func(){close(started)}); return nil,io.ErrClosedPipe }
+              ctx,cancel := context.WithCancel(context.Background()); defer cancel()
+              in,done:=regressionChild(s,ctx); in<-regressionMessage()
+              select {case <-started: case <-time.After(time.Second): t.Fatal("dial did not start")}
+              cancel()
+              select {case <-done: case <-time.After(250*time.Millisecond): t.Error("reconnect loop ignored cancellation")}
+          }
+          func TestRegressionFluentInputCloseFlushesPending(t *testing.T) {
+              s,ok,fail:=regressionFluent(); s.BatchSize=10
+              s.dialContext=func(context.Context,string,string)(net.Conn,error){return &regressionConn{},nil}
+              ctx,cancel:=context.WithCancel(context.Background());defer cancel()
+              in,done:=regressionChild(s,ctx)
+              for i:=0;i<3;i++ {in<-regressionMessage()};close(in)
+              select {case <-done: case <-time.After(time.Second):t.Fatal("sender did not drain closed input")}
+              if len(ok)!=3 || len(fail)!=0 {t.Errorf("closed input: successes=%d failures=%d, want 3 successes",len(ok),len(fail))}
+          }
+          func TestRegressionFluentPartialWriteReconnects(t *testing.T) {
+              s,ok,fail:=regressionFluent();var dials atomic.Int64
+              s.dialContext=func(context.Context,string,string)(net.Conn,error){
+                  if dials.Add(1)==1 {return &regressionConn{write:func(p []byte)(int,error){return len(p)/2,io.ErrUnexpectedEOF}},nil}
+                  return &regressionConn{},nil
+              }
+              ctx,cancel:=context.WithCancel(context.Background());defer cancel()
+              in,_:=regressionChild(s,ctx);in<-regressionMessage()
+              select {case <-ok: case <-fail:t.Error("fresh connection did not recover");case <-time.After(time.Second):t.Fatal("no outcome")}
+              if dials.Load()<2 {t.Error("partial write was acknowledged without reconnecting and retrying")}
+          }
+          func TestRegressionFluentConcurrentTagRouting(t *testing.T) {
+              s,ok,fail:=regressionFluent();errs:=make(chan error,1024)
+              s.dialContext=func(context.Context,string,string)(net.Conn,error){
+                  return &regressionConn{write:func(p []byte)(int,error){
+                      var packet library.FluentBatchMsg
+                      if err:=packet.DecodeMsg(msgp.NewReader(bytes.NewReader(p)));err!=nil {errs<-err;return len(p),nil}
+                      records,valid:=packet[1].([]interface{});if !valid {errs<-fmt.Errorf("bad records type %T",packet[1]);return len(p),nil}
+                      for _,r:=range records {
+                          entry:=r.([]interface{});msg:=entry[1].(map[string]interface{})
+                          if packet[0]!=msg["sourceTag"] {errs<-fmt.Errorf("message routed to tag %v, want %v",packet[0],msg["sourceTag"])}
+                      }
+                      return len(p),nil
+                  }},nil
+              }
+              ctx,cancel:=context.WithCancel(context.Background());defer cancel()
+              in:=s.Spawn(ctx)
+              const n=256
+              for i:=0;i<n;i++ {tag:=fmt.Sprintf("tag-%d",i%8);in<-&library.FluentMsg{ID:int64(i+1),Tag:tag,Message:map[string]interface{}{"sourceTag":tag}}}
+              deadline:=time.NewTimer(3*time.Second);defer deadline.Stop()
+              for i:=0;i<n;i++ {select {case <-ok:case <-fail:t.Error("unexpected failed delivery");case <-deadline.C:t.Fatal("missing delivery outcomes")}}
+              close(in);cancel()
+              for len(errs)>0 {t.Error(<-errs)}
+          }
+          ''')
+          Path('internal/recvs/http_limits_test.go').write_text(r'''package recvs
+
+          import (
+              "io"
+              "net/http"
+              "net/http/httptest"
+              "strings"
+              "sync"
+              "testing"
+              "gofluentd/library"
+              "github.com/gin-gonic/gin"
+          )
+          type regressionCountingBody struct { io.Reader; n int }
+          func (b *regressionCountingBody) Read(p []byte)(int,error){ n,err:=b.Reader.Read(p);b.n+=n;return n,err }
+          func (*regressionCountingBody) Close()error{return nil}
+          func TestRegressionHTTPBodyLimits(t *testing.T) {
+              for _,known:=range []bool{false,true} {t.Run(map[bool]string{false:"unknown_length",true:"known_length"}[known],func(t *testing.T){
+                  w:=httptest.NewRecorder();c,_:=gin.CreateTestContext(w)
+                  c.Params=gin.Params{{Key:"env",Value:"sit"}}
+                  body:=&regressionCountingBody{Reader:strings.NewReader(strings.Repeat("!",1024))}
+                  c.Request=httptest.NewRequest(http.MethodPost,"/logs/sit",nil);c.Request.Body=body;c.Request.ContentLength=-1
+                  if known {c.Request.ContentLength=1024}
+                  r:=&HTTPRecv{BaseRecv:&BaseRecv{},HTTPRecvCfg:&HTTPRecvCfg{MaxBodySize:32}}
+                  r.SetMsgPool(&sync.Pool{New:func()interface{}{return &library.FluentMsg{}}})
+                  r.HTTPLogHandler(c)
+                  if w.Code!=http.StatusRequestEntityTooLarge {t.Errorf("status=%d, want 413",w.Code)}
+                  if body.n>33 {t.Errorf("read %d bytes, limit must stop after at most 33",body.n)}
+              })}
+          }
+          func TestRegressionBadRequestKeepsLiteralPercent(t *testing.T){
+              c,_:=gin.CreateTestContext(httptest.NewRecorder());r:=&HTTPRecv{}
+              want:="100% failed: %s";r.BadRequest(c,want)
+              if got:=c.Errors.Last().Error();got!=want {t.Errorf("error=%q, want %q",got,want)}
+          }
+          ''')
+          PY
+          gofmt -w internal/senders/fluentd.go internal/senders/fluentd_reliability_test.go internal/recvs/http_limits_test.go
+          go test -mod=readonly -run '^$' ./...
+          git config user.name 'Laisky'
+          git config user.email 'public@laisky.com'
+          git add internal/senders/fluentd.go internal/senders/fluentd_reliability_test.go internal/recvs/http_limits_test.go
+          git commit -m 'test: reproduce TCP flush, shutdown, routing and HTTP body-limit bugs'
+          git push origin HEAD:refs/heads/fix/go127-reliability
+      - name: Verify red behavior and passing controls
+        run: |
+          python3 - <<'PY'
+          import subprocess,json
+          pattern='TestRegressionFluent(FailedFlushNotAcknowledged|Success|ConnectionClosedOnCancel|ReconnectCancellation|InputCloseFlushesPending|PartialWriteReconnects)$|TestRegressionHTTPBodyLimits|TestRegressionBadRequestKeepsLiteralPercent'
+          p=subprocess.run(['go','test','-json','-mod=readonly','-count=1','-timeout=30s','-run',pattern,'./internal/senders','./internal/recvs'],text=True,capture_output=True)
+          print(p.stdout);print(p.stderr)
+          events=[json.loads(x) for x in p.stdout.splitlines() if x.startswith('{')]
+          failed={x.get('Test') for x in events if x.get('Action')=='fail'}
+          passed={x.get('Test') for x in events if x.get('Action')=='pass'}
+          required={'TestRegressionFluentFailedFlushNotAcknowledged','TestRegressionFluentConnectionClosedOnCancel','TestRegressionFluentReconnectCancellation','TestRegressionFluentInputCloseFlushesPending','TestRegressionFluentPartialWriteReconnects','TestRegressionHTTPBodyLimits'}
+          assert required <= failed,(required-failed,failed)
+          assert 'TestRegressionFluentSuccess' in passed
+          assert 'TestRegressionBadRequestKeepsLiteralPercent' in passed
+          p=subprocess.run(['go','test','-mod=readonly','-race','-count=3','-timeout=30s','-run','^TestRegressionFluentConcurrentTagRouting$','./internal/senders'],text=True,capture_output=True)
+          output=p.stdout+p.stderr;print(output)
+          assert p.returncode!=0 and 'WARNING: DATA RACE' in output and 'senders/fluentd.go' in output
+          PY
+      - name: Fix transport state and enforce streaming request limit
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          Path('internal/senders/fluentd.go').write_text(r'''package senders
+
+          import (
+              "context"
+              "fmt"
+              "net"
+              "sync"
+              "time"
+              "gofluentd/library"
+              "gofluentd/library/log"
+              "github.com/Laisky/go-utils"
+              "github.com/Laisky/zap"
+          )
+
+          type FluentSenderCfg struct {
+              Name, Addr string
+              Tags []string
+              BatchSize, InChanSize, NFork int
+              MaxWait time.Duration
+              IsDiscardWhenBlocked bool
+              ConcatCfg map[string]interface{}
+          }
+          type FluentSender struct {
+              *BaseSender
+              *FluentSenderCfg
+              // Test seam; configure before starting workers.
+              dialContext func(context.Context,string,string)(net.Conn,error)
+          }
+          func NewFluentSender(cfg *FluentSenderCfg) *FluentSender {
+              if cfg.Addr=="" {log.Logger.Panic("addr should not be empty")}
+              if cfg.NFork<=0 {cfg.NFork=1}
+              if cfg.BatchSize<=0 {cfg.BatchSize=500}
+              if cfg.InChanSize<0 {cfg.InChanSize=0}
+              if cfg.MaxWait<=0 {cfg.MaxWait=time.Second}
+              s:=&FluentSender{BaseSender:&BaseSender{IsDiscardWhenBlocked:cfg.IsDiscardWhenBlocked},FluentSenderCfg:cfg}
+              s.SetSupportedTags(cfg.Tags)
+              return s
+          }
+          func (s *FluentSender) GetName()string{return s.Name}
+          func (s *FluentSender) dialConnection(ctx context.Context,network,address string)(net.Conn,error){
+              if s.dialContext!=nil{return s.dialContext(ctx,network,address)}
+              d:=net.Dialer{Timeout:10*time.Second}
+              return d.DialContext(ctx,network,address)
+          }
+          // report preserves the explicit lossy configuration, but a transport error
+          // must never be reported as success. Cancellation must not block shutdown.
+          func (s *FluentSender) report(ctx context.Context,msg *library.FluentMsg,success bool)bool{
+              ch:=s.failedChan;if success {ch=s.successedChan}
+              select {case ch<-msg:return true;case <-ctx.Done():return false}
+          }
+          func (s *FluentSender) Spawn(ctx context.Context)chan<- *library.FluentMsg{
+              in:=make(chan *library.FluentMsg,s.InChanSize)
+              var children sync.Map
+              var createMu sync.Mutex
+              var workers sync.WaitGroup
+              workers.Add(s.NFork)
+              for i:=0;i<s.NFork;i++ {go func(){
+                  defer workers.Done()
+                  for {
+                      var msg *library.FluentMsg
+                      select {case <-ctx.Done():return;case m,ok:=<-in:if !ok{return};msg=m}
+                      // All lookup temporaries are worker-local; only the map and its
+                      // create lock are shared between dispatch workers.
+                      child,ok:=children.Load(msg.Tag)
+                      if !ok {
+                          createMu.Lock()
+                          child,ok=children.Load(msg.Tag)
+                          if !ok {ch:=make(chan *library.FluentMsg,s.InChanSize);child=ch;children.Store(msg.Tag,ch);go s.spawnChildSenderForTag(ctx,msg.Tag,ch)}
+                          createMu.Unlock()
+                      }
+                      select {
+                      case child.(chan *library.FluentMsg)<-msg:
+                      default:if !s.report(ctx,msg,s.DiscardWhenBlocked()){return}
+                      }
+                  }
+              }()}
+              go func(){workers.Wait();children.Range(func(_,v interface{})bool{close(v.(chan *library.FluentMsg));return true})}()
+              return in
+          }
+          func waitFluentRetry(ctx context.Context)bool{
+              timer:=time.NewTimer(time.Second);defer timer.Stop()
+              select {case <-ctx.Done():return false;case <-timer.C:return true}
+          }
+          func (s *FluentSender) spawnChildSenderForTag(ctx context.Context,tag string,in chan *library.FluentMsg){
+              logger:=log.Logger.With(zap.String("tag",tag),zap.String("addr",s.Addr))
+              var conn net.Conn
+              var encoder *library.FluentEncoder
+              var stopCancel func()bool
+              closeConn:=func(){
+                  if stopCancel!=nil {stopCancel();stopCancel=nil}
+                  if conn!=nil {conn.Close();conn=nil;encoder=nil}
+              }
+              defer closeConn()
+              send:=func(batch []*library.FluentMsg)bool{
+                  if utils.Settings.GetBool("dry") {logger.Info("dry send",zap.String("message",fmt.Sprint(batch[0].Message)));return true}
+                  for attempt:=0;attempt<3;attempt++ {
+                      if ctx.Err()!=nil{return false}
+                      if conn==nil {
+                          next,err:=s.dialConnection(ctx,"tcp",s.Addr)
+                          if err!=nil {
+                              logger.Warn("connect to Fluent downstream",zap.Error(err))
+                              if attempt<2 && !waitFluentRetry(ctx){return false}
+                              continue
+                          }
+                          conn=next
+                          // Capture this connection, not the variable reused on reconnect.
+                          stopCancel=context.AfterFunc(ctx,func(){next.Close()})
+                          encoder=library.NewFluentEncoder(conn)
+                      }
+                      err:=conn.SetWriteDeadline(time.Now().Add(10*time.Second))
+                      if err==nil {err=encoder.EncodeBatch(tag,batch)}
+                      if err==nil {err=encoder.Flush()}
+                      if err==nil {return true}
+                      logger.Warn("send Fluent batch",zap.Error(err))
+                      // A partial write leaves framing uncertain: retry on a fresh
+                      // connection, never append another batch to the damaged stream.
+                      closeConn()
+                  }
+                  return false
+              }
+              batch:=make([]*library.FluentMsg,0,s.BatchSize)
+              flush:=func(){
+                  if len(batch)==0{return}
+                  success:=send(batch)
+                  for i,msg:=range batch {s.report(ctx,msg,success);batch[i]=nil}
+                  batch=batch[:0]
+              }
+              ticker:=time.NewTicker(s.MaxWait);defer ticker.Stop()
+              lastFlush:=time.Time{}
+              for {
+                  select {
+                  case <-ctx.Done():return
+                  case msg,ok:=<-in:
+                      if !ok {flush();return}
+                      batch=append(batch,msg)
+                      if len(batch)<s.BatchSize && time.Since(lastFlush)<s.MaxWait {continue}
+                  case <-ticker.C:
+                      if len(batch)==0 {continue}
+                  }
+                  lastFlush=time.Now();flush()
+              }
+          }
+          ''')
+          p=Path('internal/recvs/http.go');s=p.read_text()
+          s=s.replace('"encoding/hex"','"encoding/hex"\n\t"errors"')
+          s=s.replace('r.BadRequest(ctx, fmt.Sprintf("content size must less than %d bytes", r.MaxBodySize))','ctx.AbortWithStatus(http.StatusRequestEntityTooLarge)')
+          old='msgData, err := ioutil.ReadAll(ctx.Request.Body)'
+          assert old in s
+          s=s.replace(old,'ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, r.MaxBodySize)\n\tmsgData, err := ioutil.ReadAll(ctx.Request.Body)')
+          old='r.BadRequest(ctx, "can not load request body")'
+          assert old in s
+          s=s.replace(old,'var tooLarge *http.MaxBytesError\n\t\tif errors.As(err, &tooLarge) { ctx.AbortWithStatus(http.StatusRequestEntityTooLarge) } else { r.BadRequest(ctx, "can not load request body") }')
+          p.write_text(s)
+          PY
+          gofmt -w internal/senders/fluentd.go internal/recvs/http.go
+          go test -mod=readonly -count=1 -timeout=60s -run TestRegression ./internal/senders ./internal/recvs ./library
+          go test -mod=readonly -race -count=10 -timeout=120s -run TestRegression ./internal/senders ./internal/recvs ./library
+          git add internal/senders/fluentd.go internal/recvs/http.go
+          git diff --cached --check
+          git commit -m 'fix: verify TCP flush, isolate tag routing and bound HTTP request reads'
+          git push origin HEAD:refs/heads/fix/go127-reliability
+          git rev-parse HEAD
+      - name: Full repository verification
+        run: |
+          go test -mod=readonly -count=1 -timeout=120s ./...
+          go test -mod=readonly -race -count=1 -timeout=120s ./...
+          go vet -mod=readonly ./...
+          go build -mod=readonly ./...

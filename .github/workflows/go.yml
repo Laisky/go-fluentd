@@ -18,6 +18,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      GOTOOLCHAIN: local
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -29,10 +31,23 @@ jobs:
       - run: go mod verify
       - run: go build -mod=readonly ./...
       - run: go vet -mod=readonly ./...
-      - run: go test -mod=readonly -count=1 -timeout=180s ./...
-      - run: go test -mod=readonly -race -count=1 -timeout=180s ./...
-      - run: go test -mod=readonly -race -count=10 -timeout=180s -run TestRegression ./...
+      - name: Behavior tests and component coverage floors
+        run: |
+          go test -mod=readonly -count=1 -timeout=180s -coverprofile=/tmp/component.cover ./...
+          python3 .scripts/check_component_coverage.py /tmp/component.cover
+          go tool cover -func=/tmp/component.cover
+      - name: Randomized full-suite race tests
+        run: go test -mod=readonly -race -count=5 -shuffle=on -timeout=180s ./...
+      - name: Repeat component and regression contracts
+        run: go test -mod=readonly -race -count=10 -shuffle=on -timeout=180s -run 'Test(Regression|Component)' ./...
       - run: git diff --exit-code -- go.mod go.sum
+      - name: Retain the measured coverage profile
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: component-coverage
+          path: /tmp/component.cover
+          if-no-files-found: error
+          retention-days: 14
 
   docker:
     runs-on: ubuntu-latest

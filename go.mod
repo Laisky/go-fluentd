@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/Laisky/gin-middlewares v1.1.1
-	github.com/Laisky/go-journal v1.1.7-0.20260922164307-3ed625db57b2
+	github.com/Laisky/go-journal v1.1.7-0.20260922164955-86ddbb3d3069
 	github.com/Laisky/go-kafka v1.0.1
 	github.com/Laisky/go-syslog v2.3.3+incompatible
 	github.com/Laisky/go-utils v1.14.6

@@ -151,3 +151,51 @@ func TestRegressionCommittedIDRetry(t *testing.T) {
 		})
 	}
 }
+
+type regressionReplayBackend struct {
+	loadError   error
+	malformed   bool
+	unlockCalls int
+	writes      int
+}
+
+func (*regressionReplayBackend) LockLegacy() bool     { return true }
+func (b *regressionReplayBackend) UnLockLegacy() bool { b.unlockCalls++; return true }
+func (b *regressionReplayBackend) LoadLegacyBuf(data *journal.Data) error {
+	if b.malformed {
+		data.ID = 42
+		data.Data = map[string]interface{}{"tag": 123, "message": map[string]interface{}{"payload": "keep"}}
+		return nil
+	}
+	// Model the documented backend handoff: EOF/error already released
+	// our lock, and another owner may acquire it before this returns.
+	return b.loadError
+}
+func (b *regressionReplayBackend) WriteData(*journal.Data) error { b.writes++; return nil }
+func regressionControllerForBackend(b legacyJournal) *Journal {
+	j := &Journal{JournalCfg: &JournalCfg{MsgPool: &sync.Pool{New: func() interface{} { return &library.FluentMsg{} }}}, legacyLock: utils.NewMutex(), tag2JMap: &sync.Map{}}
+	j.tag2JMap.Store("logs", b)
+	return j
+}
+func TestRegressionReplayDoesNotReleaseAnotherOwner(t *testing.T) {
+	for _, err := range []error{io.EOF, io.ErrUnexpectedEOF} {
+		b := &regressionReplayBackend{loadError: err}
+		regressionControllerForBackend(b).ProcessLegacyMsg(make(chan *library.FluentMsg, 1))
+		if b.unlockCalls != 0 {
+			t.Errorf("released another owner's lock %d times after %v", b.unlockCalls, err)
+		}
+	}
+}
+func TestRegressionReplayMalformedRecordPreserved(t *testing.T) {
+	b := &regressionReplayBackend{malformed: true}
+	_, err := regressionControllerForBackend(b).ProcessLegacyMsg(make(chan *library.FluentMsg, 1))
+	if err == nil {
+		t.Error("malformed record accepted")
+	}
+	if b.writes != 1 {
+		t.Errorf("malformed record lost its replacement copy: writes=%d", b.writes)
+	}
+	if b.unlockCalls != 1 {
+		t.Errorf("owned lock not released exactly once: %d", b.unlockCalls)
+	}
+}

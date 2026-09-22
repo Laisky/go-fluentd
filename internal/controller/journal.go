@@ -213,6 +213,14 @@ func (j *Journal) ProcessLegacyMsg(dumpChan chan *library.FluentMsg) (int64, err
 
 // processLegacyMsg writes each retained record before publishing its in-memory
 // copy. go-journal synchronizes replacement files before legacy cleanup.
+// LoadLegacyBuf releases the legacy lock itself on EOF or error.
+type legacyJournal interface {
+	LockLegacy() bool
+	UnLockLegacy() bool
+	LoadLegacyBuf(*journal.Data) error
+	WriteData(*journal.Data) error
+}
+
 func (j *Journal) processLegacyMsg(ctx context.Context, out chan *library.FluentMsg) (maxID int64, resultErr error) {
 	if !j.legacyLock.TryLock() {
 		return 0, fmt.Errorf("another legacy is running")
@@ -222,7 +230,7 @@ func (j *Journal) processLegacyMsg(ctx context.Context, out chan *library.Fluent
 	var mu sync.Mutex
 	j.tag2JMap.Range(func(k, v interface{}) bool {
 		wg.Add(1)
-		go func(tag string, jj *journal.Journal) {
+		go func(tag string, jj legacyJournal) {
 			defer wg.Done()
 			var innerMax int64
 			var replayErr error
@@ -274,7 +282,7 @@ func (j *Journal) processLegacyMsg(ctx context.Context, out chan *library.Fluent
 					return
 				}
 			}
-		}(k.(string), v.(*journal.Journal))
+		}(k.(string), v.(legacyJournal))
 		return true
 	})
 	wg.Wait()

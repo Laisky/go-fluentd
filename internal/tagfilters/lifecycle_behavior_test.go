@@ -143,3 +143,30 @@ func TestBehaviorTagPipelineMetricsConcurrentWithSpawn(t *testing.T) {
 	}()
 	wg.Wait()
 }
+
+func TestBehaviorConcatorFactoryConfigurationAndSpawn(t *testing.T) {
+	configs := LoadConcatorTagConfigs("prod", map[string]interface{}{"logs": map[string]interface{}{"msg_key": "log", "identifier": "container", "regex": "^START"}})
+	cf := NewConcatorFact(&ConcatorFactCfg{NFork: 2, MaxLen: 10000, LBKey: "container", Plugins: configs})
+	if !cf.IsTagSupported("logs.prod") || cf.IsTagSupported("logs.test") || cf.GetName() != "concator" {
+		t.Fatal("factory configuration")
+	}
+	cf.SetDefaultIntervalChanSize(8)
+	cf.SetMsgPool(&sync.Pool{New: func() interface{} { return &library.FluentMsg{} }})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	out := make(chan *library.FluentMsg, 8)
+	in := cf.Spawn(ctx, "logs.prod", out)
+	head := &library.FluentMsg{Tag: "logs.prod", ID: 10, Message: map[string]interface{}{"log": "START a", "container": "x"}}
+	tail := &library.FluentMsg{Tag: "logs.prod", ID: 11, Message: map[string]interface{}{"log": " tail", "container": "x"}}
+	in <- head
+	in <- tail
+	close(in)
+	select {
+	case got := <-out:
+		if got != head || string(got.Message["log"].([]byte)) != "START a tail" || len(got.ExtIds) != 1 || got.ExtIds[0] != 11 {
+			t.Fatalf("factory lost/merged incorrectly: %+v", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("factory did not drain")
+	}
+}

@@ -27,7 +27,10 @@ jobs:
           go-version: '1.27.x'
           cache: true
       - run: go version
+      - name: Focused regression behavior
+        run: go test -mod=mod -count=1 -v -run TestRegression ./internal/senders ./library
       - name: Compile all packages and tests
+        if: always()
         run: go test -mod=mod -run '^$' ./...
       - name: Tests and race detector
         run: go test -mod=mod -race -count=1 -timeout=120s ./...

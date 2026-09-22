@@ -3,85 +3,26 @@ package library
 import (
 	"testing"
 	"time"
-
-	"github.com/Laisky/zap"
-)
-
-var (
-	initWaitTs     = 200 * time.Millisecond
-	maxWaitTs      = 1 * time.Second
-	waitTs         = initWaitTs
-	nWaits         = 0
-	nWaitsToDouble = 2
-	timeoutTs      = 5 * time.Second
-	timer          = NewTimer(
-		NewTimerConfig(
-			initWaitTs,
-			maxWaitTs,
-			waitTs,
-			timeoutTs,
-			nWaits,
-			nWaitsToDouble,
-		),
-	)
 )
 
 func TestTimerTick(t *testing.T) {
-	now := time.Now()
+	timer := NewTimer(NewTimerConfig(time.Millisecond, 4*time.Millisecond, time.Millisecond, time.Second, 0, 2))
+	now := time.Unix(100, 0)
 	timer.Reset(now)
-
-	if timer.Tick(now.Add(timeoutTs).Truncate(1 * time.Millisecond)) {
-		t.Error("expect false, got true")
-	}
-
-	if timer.Tick(now.Add(timeoutTs)) {
-		t.Error("expect true, got false")
-	}
+	if timer.Tick(now.Add(time.Second-time.Nanosecond)) { t.Error("triggered before timeout") }
+	if timer.Tick(now.Add(time.Second)) { t.Error("existing strict timeout boundary changed") }
+	if !timer.Tick(now.Add(time.Second+time.Nanosecond)) { t.Error("did not trigger after timeout") }
+	if timer.Tick(now.Add(time.Second+2*time.Nanosecond)) { t.Error("did not reset trigger time") }
 }
 
 func TestTimerSleep(t *testing.T) {
-	var (
-		start, end   time.Time
-		expectWaitTs = initWaitTs
-	)
-	start = time.Now()
-	timer.Sleep()
-	end = time.Now()
-	if end.Sub(start) < expectWaitTs {
-		t.Errorf("except %v, got %v", expectWaitTs, end.Sub(start))
-	}
-
-	start = time.Now()
-	timer.Sleep()
-	expectWaitTs += expectWaitTs
-	end = time.Now()
-	if end.Sub(start) < expectWaitTs {
-		t.Errorf("except %v, got %v", expectWaitTs, end.Sub(start))
-	}
-
-	timer.Sleep()
-	start = time.Now()
-	timer.Sleep()
-	expectWaitTs += expectWaitTs
-	end = time.Now()
-	if end.Sub(start) < expectWaitTs {
-		t.Errorf("except %v, got %v", expectWaitTs, end.Sub(start))
-	}
-
-	for i := 0; i < 8; i++ {
+	timer := NewTimer(NewTimerConfig(time.Millisecond, 4*time.Millisecond, time.Millisecond, time.Second, 0, 2))
+	for _, want := range []time.Duration{time.Millisecond, 2*time.Millisecond, 2*time.Millisecond, 4*time.Millisecond, 4*time.Millisecond, 4*time.Millisecond} {
+		start := time.Now()
 		timer.Sleep()
+		if timer.cfg.waitTs != want { t.Fatalf("backoff=%v, want %v", timer.cfg.waitTs, want) }
+		if elapsed := time.Since(start); elapsed < want { t.Errorf("slept %v, want at least %v", elapsed, want) }
 	}
-	expectWaitTs = 1100 * time.Millisecond
-	start = time.Now()
-	timer.Sleep()
-	end = time.Now()
-	if end.Sub(start) > expectWaitTs {
-		t.Errorf("except %v, got %v", expectWaitTs, end.Sub(start))
-	}
-}
-
-func init() {
-	if err := Logger.ChangeLevel("debug"); err != nil {
-		Logger.Panic("change level", zap.Error(err))
-	}
+	timer.Reset(time.Now())
+	if timer.cfg.waitTs != time.Millisecond || timer.cfg.nWaits != 0 { t.Error("Reset did not reset backoff") }
 }

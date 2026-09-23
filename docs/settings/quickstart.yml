@@ -1,0 +1,69 @@
+# Local demo only. Start from the repository root; state is relative to cwd.
+# The public salt and console destination are not a production security/storage setup.
+settings:
+  journal:
+    buf_dir_path: ./var/go-fluentd/journal
+    buf_file_bytes: 1048576
+    is_compress: false
+    committed_id_sec: 120
+    group_commit_max_messages: 1
+    journal_out_chan_len: 32
+    commit_id_chan_len: 32
+    child_data_chan_len: 32
+    child_id_chan_len: 32
+    gc_inteval_sec: 3600 # Existing spelling in the configuration loader.
+  acceptor:
+    async_out_chan_size: 32
+    sync_out_chan_size: 32
+    recvs:
+      plugins:
+        demo_http:
+          type: http
+          active_env: [sit]
+          path: /ingest/:env
+          tag: demo
+          orig_tag: demo
+          tag_key: tag
+          require_durable_ack: true
+          time_key: ts
+          time_format: '2006-01-02T15:04:05Z07:00'
+          ts_regexp: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$'
+          signature_key: sig
+          signature_salt: local-demo-only-not-a-production-secret
+          max_body_byte: 65536
+          max_allowed_delay_sec: 300
+          max_allowed_ahead_sec: 30
+  acceptor_filters:
+    fork: 1
+    out_buf_len: 32
+    reenter_chan_len: 32
+    plugins:
+      default:
+        remove_empty_tag: true
+        remove_unknown_tag: true
+        accept_tags: ['demo.{env}']
+  tag_filters:
+    internal_chan_size: 32
+  dispatcher:
+    nfork: 1
+    out_chan_size: 32
+  post_filters:
+    fork: 1
+    out_chan_size: 32
+    reenter_chan_len: 32
+    plugins:
+      default:
+        max_len: 65536
+  producer:
+    forks: 1
+    discard_chan_size: 32
+    sender_inchan_size: 32
+    plugins:
+      demo_console:
+        type: stdout
+        active_env: [sit]
+        tags: ['demo.{env}']
+        forks: 1
+        log_level: info
+        is_commit: true # Demo terminal sink only; console output is not durable storage.
+        is_discard_when_blocked: false

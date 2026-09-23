@@ -1,0 +1,54 @@
+name: README examples
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: readme-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  examples:
+    name: README (${{ matrix.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [native, docker]
+    env:
+      GOTOOLCHAIN: local
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        if: matrix.mode == 'native'
+        with:
+          go-version: '1.27.x'
+      - name: Verify documentation checker and Markdown structure
+        run: |
+          python3 .scripts/check_readme.py --self-test
+          python3 .scripts/check_readme.py --static
+      - name: Execute exact README commands and inspect actual output
+        env:
+          EXAMPLE_MODE: ${{ matrix.mode }}
+        run: python3 .scripts/check_readme.py --"$EXAMPLE_MODE"
+      - name: Verify module files were not changed
+        run: git diff --exit-code -- go.mod go.sum
+      - name: Retain example assertions and diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: readme-${{ matrix.mode }}
+          path: var/readme-check/
+          retention-days: 14
+          if-no-files-found: warn

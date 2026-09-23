@@ -1,165 +1,63 @@
-# Quick Start
+# Quickstart and troubleshooting
 
-Running a minimal example with app, go-fluentd and fluentd.
+Follow the [tested root README quickstart](../README.md#quickstart). It builds
+from the current checkout and runs HTTP → journal → console without an external
+cluster. The [small configuration](settings/quickstart.yml), source build, Docker
+command and request example are exercised by the README CI workflow.
 
-App ---> Go-Fluentd(with stdout sender plugin)
+The older Compose example under `docs/example/` remains historical material; it
+is not the recommended entry point or a claim about current published images.
 
-- App: generate and emit logs
-- Go-Fluentd: collect and parse log
+## What the demo proves
 
+`require_durable_ack: true` makes a successful HTTP response wait for local
+journal synchronization. The console sender then logs the event and confirms it
+according to its explicit `is_commit: true` setting. This demonstrates the local
+processing path, not durable downstream storage or exactly-once delivery.
 
-## Prepare
+The routing tag is `demo.sit`: HTTP `tag: demo` appends the process's `--env=sit`.
+The payload's `tag` is also `demo.sit` for `/ingest/sit`; it is derived from
+`orig_tag` and the URL environment. The console's `demo.{env}` replaces the
+placeholder. Other plugins have different naming rules; verify the effective
+tag and active environment when adding a destination.
 
-Requirements:
+## Troubleshooting
 
-- git
-- docker
-- docker-compose
+| Symptom | Check |
+| --- | --- |
+| Build fails immediately | Run `go version`; use Go 1.27 or newer. Build from the repository root using `go build ... .`, not an invented module import path. Dependency downloads need network access. |
+| Configuration not found | `--config` points to the checked-in example. Relative journal paths resolve from the process working directory, not from the YAML file's directory. |
+| Port 8080 already in use | Stop the other demo. Changing `--addr` also requires changing the request/check URLs. It does not change other receiver addresses. |
+| HTTP `400` | Regenerate the timestamp/signature together. The demo allows 300 seconds of age and 30 seconds of clock lead. Use `/ingest/sit`, a JSON object, and the exact demo salt; the signature covers the timestamp, not the payload. |
+| HTTP `413` | The demo limits the actual request body to 65,536 bytes. Chunking or omitting Content-Length does not bypass it. |
+| HTTP `503` | Check journal permissions, disk availability and pre-persistence filtering. Never treat a rejected/failed response as successful acceptance. |
+| Timeout or connection loss | Acceptance may already have happened. Retry with awareness that duplicates are possible; do not delete journal state. |
+| `200`, but no `consume msg` line | Wait for downstream processing, then verify `--log-level=info`, console `log_level: info`, `active_env`, and exact output tags. The HTTP response is a local acceptance receipt. |
+| Docker permission error | Create the host `var/go-fluentd/journal` directory as the user named by `--user`; check bind-mount ownership. Do not use world-writable state as a workaround. |
+| `/health` succeeds during a downstream outage | Expected: this endpoint checks the listener only. Inspect `/monitor`, errors and destination health separately. |
 
-And this example need bind port 24225 to transfer log stream,
-and port 8080 to monitor HTTP API.
+## State and cleanup
 
+The native command and Docker example use the same host `var/go-fluentd/journal`
+directory. Never run them simultaneously against it. Stop the application before
+any intentional demo-state deletion. Keep the directory across restarts and
+upgrades for replay; `docker --rm` removes the container, not the host bind mount.
 
-## Install & Run
+Do not use cleanup scripts to delete `.buf`, `.ids`, gzip segments or
+`.incomplete` evidence as a remedy for a production recovery error. Preserve the
+files and investigate using the [reliability notes](reliability.md).
 
-```sh
-# clone
-$ git clone https://gofluentd.git
+## Verification and next steps
 
-# running
-$ cd go-fluentd/docs/example
-$ sudo docker-compose up -d --remove-orphans --force-recreate
+From the repository root, `python3 .scripts/check_readme.py --native` executes the
+README commands in an isolated temporary workspace. `--docker` repeats the same
+checks with the hardened local-image command. `--static` checks links, anchors,
+code fences and required executable blocks without Go or Docker. Both runtime
+checks require port 8080 to be free and do not touch an existing demo journal.
 
-# check
-$ sudo docker-compose ps
-
-         Name                        Command               State                          Ports
------------------------------------------------------------------------------------------------------------------------
-example_go-fluentd_1      ./go-fluentd --config=/etc ...   Up      127.0.0.1:24225->24225/tcp, 127.0.0.1:8080->8080/tcp
-example_log-generator_1   python /app.py                   Up
-```
-
-The origin logs emitted by app are look like:
-
-```
-2019-02-28 08:41:21.123 | app | INFO | thread | class | 64: xxxx
-```
-
-You can check the logs that parserd by go-fluentd:
-
-```sh
-$ sudo docker logs example_fluentd_1
-
-```js
-{
-    "tag": "test.sit",
-    "app": "app",
-    "thread": "thread",
-    "class": "class",
-    "message": "0.8336017742577866\n0.059360002847527626\n0.9471091772460405",
-    "msgid": 1377,
-    "container_name": "/example_log-generator_1",
-    "source": "stdout",
-    "level": "INFO",
-    "line": "64",
-    "datasource": "test",
-    "@timestamp": "2019-02-21T07:41:17.871000Z",
-    "container_id": "24d6069f241ad94719ac1eee15dce43e29a3a32af67c478ded9c474066389260"
-}
-{
-    "container_name": "/example_log-generator_1",
-    "msgid": 1026,
-    "line": "64",
-    "message": "0.7159115118036709",
-    "datasource": "test",
-    "level": "INFO",
-    "thread": "thread",
-    "class": "class",
-    "@timestamp": "2019-02-03T17:41:13.813000Z",
-    "container_id": "24d6069f241ad94719ac1eee15dce43e29a3a32af67c478ded9c474066389260",
-    "source": "stdout",
-    "tag": "test.sit",
-    "app": "app"
-}
-```
-
-
-## Monitor
-
-You can load monitor metrics by <http://localhost:8080/monitor>
-
-
-<details><summary>metrics return by monitor HTTP API: </summary>
-<p>
-
-```js
-// 20190228163221
-// http://localhost:8080/monitor
-
-{
-  "acceptorPipeline": {
-    "msgPerSec": 252160.4
-  },
-  "controllor": {
-    "goroutine": 64,
-    "skipDumpChanCap": 150000,
-    "skipDumpChanLen": 5299,
-    "waitAccepPipelineAsyncChanCap": 100000,
-    "waitAccepPipelineAsyncChanLen": 17174,
-    "waitAccepPipelineSyncChanCap": 10000,
-    "waitAccepPipelineSyncChanLen": 0,
-    "waitCommitChanCap": 500000,
-    "waitCommitChanLen": 500000,
-    "waitDispatchChanCap": 100000,
-    "waitDispatchChanLen": 99,
-    "waitDumpChanCap": 150000,
-    "waitDumpChanLen": 150000,
-    "waitPostPipelineChanCap": 10000,
-    "waitPostPipelineChanLen": 9777,
-    "waitProduceChanCap": 50000,
-    "waitProduceChanLen": 49946
-  },
-  "dispatcher": {
-    "app.spring.perf.ChanCap": 10000,
-    "app.spring.perf.ChanLen": 0,
-    "app.spring.perf.MsgPerSec": 123304.8,
-    "msgPerSec": 123306.7
-  },
-  "journal": {
-    "idsSetLen": 644303
-  },
-  "producer": {
-    "app.spring.perf.localtest.ChanCap": 50000,
-    "app.spring.perf.localtest.ChanLen": 50000,
-    "discardChanCap": 50000,
-    "discardChanLen": 50000,
-    "msgPerSec": 19111.5,
-    "waitToDiscardMsgNum": 0
-  },
-  "tagpipeline": {
-    "app.spring.perf.concator.ChanCap": 10000,
-    "app.spring.perf.concator.ChanLen": 0,
-    "app.spring.perf.spring-parser.ChanCap": 10000,
-    "app.spring.perf.spring-parser.ChanLen": 4364
-  },
-  "ts": "2019-08-20T01:06:43.934658174Z"
-}
-```
-</p>
-</details>
-
-
-## Profile
-
-
-This HTTP API also support pprof endpoints:
-
-- <http://localhost:8080/pprof/profile>
-- <http://localhost:8080/pprof/cmdline>
-- <http://localhost:8080/pprof/symbol>
-- <http://localhost:8080/pprof/goroutine>
-- <http://localhost:8080/pprof/heap>
-- <http://localhost:8080/pprof/heap?debug=1>
-- <http://localhost:8080/pprof/threadcreate>
-- <http://localhost:8080/pprof/debug/block>
-- <http://localhost:8080/pprof/>
+For production, replace the console destination with an explicitly validated
+backend, protect ingress and diagnostics, use persistent least-privilege state,
+and measure with the desired synchronization policy. See
+[operations and security](../README.md#operations-and-security),
+[delivery qualification](../tests/delivery/README.md), and
+[performance measurement](../tests/performance/README.md).

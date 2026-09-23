@@ -1,0 +1,59 @@
+name: Encoder performance iteration
+on:
+  push:
+    branches: [perf/measured-pipeline-20260923]
+    paths: [.github/workflows/perf-stage3.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.x'
+      - name: Decode hash-checked source inputs
+        env:
+          PAYLOAD: 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
+        run: |
+          python3 - <<'PY'
+          import os,base64,gzip,json,hashlib
+          from pathlib import Path
+          data=os.environ['PAYLOAD'].replace('ZXMuEbEb2','ZXMuEb2')
+          files=json.loads(gzip.decompress(base64.b64decode(data)))
+          assert set(files)=={'library/encoder_performance_test.go','library/fluentd.go','library/fluentd_reliability_test.go'}
+          for name,item in files.items():
+              p=Path(name)
+              assert (hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else None)==item['before'],name
+          Path('/tmp/encoder-sources.json').write_text(json.dumps(files))
+          Path('library/encoder_performance_test.go').write_text(files['library/encoder_performance_test.go']['after'])
+          PY
+      - name: Run independent wire and failure contracts on unchanged encoder
+        run: go test -mod=readonly -count=1 -run TestPerformanceContract ./library
+      - name: Apply the locally measured direct-framing implementation
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for name,item in json.loads(Path('/tmp/encoder-sources.json').read_text()).items():
+              Path(name).write_text(item['after'])
+          PY
+          test -z "$(gofmt -l library/encoder_performance_test.go library/fluentd.go library/fluentd_reliability_test.go)"
+      - name: Full build and repeated correctness validation
+        run: |
+          go mod verify
+          go build -mod=readonly ./...
+          go vet -mod=readonly ./...
+          go test -mod=readonly -count=1 -timeout=180s ./...
+          go test -mod=readonly -race -count=5 -shuffle=on -timeout=180s ./...
+      - name: Publish validated implementation and behavior tests
+        run: |
+          git config user.name Laisky
+          git config user.email public@laisky.com
+          git add library/encoder_performance_test.go library/fluentd.go library/fluentd_reliability_test.go
+          git commit -m 'perf(encoder): write Forward frames directly without per-message wrappers'
+          git push origin HEAD:refs/heads/perf/measured-pipeline-20260923

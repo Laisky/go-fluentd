@@ -1,0 +1,94 @@
+name: Pending gauge performance iteration
+on:
+  push:
+    branches: [perf/measured-pipeline-20260923]
+    paths: [.github/workflows/perf-stage5.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOMAXPROCS: '2'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.x'
+      - name: Validate and measure the existing pending-map scan
+        run: |
+          gofmt -w tests/performance/producer_metrics_test.go
+          go test -mod=readonly -race -count=3 -run TestPerformanceContractPendingGaugeTracksFanout ./tests/performance
+          go test -mod=readonly -run '^$' -bench BenchmarkPerfPendingMonitor -benchtime=100ms -count=5 ./tests/performance > /tmp/gauge-before.txt
+      - name: Maintain gauge only on real pending-state transitions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('internal/controller/producer.go'); s=p.read_text()
+          assert s.count('discardMsgCountMap *sync.Map')==1
+          s=s.replace('\t"sync"\n','\t"sync"\n\t"sync/atomic"\n',1)
+          s=s.replace('discardMsgCountMap *sync.Map','discardMsgCountMap *sync.Map\n\tpendingCount atomic.Int64',1)
+          a=s.index('\t\t// get discardMsgCountMap length'); z=s.index('\n\t\treturn metrics',a)
+          s=s[:a]+'\t\tmetrics["waitToDiscardMsgNum"] = p.pendingCount.Load()'+s[z:]
+          s=s.replace('cntToDiscard    int','cntToDiscard    int\n\t\twasPending bool',1)
+          old='if itf, ok = p.discardMsgCountMap.Load(msg); !ok {'; assert s.count(old)==1
+          s=s.replace(old,'if itf, wasPending = p.discardMsgCountMap.Load(msg); !wasPending {')
+          old='p.discardMsgCountMap.Delete(pmsg.msg)'; assert s.count(old)==1
+          s=s.replace(old,old+'\n\t\t\tif wasPending { p.pendingCount.Add(-1) }')
+          old='p.discardMsgCountMap.Store(pmsg.msg, pmsg)'; assert s.count(old)==1
+          s=s.replace(old,old+'\n\t\t\tif !wasPending { p.pendingCount.Add(1) }')
+          p.write_text(s)
+          p=Path('tests/performance/benchmark_test.go');s=p.read_text()
+          a=s.index('func BenchmarkPerfMonitor(');z=s.index('func BenchmarkPerfHTTPReceive(',a)
+          part=s[a:z];assert part.count('rate(b, 1)')==1
+          s=s[:a]+part.replace('rate(b, 1)','b.ReportMetric(1, "scrapes/op")\n\tb.ReportMetric(float64(b.N)/b.Elapsed().Seconds(), "scrapes/s")')+s[z:]
+          p.write_text(s)
+          p=Path('tests/performance/compare.py');s=p.read_text()
+          s=s.replace('Producer|Monitor|HTTPReceive','Producer|Monitor|PendingMonitor|HTTPReceive').replace('EXPECTED_CASES = 32','EXPECTED_CASES = 35')
+          old="        if not {'ns/op', 'msgs/op', 'msgs/s', 'B/op', 'allocs/op'} <= metrics.keys():"
+          assert s.count(old)==1
+          s=s.replace(old,"        units = [(op, rate, kind) for op, rate, kind in\n                 [('msgs/op', 'msgs/s', 'message'), ('scrapes/op', 'scrapes/s', 'scrape')]\n                 if op in metrics and rate in metrics]\n        if len(units) != 1 or not {'ns/op', 'B/op', 'allocs/op'} <= metrics.keys():")
+          s=s.replace("metrics['msgs/op'] <= 0","metrics[units[0][0]] <= 0")
+          s=s.replace("        metrics['iterations'] = int(tokens[1])","        metrics['units/op'] = metrics[units[0][0]]\n        metrics['work_unit'] = units[0][2]\n        metrics['iterations'] = int(tokens[1])")
+          s=s.replace("units = {v['msgs/op'] for v in a + b}\n        if len(units) != 1:","units = {v['units/op'] for v in a + b}\n        kinds = {v['work_unit'] for v in a + b}\n        if len(units) != 1 or len(kinds) != 1:")
+          s=s.replace("row = {'messages_per_operation': unit, 'samples':", "row = {'work_units_per_operation': unit, 'work_unit': next(iter(kinds)), 'samples':")
+          s=s.replace("'messages_per_second': unit * 1e9 / med", "'work_units_per_second': unit * 1e9 / med")
+          p.write_text(s)
+          p=Path('tests/performance/test_reporting.py');s=p.read_text().replace("['messages_per_second']","['work_units_per_second']")
+          anchor='    def test_latency_nearest_rank(self):';assert s.count(anchor)==1
+          test='''    def test_scrapes_are_not_reported_as_messages(self):
+                  data = parse('BenchmarkPerfMonitor-2 100 2000 ns/op 1 scrapes/op 500000 scrapes/s 80 B/op 2 allocs/op')
+                  row = summarize(data, data, 1)['BenchmarkPerfMonitor']
+                  self.assertEqual(row['work_unit'], 'scrape')
+                  self.assertEqual(row['after']['work_units_per_second'], 500000)
+
+          '''
+          s=s.replace(anchor,test+anchor);p.write_text(s)
+          PY
+          gofmt -w internal/controller/producer.go tests/performance/*_test.go
+      - name: Remeasure and validate without weakening delivery tests
+        run: |
+          python3 -m unittest discover -s tests/performance -p 'test_*.py'
+          go test -mod=readonly -run '^$' -bench BenchmarkPerfPendingMonitor -benchtime=100ms -count=5 ./tests/performance > /tmp/gauge-after.txt
+          go mod verify
+          go build -mod=readonly ./...
+          go vet -mod=readonly ./...
+          go test -mod=readonly -count=1 -timeout=180s ./...
+          go test -mod=readonly -race -count=5 -shuffle=on -timeout=180s ./...
+          git diff --exit-code -- go.mod go.sum
+      - name: Push the validated constant-time gauge and honest scrape units
+        run: |
+          git config user.name Laisky
+          git config user.email public@laisky.com
+          git add internal/controller/producer.go tests/performance/producer_metrics_test.go tests/performance/benchmark_test.go tests/performance/compare.py tests/performance/test_reporting.py
+          git commit -m 'perf(monitor): track pending fanout in constant time instead of scanning every message'
+          git push origin HEAD:refs/heads/perf/measured-pipeline-20260923
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: pending-gauge-iteration
+          path: /tmp/gauge-*.txt
+          retention-days: 14

@@ -1,0 +1,82 @@
+name: Verify group rollout correction
+on:
+  push:
+    branches: [chore/group-review-workspace-20260923]
+    paths: [.github/workflows/group-rollout-check.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOMAXPROCS: '2'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 5350923ee6d7682d799709ffa19344eabbcd2e0c
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.x'
+      - name: Apply the locally verified small rollout correction
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          def replace(path,old,new):
+              p=Path(path);text=p.read_text();assert text.count(old)==1,(path,old)
+              p.write_text(text.replace(old,new))
+          replace('internal/controller/journal_writer.go','const defaultGroupCommitMaxMessages = 64','// Keep the prior per-record policy unless grouping is explicitly enabled.\nconst defaultGroupCommitMaxMessages = 1')
+          replace('internal/controller/journal.go','// GroupCommitMaxMessages bounds reliable groups; 0 selects 64, 1 disables grouping.','// GroupCommitMaxMessages bounds reliable groups; 0 or 1 keeps per-record Sync.')
+          replace('internal/controller/journal_writer_test.go','JournalCfg: &JournalCfg{MsgPool: &sync.Pool{}}, outChan: make(chan *library.FluentMsg, 256)','JournalCfg: &JournalCfg{MsgPool: &sync.Pool{}, GroupCommitMaxMessages: 64}, outChan: make(chan *library.FluentMsg, 256)')
+          replace('internal/controller/journal_writer_test.go','j.BufDirPath = t.TempDir()\n\tif err := j.valid();','j.BufDirPath = t.TempDir()\n\tj.GroupCommitMaxMessages = 0\n\tif err := j.valid();')
+          replace('internal/controller/journal_writer_test.go','if j.GroupCommitMaxMessages != 64 {','if j.GroupCommitMaxMessages != 1 {')
+          replace('internal/controller/journal_writer_bench_test.go','"context"\n','"context"\n\t"encoding/json"\n')
+          replace('internal/controller/journal_writer_bench_test.go','\t\t\t\tin := make(chan *library.FluentMsg, clients*2)','\t\t\t\t// Configure the exported option outside timing. The same benchmark\n\t\t\t\t// source also runs on the historical per-record writer, whose\n\t\t\t\t// config predates this option and ignores the unknown JSON field.\n\t\t\t\tif err := json.Unmarshal([]byte(`{"GroupCommitMaxMessages":64}`), j.JournalCfg); err != nil {\n\t\t\t\t\tb.Fatal(err)\n\t\t\t\t}\n\t\t\t\tin := make(chan *library.FluentMsg, clients*2)')
+          for path in ['docs/settings/settings.yml','docs/settings/settings_cn.yml']:
+              replace(path,'group_commit_max_messages: 64 # 0 = default 64; maximum 1024; no timer delay','group_commit_max_messages: 1 # 0/1 = per-record Sync; opt in with 64; maximum 1024; no timer delay')
+          replace('tests/performance/group_compare.py',"'policy':'before per-record; after default bounded ready-only grouping; same success-after-Sync contract; no batching timer'","'policy':'before explicit per-record (1); after explicit bounded ready-only grouping (64); same success-after-Sync contract; no batching timer'")
+          replace('tests/performance/group_compare.py','r=sample(files[variant],folder,args.pipeline_count,clients,gz)',"r=sample(files[variant],folder,args.pipeline_count,clients,gz,group_max_messages=(1 if variant=='before' else 64))")
+          replace('tests/delivery/run.py',"parser.add_argument('--seed', type=int, default=127)","parser.add_argument('--seed', type=int, default=127)\n    parser.add_argument('--group-max-messages', type=int, choices=(1,64), default=None)")
+          replace('tests/delivery/run.py',"os.environ['DELIVERY_SEED'] = str(args.seed)","os.environ['DELIVERY_SEED'] = str(args.seed)\n    if args.group_max_messages is not None:\n        os.environ['DELIVERY_GROUP_MAX_MESSAGES'] = str(args.group_max_messages)\n    else:\n        os.environ.pop('DELIVERY_GROUP_MAX_MESSAGES', None)")
+          replace('tests/delivery/run.py',"'platform': platform.platform(), 'seed': args.seed, 'order': names,","'platform': platform.platform(), 'seed': args.seed, 'order': names,\n        'group_commit_max_messages': args.group_max_messages,")
+          replace('tests/delivery/test_delivery.py','        if self.overrides:\n            self.overrides(cfg["settings"])','        group_maximum = os.environ.get("DELIVERY_GROUP_MAX_MESSAGES")\n        if group_maximum is not None:\n            cfg["settings"]["journal"]["group_commit_max_messages"] = int(group_maximum)\n        if self.overrides:\n            self.overrides(cfg["settings"])')
+          PY
+          gofmt -w internal/controller/journal_writer*.go
+          git -c core.abbrev=7 diff > /tmp/opt-in.patch
+          echo '3a27887a200072a3c486f7cef94c31de4bda5a5dffa332a65def25301528e4b3  /tmp/opt-in.patch' | sha256sum -c -
+      - name: Validate all components and repeated barrier behavior
+        run: |
+          go mod verify
+          go build -mod=readonly ./...
+          go vet -mod=readonly ./...
+          go test -mod=readonly -count=1 -timeout=180s ./...
+          go test -mod=readonly -race -count=5 -shuffle=on -timeout=180s ./...
+          go test -mod=readonly -race -count=20 -shuffle=on -timeout=180s -run '^TestJournal' ./internal/controller
+          python3 -m unittest discover -s tests/performance -p 'test_*.py'
+      - name: Validate unchanged default and explicit grouping through real processes
+        env:
+          GORACE: 'halt_on_error=1 exitcode=66'
+        run: |
+          go build -mod=readonly -race -o /tmp/group-rollout-app .
+          python3 tests/delivery/run.py --binary /tmp/group-rollout-app --artifacts /tmp/rollout-default --seed 127
+          python3 tests/delivery/run.py --binary /tmp/group-rollout-app --artifacts /tmp/rollout-grouped --seed 991 --group-max-messages 64
+      - name: Publish only the tested source without overwriting concurrent work
+        run: |
+          git diff --exit-code -- go.mod go.sum
+          git config user.name Laisky
+          git config user.email public@laisky.com
+          git add docs/settings/settings.yml docs/settings/settings_cn.yml internal/controller/journal.go internal/controller/journal_writer.go internal/controller/journal_writer_bench_test.go internal/controller/journal_writer_test.go tests/delivery/run.py tests/delivery/test_delivery.py tests/performance/group_compare.py
+          git commit -m 'fix(journal): keep group commit opt-in after mixed low-load measurements'
+          git push origin HEAD:refs/heads/perf/durable-group-commit-20260923
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: group-rollout-acceptance
+          path: |
+            /tmp/opt-in.patch
+            /tmp/rollout-default/
+            /tmp/rollout-grouped/
+          retention-days: 14
+          if-no-files-found: error

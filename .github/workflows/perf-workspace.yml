@@ -1,0 +1,42 @@
+name: Performance workspace
+on:
+  push:
+    branches: [perf/measured-pipeline-20260923]
+    paths: [.github/workflows/perf-workspace.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          path: app
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Laisky/go-journal
+          ref: 665e193ecd7b07886308614e4e4c4f44d28eef97
+          persist-credentials: false
+          fetch-depth: 0
+          path: journal
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.x'
+          cache-dependency-path: app/go.sum
+      - name: Export exact sources and newly pinned journal module
+        run: |
+          mkdir -p export
+          (cd app && go mod download && go mod verify && git bundle create ../export/app.bundle --all)
+          (cd journal && git bundle create ../export/journal.bundle --all)
+          module=$(cd app && go list -m -f '{{.Dir}}' github.com/Laisky/go-journal)
+          tar -czf export/journal-module.tar.gz -C "$module" .
+          (cd app && go mod download -json github.com/Laisky/go-journal) > export/journal-module.json
+          go version > export/toolchain.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: perf-workspace
+          path: export/
+          retention-days: 3

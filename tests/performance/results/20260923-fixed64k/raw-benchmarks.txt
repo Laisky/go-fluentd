@@ -1,0 +1,740 @@
+
+# components/0-after-components.txt
+2026-09-23T12:04:29Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:04:29Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfAcceptorFilter-2   	   52096	      2189 ns/op	         1.000 msgs/op	    456898 msgs/s	    1390 B/op	      20 allocs/op
+BenchmarkPerfPostFilter/rename=false-2         	  111420	      1020 ns/op	         1.000 msgs/op	    980850 msgs/s	     831 B/op	       7 allocs/op
+BenchmarkPerfPostFilter/rename=true-2          	   55015	      2117 ns/op	         1.000 msgs/op	    472410 msgs/s	    1863 B/op	      17 allocs/op
+BenchmarkPerfParser-2                          	   33358	      3302 ns/op	         1.000 msgs/op	    302849 msgs/s	    1864 B/op	      22 allocs/op
+BenchmarkPerfConcatenator-2                    	   38334	      2966 ns/op	         2.000 msgs/op	    674300 msgs/s	    1035 B/op	      19 allocs/op
+BenchmarkPerfFluentEncoder/batch=1-2           	  191206	       622.2 ns/op	3291.78 MB/s	         1.000 msgs/op	   1607323 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfFluentEncoder/batch=64-2          	    5698	     17973 ns/op	7292.80 MB/s	        64.00 msgs/op	   3560957 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfFluentEncoder/batch=512-2         	     804	    148514 ns/op	7060.44 MB/s	       512.0 msgs/op	   3447497 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfDispatcher-2                      	  245770	       509.1 ns/op	         1.000 msgs/op	   1964430 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfProducer/sinks=1-2                	   83995	      1472 ns/op	         1.000 msgs/op	    679212 msgs/s	      18 B/op	       2 allocs/op
+BenchmarkPerfProducer/sinks=2-2                	   50743	      2372 ns/op	         1.000 msgs/op	    421516 msgs/s	      66 B/op	       3 allocs/op
+BenchmarkPerfMonitor-2                         	    2376	     50848 ns/op	         1.000 scrapes/op	     19667 scrapes/s	   42120 B/op	     489 allocs/op
+BenchmarkPerfHTTPReceive-2                     	   10000	     11077 ns/op	 192.01 MB/s	         1.000 msgs/op	     90275 msgs/s	   14387 B/op	      59 allocs/op
+BenchmarkPerfHTTPSender/http-2                 	      75	   1641153 ns/op	  79.87 MB/s	        64.00 msgs/op	     38997 msgs/s	  930667 B/op	    2849 allocs/op
+BenchmarkPerfHTTPSender/es-2                   	      63	   1857840 ns/op	  70.55 MB/s	        64.00 msgs/op	     34449 msgs/s	  910361 B/op	    4686 allocs/op
+BenchmarkPerfJournalTTL/hit-2                  	 1998306	        59.17 ns/op	         1.000 msgs/op	  16900806 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/miss-2                 	 1808361	        65.95 ns/op	         1.000 msgs/op	  15163953 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/refresh-2              	 1000000	       126.7 ns/op	         1.000 msgs/op	   7890478 msgs/s	      63 B/op	       2 allocs/op
+BenchmarkPerfPendingMonitor/pending=0-2        	    2196	     48460 ns/op	         1.000 scrapes/op	     20636 scrapes/s	   40404 B/op	     476 allocs/op
+BenchmarkPerfPendingMonitor/pending=1000-2     	    1822	     66669 ns/op	         1.000 scrapes/op	     15000 scrapes/s	   42169 B/op	     492 allocs/op
+BenchmarkPerfPendingMonitor/pending=100000-2   	    2012	     52713 ns/op	         1.000 scrapes/op	     18971 scrapes/s	   42106 B/op	     492 allocs/op
+PASS
+
+# components/0-after-journal-recovery.txt
+2026-09-23T12:04:37Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:04:37Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalRecovery/gzip=false/records=64-2         	      20	    169743 ns/op	 772.18 MB/s	        64.00 msgs/op	    379143 msgs/s	  302917 B/op	    1493 allocs/op
+BenchmarkPerfJournalRecovery/gzip=false/records=4096-2       	      20	   7937009 ns/op	1056.90 MB/s	      4096 msgs/op	    516123 msgs/s	10817752 B/op	   94234 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=64-2          	      20	    460360 ns/op	 284.72 MB/s	        64.00 msgs/op	    143477 msgs/s	  473191 B/op	    1509 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=4096-2        	      20	  24575490 ns/op	 341.34 MB/s	      4096 msgs/op	    166808 msgs/s	10974553 B/op	   94246 allocs/op
+BenchmarkPerfJournalReplay/gzip=false-2                      	      20	   2202351 ns/op	 952.23 MB/s	      1024 msgs/op	    464960 msgs/s	 2740376 B/op	   25719 allocs/op
+BenchmarkPerfJournalReplay/gzip=true-2                       	      20	   6848673 ns/op	 306.21 MB/s	      1024 msgs/op	    149519 msgs/s	 2818167 B/op	   25732 allocs/op
+PASS
+
+# components/0-after-journal-write.txt
+2026-09-23T12:04:33Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:04:33Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=0-2         	    4096	      4341 ns/op	 471.77 MB/s	         1.000 msgs/op	    230359 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=1-2         	    4096	    329835 ns/op	   6.21 MB/s	         1.000 msgs/op	      3032 msgs/s	     200 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=64-2        	    4096	     10030 ns/op	 204.18 MB/s	         1.000 msgs/op	     99700 msgs/s	       3 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=0-2          	    4096	      9803 ns/op	 208.92 MB/s	         1.000 msgs/op	    102012 msgs/s	     397 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=1-2          	    4096	    473813 ns/op	   4.32 MB/s	         1.000 msgs/op	      2111 msgs/s	     597 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=64-2         	    4096	     20787 ns/op	  98.52 MB/s	         1.000 msgs/op	     48107 msgs/s	     400 B/op	       0 allocs/op
+BenchmarkPerfJournalIDs/gzip=false-2                        	    4096	      1964 ns/op	         1.000 msgs/op	    509230 msgs/s	     121 B/op	       3 allocs/op
+BenchmarkPerfJournalIDs/gzip=true-2                         	    4096	       776.4 ns/op	         1.000 msgs/op	   1288009 msgs/s	     519 B/op	       3 allocs/op
+PASS
+
+# components/0-before-components.txt
+2026-09-23T12:04:20Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:04:20Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfAcceptorFilter-2   	   52100	      3201 ns/op	         1.000 msgs/op	    312435 msgs/s	    1389 B/op	      20 allocs/op
+BenchmarkPerfPostFilter/rename=false-2         	   97210	      1429 ns/op	         1.000 msgs/op	    699937 msgs/s	     831 B/op	       7 allocs/op
+BenchmarkPerfPostFilter/rename=true-2          	   55112	      2676 ns/op	         1.000 msgs/op	    373708 msgs/s	    1864 B/op	      17 allocs/op
+BenchmarkPerfParser-2                          	   32582	      3374 ns/op	         1.000 msgs/op	    296415 msgs/s	    1864 B/op	      22 allocs/op
+BenchmarkPerfConcatenator-2                    	   38901	      2893 ns/op	         2.000 msgs/op	    691223 msgs/s	    1035 B/op	      19 allocs/op
+BenchmarkPerfFluentEncoder/batch=1-2           	  113643	       936.8 ns/op	2186.07 MB/s	         1.000 msgs/op	   1067424 msgs/s	     112 B/op	       5 allocs/op
+BenchmarkPerfFluentEncoder/batch=64-2          	    4094	     28919 ns/op	4532.46 MB/s	        64.00 msgs/op	   2213127 msgs/s	    3140 B/op	     131 allocs/op
+BenchmarkPerfFluentEncoder/batch=512-2         	     469	    272118 ns/op	3853.39 MB/s	       512.0 msgs/op	   1881546 msgs/s	   24925 B/op	    1029 allocs/op
+BenchmarkPerfDispatcher-2                      	  190942	       599.5 ns/op	         1.000 msgs/op	   1668160 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfProducer/sinks=1-2                	   79746	      1535 ns/op	         1.000 msgs/op	    651283 msgs/s	      18 B/op	       2 allocs/op
+BenchmarkPerfProducer/sinks=2-2                	   48769	      2484 ns/op	         1.000 msgs/op	    402638 msgs/s	      66 B/op	       3 allocs/op
+BenchmarkPerfMonitor-2                         	    2286	     53223 ns/op	         1.000 scrapes/op	     18789 scrapes/s	   42124 B/op	     489 allocs/op
+BenchmarkPerfHTTPReceive-2                     	   10000	     11311 ns/op	 188.04 MB/s	         1.000 msgs/op	     88408 msgs/s	   14388 B/op	      59 allocs/op
+BenchmarkPerfHTTPSender/http-2                 	      73	   1550525 ns/op	  84.53 MB/s	        64.00 msgs/op	     41276 msgs/s	  862840 B/op	    2843 allocs/op
+BenchmarkPerfHTTPSender/es-2                   	      64	   1792694 ns/op	  73.11 MB/s	        64.00 msgs/op	     35700 msgs/s	  913336 B/op	    4688 allocs/op
+BenchmarkPerfJournalTTL/hit-2                  	 2014477	        59.93 ns/op	         1.000 msgs/op	  16687223 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/miss-2                 	 1826449	        65.82 ns/op	         1.000 msgs/op	  15194045 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/refresh-2              	  502336	       238.1 ns/op	         1.000 msgs/op	   4199891 msgs/s	      95 B/op	       6 allocs/op
+BenchmarkPerfPendingMonitor/pending=0-2        	    2239	     47315 ns/op	         1.000 scrapes/op	     21135 scrapes/s	   40409 B/op	     476 allocs/op
+BenchmarkPerfPendingMonitor/pending=1000-2     	    1411	     74661 ns/op	         1.000 scrapes/op	     13394 scrapes/s	   42158 B/op	     492 allocs/op
+BenchmarkPerfPendingMonitor/pending=100000-2   	      39	   2782020 ns/op	         1.000 scrapes/op	       359.5 scrapes/s	   42221 B/op	     492 allocs/op
+PASS
+
+# components/0-before-journal-recovery.txt
+2026-09-23T12:04:28Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:04:28Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalRecovery/gzip=false/records=64-2         	      20	    617440 ns/op	 212.28 MB/s	        64.00 msgs/op	    103837 msgs/s	 8568195 B/op	    1528 allocs/op
+BenchmarkPerfJournalRecovery/gzip=false/records=4096-2       	      20	   6822858 ns/op	1229.49 MB/s	      4096 msgs/op	    600438 msgs/s	19087939 B/op	   96283 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=64-2          	      20	    996932 ns/op	 131.48 MB/s	        64.00 msgs/op	     65034 msgs/s	 8740344 B/op	    1543 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=4096-2        	      20	  26474094 ns/op	 316.86 MB/s	      4096 msgs/op	    154815 msgs/s	19248787 B/op	   96296 allocs/op
+BenchmarkPerfJournalReplay/gzip=false-2                      	      20	   3068409 ns/op	 683.47 MB/s	      1024 msgs/op	    333726 msgs/s	11000865 B/op	   26238 allocs/op
+BenchmarkPerfJournalReplay/gzip=true-2                       	      20	   8561599 ns/op	 244.95 MB/s	      1024 msgs/op	    119604 msgs/s	11113620 B/op	   26251 allocs/op
+PASS
+
+# components/0-before-journal-write.txt
+2026-09-23T12:04:24Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:04:24Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=0-2         	    4096	      4360 ns/op	 469.73 MB/s	         1.000 msgs/op	    229359 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=1-2         	    4096	    383155 ns/op	   5.35 MB/s	         1.000 msgs/op	      2610 msgs/s	     200 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=64-2        	    4096	     11083 ns/op	 184.78 MB/s	         1.000 msgs/op	     90227 msgs/s	       3 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=0-2          	    4096	      9678 ns/op	 211.61 MB/s	         1.000 msgs/op	    103324 msgs/s	     397 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=1-2          	    4096	    479993 ns/op	   4.27 MB/s	         1.000 msgs/op	      2083 msgs/s	     597 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=64-2         	    4096	     17321 ns/op	 118.24 MB/s	         1.000 msgs/op	     57733 msgs/s	     400 B/op	       0 allocs/op
+BenchmarkPerfJournalIDs/gzip=false-2                        	    4096	      2049 ns/op	         1.000 msgs/op	    488137 msgs/s	     130 B/op	       4 allocs/op
+BenchmarkPerfJournalIDs/gzip=true-2                         	    4096	       862.3 ns/op	         1.000 msgs/op	   1159648 msgs/s	     525 B/op	       4 allocs/op
+PASS
+
+# components/1-after-components.txt
+2026-09-23T12:04:38Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:04:38Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfAcceptorFilter-2   	   50000	      2176 ns/op	         1.000 msgs/op	    459456 msgs/s	    1388 B/op	      20 allocs/op
+BenchmarkPerfPostFilter/rename=false-2         	  107983	       987.6 ns/op	         1.000 msgs/op	   1012513 msgs/s	     831 B/op	       7 allocs/op
+BenchmarkPerfPostFilter/rename=true-2          	   55779	      2074 ns/op	         1.000 msgs/op	    482229 msgs/s	    1863 B/op	      17 allocs/op
+BenchmarkPerfParser-2                          	   33950	      3441 ns/op	         1.000 msgs/op	    290606 msgs/s	    1864 B/op	      22 allocs/op
+BenchmarkPerfConcatenator-2                    	   38622	      2829 ns/op	         2.000 msgs/op	    707068 msgs/s	    1034 B/op	      19 allocs/op
+BenchmarkPerfFluentEncoder/batch=1-2           	  188373	       616.4 ns/op	3322.33 MB/s	         1.000 msgs/op	   1622239 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfFluentEncoder/batch=64-2          	    6807	     17736 ns/op	7390.29 MB/s	        64.00 msgs/op	   3608559 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfFluentEncoder/batch=512-2         	     798	    150270 ns/op	6977.94 MB/s	       512.0 msgs/op	   3407213 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfDispatcher-2                      	  245691	       504.0 ns/op	         1.000 msgs/op	   1984018 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfProducer/sinks=1-2                	   84231	      1431 ns/op	         1.000 msgs/op	    698815 msgs/s	      18 B/op	       2 allocs/op
+BenchmarkPerfProducer/sinks=2-2                	   50691	      2377 ns/op	         1.000 msgs/op	    420655 msgs/s	      66 B/op	       3 allocs/op
+BenchmarkPerfMonitor-2                         	    2367	     51033 ns/op	         1.000 scrapes/op	     19595 scrapes/s	   42118 B/op	     489 allocs/op
+BenchmarkPerfHTTPReceive-2                     	   10000	     11238 ns/op	 189.27 MB/s	         1.000 msgs/op	     88983 msgs/s	   14387 B/op	      59 allocs/op
+BenchmarkPerfHTTPSender/http-2                 	      74	   1619911 ns/op	  80.91 MB/s	        64.00 msgs/op	     39508 msgs/s	  871582 B/op	    2846 allocs/op
+BenchmarkPerfHTTPSender/es-2                   	      63	   1839515 ns/op	  71.25 MB/s	        64.00 msgs/op	     34792 msgs/s	  912939 B/op	    4687 allocs/op
+BenchmarkPerfJournalTTL/hit-2                  	 2064291	        57.67 ns/op	         1.000 msgs/op	  17340032 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/miss-2                 	 1743345	        64.72 ns/op	         1.000 msgs/op	  15451546 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/refresh-2              	 1000000	       126.2 ns/op	         1.000 msgs/op	   7924408 msgs/s	      63 B/op	       2 allocs/op
+BenchmarkPerfPendingMonitor/pending=0-2        	    2188	     49388 ns/op	         1.000 scrapes/op	     20248 scrapes/s	   40404 B/op	     476 allocs/op
+BenchmarkPerfPendingMonitor/pending=1000-2     	    1934	     63801 ns/op	         1.000 scrapes/op	     15674 scrapes/s	   42157 B/op	     492 allocs/op
+BenchmarkPerfPendingMonitor/pending=100000-2   	    2814	     68804 ns/op	         1.000 scrapes/op	     14534 scrapes/s	   42105 B/op	     492 allocs/op
+PASS
+
+# components/1-after-journal-recovery.txt
+2026-09-23T12:04:47Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:04:47Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalRecovery/gzip=false/records=64-2         	      20	    173881 ns/op	 753.80 MB/s	        64.00 msgs/op	    370283 msgs/s	  302975 B/op	    1494 allocs/op
+BenchmarkPerfJournalRecovery/gzip=false/records=4096-2       	      20	   7700144 ns/op	1089.41 MB/s	      4096 msgs/op	    532018 msgs/s	10823024 B/op	   94234 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=64-2          	      20	    460097 ns/op	 284.88 MB/s	        64.00 msgs/op	    140845 msgs/s	  475048 B/op	    1509 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=4096-2        	      20	  24602758 ns/op	 340.96 MB/s	      4096 msgs/op	    166556 msgs/s	10974800 B/op	   94247 allocs/op
+BenchmarkPerfJournalReplay/gzip=false-2                      	      20	   2241289 ns/op	 935.69 MB/s	      1024 msgs/op	    456885 msgs/s	 2740468 B/op	   25720 allocs/op
+BenchmarkPerfJournalReplay/gzip=true-2                       	      20	   7099291 ns/op	 295.40 MB/s	      1024 msgs/op	    144240 msgs/s	 2818740 B/op	   25734 allocs/op
+PASS
+
+# components/1-after-journal-write.txt
+2026-09-23T12:04:43Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:04:43Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=0-2         	    4096	      4208 ns/op	 486.64 MB/s	         1.000 msgs/op	    237618 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=1-2         	    4096	    364242 ns/op	   5.62 MB/s	         1.000 msgs/op	      2745 msgs/s	     200 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=64-2        	    4096	     10865 ns/op	 188.50 MB/s	         1.000 msgs/op	     92042 msgs/s	       3 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=0-2          	    4096	      9694 ns/op	 211.26 MB/s	         1.000 msgs/op	    103155 msgs/s	     397 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=1-2          	    4096	    464923 ns/op	   4.41 MB/s	         1.000 msgs/op	      2151 msgs/s	     597 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=64-2         	    4096	     19684 ns/op	 104.05 MB/s	         1.000 msgs/op	     50804 msgs/s	     400 B/op	       0 allocs/op
+BenchmarkPerfJournalIDs/gzip=false-2                        	    4096	      1818 ns/op	         1.000 msgs/op	    550007 msgs/s	     124 B/op	       3 allocs/op
+BenchmarkPerfJournalIDs/gzip=true-2                         	    4096	       805.5 ns/op	         1.000 msgs/op	   1241448 msgs/s	     519 B/op	       3 allocs/op
+PASS
+
+# components/1-before-components.txt
+2026-09-23T12:04:48Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:04:48Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfAcceptorFilter-2   	   53889	      2184 ns/op	         1.000 msgs/op	    457839 msgs/s	    1388 B/op	      20 allocs/op
+BenchmarkPerfPostFilter/rename=false-2         	  100728	      1067 ns/op	         1.000 msgs/op	    937481 msgs/s	     831 B/op	       7 allocs/op
+BenchmarkPerfPostFilter/rename=true-2          	   56127	      2092 ns/op	         1.000 msgs/op	    478018 msgs/s	    1864 B/op	      17 allocs/op
+BenchmarkPerfParser-2                          	   33946	      3204 ns/op	         1.000 msgs/op	    312118 msgs/s	    1864 B/op	      22 allocs/op
+BenchmarkPerfConcatenator-2                    	   38680	      2925 ns/op	         2.000 msgs/op	    683842 msgs/s	    1037 B/op	      19 allocs/op
+BenchmarkPerfFluentEncoder/batch=1-2           	  119866	       936.1 ns/op	2187.83 MB/s	         1.000 msgs/op	   1068284 msgs/s	     112 B/op	       5 allocs/op
+BenchmarkPerfFluentEncoder/batch=64-2          	    4058	     29426 ns/op	4454.28 MB/s	        64.00 msgs/op	   2174953 msgs/s	    3140 B/op	     131 allocs/op
+BenchmarkPerfFluentEncoder/batch=512-2         	     468	    241306 ns/op	4345.42 MB/s	       512.0 msgs/op	   2121800 msgs/s	   24925 B/op	    1029 allocs/op
+BenchmarkPerfDispatcher-2                      	  227706	       495.5 ns/op	         1.000 msgs/op	   2018073 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfProducer/sinks=1-2                	   83517	      1442 ns/op	         1.000 msgs/op	    693661 msgs/s	      18 B/op	       2 allocs/op
+BenchmarkPerfProducer/sinks=2-2                	   50190	      2523 ns/op	         1.000 msgs/op	    396395 msgs/s	      66 B/op	       3 allocs/op
+BenchmarkPerfMonitor-2                         	    1854	     58616 ns/op	         1.000 scrapes/op	     17060 scrapes/s	   42130 B/op	     489 allocs/op
+BenchmarkPerfHTTPReceive-2                     	   10000	     12757 ns/op	 166.73 MB/s	         1.000 msgs/op	     78389 msgs/s	   14388 B/op	      59 allocs/op
+BenchmarkPerfHTTPSender/http-2                 	      64	   1750272 ns/op	  74.89 MB/s	        64.00 msgs/op	     36566 msgs/s	  878557 B/op	    2844 allocs/op
+BenchmarkPerfHTTPSender/es-2                   	      56	   1961658 ns/op	  66.82 MB/s	        64.00 msgs/op	     32625 msgs/s	  916263 B/op	    4686 allocs/op
+BenchmarkPerfJournalTTL/hit-2                  	 1975822	        60.42 ns/op	         1.000 msgs/op	  16550560 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/miss-2                 	 1812639	        66.88 ns/op	         1.000 msgs/op	  14952651 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/refresh-2              	  599680	       238.9 ns/op	         1.000 msgs/op	   4185567 msgs/s	      95 B/op	       6 allocs/op
+BenchmarkPerfPendingMonitor/pending=0-2        	    2404	     48279 ns/op	         1.000 scrapes/op	     20713 scrapes/s	   40406 B/op	     476 allocs/op
+BenchmarkPerfPendingMonitor/pending=1000-2     	    1572	     73093 ns/op	         1.000 scrapes/op	     13681 scrapes/s	   42171 B/op	     492 allocs/op
+BenchmarkPerfPendingMonitor/pending=100000-2   	      43	   2878869 ns/op	         1.000 scrapes/op	       347.4 scrapes/s	   42210 B/op	     492 allocs/op
+PASS
+
+# components/1-before-journal-recovery.txt
+2026-09-23T12:04:56Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:04:56Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalRecovery/gzip=false/records=64-2         	      20	    575853 ns/op	 227.61 MB/s	        64.00 msgs/op	    111349 msgs/s	 8566649 B/op	    1528 allocs/op
+BenchmarkPerfJournalRecovery/gzip=false/records=4096-2       	      20	   6969370 ns/op	1203.64 MB/s	      4096 msgs/op	    587814 msgs/s	19097248 B/op	   96284 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=64-2          	      20	   1013160 ns/op	 129.37 MB/s	        64.00 msgs/op	     64108 msgs/s	 8744001 B/op	    1544 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=4096-2        	      20	  26624750 ns/op	 315.07 MB/s	      4096 msgs/op	    153917 msgs/s	19254232 B/op	   96297 allocs/op
+BenchmarkPerfJournalReplay/gzip=false-2                      	      20	   2914905 ns/op	 719.46 MB/s	      1024 msgs/op	    351301 msgs/s	11011655 B/op	   26237 allocs/op
+BenchmarkPerfJournalReplay/gzip=true-2                       	      20	   9120870 ns/op	 229.93 MB/s	      1024 msgs/op	    112270 msgs/s	11109751 B/op	   26251 allocs/op
+PASS
+
+# components/1-before-journal-write.txt
+2026-09-23T12:04:52Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:04:52Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=0-2         	    4096	      4024 ns/op	 508.99 MB/s	         1.000 msgs/op	    248532 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=1-2         	    4096	    333909 ns/op	   6.13 MB/s	         1.000 msgs/op	      2995 msgs/s	     200 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=64-2        	    4096	     10130 ns/op	 202.16 MB/s	         1.000 msgs/op	     98712 msgs/s	       3 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=0-2          	    4096	      9584 ns/op	 213.69 MB/s	         1.000 msgs/op	    104340 msgs/s	     397 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=1-2          	    4096	    448513 ns/op	   4.57 MB/s	         1.000 msgs/op	      2230 msgs/s	     597 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=64-2         	    4096	     17464 ns/op	 117.27 MB/s	         1.000 msgs/op	     57261 msgs/s	     400 B/op	       0 allocs/op
+BenchmarkPerfJournalIDs/gzip=false-2                        	    4096	      1906 ns/op	         1.000 msgs/op	    524743 msgs/s	     129 B/op	       4 allocs/op
+BenchmarkPerfJournalIDs/gzip=true-2                         	    4096	       898.9 ns/op	         1.000 msgs/op	   1112438 msgs/s	     528 B/op	       4 allocs/op
+PASS
+
+# components/2-after-components.txt
+2026-09-23T12:05:06Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:05:06Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfAcceptorFilter-2   	   55041	      2193 ns/op	         1.000 msgs/op	    456094 msgs/s	    1390 B/op	      20 allocs/op
+BenchmarkPerfPostFilter/rename=false-2         	  103940	      1065 ns/op	         1.000 msgs/op	    939354 msgs/s	     831 B/op	       7 allocs/op
+BenchmarkPerfPostFilter/rename=true-2          	   55089	      2055 ns/op	         1.000 msgs/op	    486507 msgs/s	    1863 B/op	      17 allocs/op
+BenchmarkPerfParser-2                          	   33688	      3379 ns/op	         1.000 msgs/op	    295965 msgs/s	    1864 B/op	      22 allocs/op
+BenchmarkPerfConcatenator-2                    	   38326	      2953 ns/op	         2.000 msgs/op	    677270 msgs/s	    1034 B/op	      19 allocs/op
+BenchmarkPerfFluentEncoder/batch=1-2           	  187147	       617.5 ns/op	3316.64 MB/s	         1.000 msgs/op	   1619461 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfFluentEncoder/batch=64-2          	    5822	     17910 ns/op	7318.49 MB/s	        64.00 msgs/op	   3573501 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfFluentEncoder/batch=512-2         	     793	    144941 ns/op	7234.52 MB/s	       512.0 msgs/op	   3532489 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfDispatcher-2                      	  231409	       515.5 ns/op	         1.000 msgs/op	   1940046 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfProducer/sinks=1-2                	   85434	      1456 ns/op	         1.000 msgs/op	    686909 msgs/s	      18 B/op	       2 allocs/op
+BenchmarkPerfProducer/sinks=2-2                	   50758	      2338 ns/op	         1.000 msgs/op	    427787 msgs/s	      66 B/op	       3 allocs/op
+BenchmarkPerfMonitor-2                         	    2346	     51812 ns/op	         1.000 scrapes/op	     19301 scrapes/s	   42125 B/op	     489 allocs/op
+BenchmarkPerfHTTPReceive-2                     	   10000	     10848 ns/op	 196.06 MB/s	         1.000 msgs/op	     92179 msgs/s	   14387 B/op	      59 allocs/op
+BenchmarkPerfHTTPSender/http-2                 	      78	   1619507 ns/op	  80.93 MB/s	        64.00 msgs/op	     39518 msgs/s	  919680 B/op	    2848 allocs/op
+BenchmarkPerfHTTPSender/es-2                   	      56	   1863207 ns/op	  70.35 MB/s	        64.00 msgs/op	     34349 msgs/s	  913344 B/op	    4686 allocs/op
+BenchmarkPerfJournalTTL/hit-2                  	 2022190	        58.74 ns/op	         1.000 msgs/op	  17023394 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/miss-2                 	 1808637	        65.85 ns/op	         1.000 msgs/op	  15186674 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/refresh-2              	  899344	       126.3 ns/op	         1.000 msgs/op	   7917058 msgs/s	      63 B/op	       2 allocs/op
+BenchmarkPerfPendingMonitor/pending=0-2        	    2594	     50075 ns/op	         1.000 scrapes/op	     19970 scrapes/s	   40409 B/op	     476 allocs/op
+BenchmarkPerfPendingMonitor/pending=1000-2     	    1806	     65762 ns/op	         1.000 scrapes/op	     15206 scrapes/s	   42180 B/op	     492 allocs/op
+BenchmarkPerfPendingMonitor/pending=100000-2   	    2826	     81069 ns/op	         1.000 scrapes/op	     12335 scrapes/s	   42107 B/op	     492 allocs/op
+PASS
+
+# components/2-after-journal-recovery.txt
+2026-09-23T12:05:14Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:05:14Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalRecovery/gzip=false/records=64-2         	      20	    192473 ns/op	 680.99 MB/s	        64.00 msgs/op	    334273 msgs/s	  302944 B/op	    1494 allocs/op
+BenchmarkPerfJournalRecovery/gzip=false/records=4096-2       	      20	   7969277 ns/op	1052.62 MB/s	      4096 msgs/op	    514039 msgs/s	10817564 B/op	   94234 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=64-2          	      20	    536016 ns/op	 244.53 MB/s	        64.00 msgs/op	    123045 msgs/s	  473196 B/op	    1508 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=4096-2        	      20	  24566642 ns/op	 341.46 MB/s	      4096 msgs/op	    166836 msgs/s	10978393 B/op	   94247 allocs/op
+BenchmarkPerfJournalReplay/gzip=false-2                      	      20	   2217341 ns/op	 945.80 MB/s	      1024 msgs/op	    461819 msgs/s	 2736976 B/op	   25721 allocs/op
+BenchmarkPerfJournalReplay/gzip=true-2                       	      20	   7046806 ns/op	 297.60 MB/s	      1024 msgs/op	    145315 msgs/s	 2820085 B/op	   25732 allocs/op
+PASS
+
+# components/2-after-journal-write.txt
+2026-09-23T12:05:11Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:05:11Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=0-2         	    4096	      4738 ns/op	 432.29 MB/s	         1.000 msgs/op	    211081 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=1-2         	    4096	    355606 ns/op	   5.76 MB/s	         1.000 msgs/op	      2812 msgs/s	     200 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=64-2        	    4096	      9645 ns/op	 212.33 MB/s	         1.000 msgs/op	    103678 msgs/s	       3 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=0-2          	    4096	      9684 ns/op	 211.47 MB/s	         1.000 msgs/op	    103259 msgs/s	     397 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=1-2          	    4096	    482854 ns/op	   4.24 MB/s	         1.000 msgs/op	      2071 msgs/s	     597 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=64-2         	    4096	     18062 ns/op	 113.38 MB/s	         1.000 msgs/op	     55363 msgs/s	     400 B/op	       0 allocs/op
+BenchmarkPerfJournalIDs/gzip=false-2                        	    4096	      1888 ns/op	         1.000 msgs/op	    529576 msgs/s	     121 B/op	       3 allocs/op
+BenchmarkPerfJournalIDs/gzip=true-2                         	    4096	       882.3 ns/op	         1.000 msgs/op	   1133461 msgs/s	     518 B/op	       3 allocs/op
+PASS
+
+# components/2-before-components.txt
+2026-09-23T12:04:57Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:04:57Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfAcceptorFilter-2   	   52017	      2219 ns/op	         1.000 msgs/op	    450675 msgs/s	    1388 B/op	      20 allocs/op
+BenchmarkPerfPostFilter/rename=false-2         	  104462	      1055 ns/op	         1.000 msgs/op	    947584 msgs/s	     832 B/op	       7 allocs/op
+BenchmarkPerfPostFilter/rename=true-2          	   56144	      2030 ns/op	         1.000 msgs/op	    492543 msgs/s	    1863 B/op	      17 allocs/op
+BenchmarkPerfParser-2                          	   34077	      3252 ns/op	         1.000 msgs/op	    307477 msgs/s	    1864 B/op	      22 allocs/op
+BenchmarkPerfConcatenator-2                    	   38146	      3082 ns/op	         2.000 msgs/op	    648914 msgs/s	    1035 B/op	      19 allocs/op
+BenchmarkPerfFluentEncoder/batch=1-2           	  122745	       925.8 ns/op	2212.19 MB/s	         1.000 msgs/op	   1080177 msgs/s	     112 B/op	       5 allocs/op
+BenchmarkPerfFluentEncoder/batch=64-2          	    4000	     29510 ns/op	4441.62 MB/s	        64.00 msgs/op	   2168771 msgs/s	    3140 B/op	     131 allocs/op
+BenchmarkPerfFluentEncoder/batch=512-2         	     472	    241188 ns/op	4347.55 MB/s	       512.0 msgs/op	   2122838 msgs/s	   24882 B/op	    1029 allocs/op
+BenchmarkPerfDispatcher-2                      	  219826	       507.7 ns/op	         1.000 msgs/op	   1969599 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfProducer/sinks=1-2                	   82394	      1440 ns/op	         1.000 msgs/op	    694535 msgs/s	      18 B/op	       2 allocs/op
+BenchmarkPerfProducer/sinks=2-2                	   50361	      2409 ns/op	         1.000 msgs/op	    415138 msgs/s	      66 B/op	       3 allocs/op
+BenchmarkPerfMonitor-2                         	    2289	     51124 ns/op	         1.000 scrapes/op	     19560 scrapes/s	   42124 B/op	     489 allocs/op
+BenchmarkPerfHTTPReceive-2                     	   10000	     10345 ns/op	 205.61 MB/s	         1.000 msgs/op	     96666 msgs/s	   14388 B/op	      59 allocs/op
+BenchmarkPerfHTTPSender/http-2                 	      74	   1519012 ns/op	  86.29 MB/s	        64.00 msgs/op	     42133 msgs/s	  862132 B/op	    2844 allocs/op
+BenchmarkPerfHTTPSender/es-2                   	      56	   1845146 ns/op	  71.04 MB/s	        64.00 msgs/op	     34686 msgs/s	  913786 B/op	    4686 allocs/op
+BenchmarkPerfJournalTTL/hit-2                  	 2008604	        59.44 ns/op	         1.000 msgs/op	  16823000 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/miss-2                 	 1804006	        67.04 ns/op	         1.000 msgs/op	  14917293 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/refresh-2              	  544875	       250.7 ns/op	         1.000 msgs/op	   3988542 msgs/s	      95 B/op	       6 allocs/op
+BenchmarkPerfPendingMonitor/pending=0-2        	    2019	     49991 ns/op	         1.000 scrapes/op	     20004 scrapes/s	   40413 B/op	     476 allocs/op
+BenchmarkPerfPendingMonitor/pending=1000-2     	    1597	     74908 ns/op	         1.000 scrapes/op	     13350 scrapes/s	   42166 B/op	     492 allocs/op
+BenchmarkPerfPendingMonitor/pending=100000-2   	      42	   2905403 ns/op	         1.000 scrapes/op	       344.2 scrapes/s	   42315 B/op	     492 allocs/op
+PASS
+
+# components/2-before-journal-recovery.txt
+2026-09-23T12:05:05Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:05:05Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalRecovery/gzip=false/records=64-2         	      20	    538281 ns/op	 243.50 MB/s	        64.00 msgs/op	    119269 msgs/s	 8564534 B/op	    1528 allocs/op
+BenchmarkPerfJournalRecovery/gzip=false/records=4096-2       	      20	   6745460 ns/op	1243.59 MB/s	      4096 msgs/op	    607369 msgs/s	19093219 B/op	   96284 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=64-2          	      20	   1083920 ns/op	 120.92 MB/s	        64.00 msgs/op	     59809 msgs/s	 8740347 B/op	    1543 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=4096-2        	      20	  26840276 ns/op	 312.54 MB/s	      4096 msgs/op	    152663 msgs/s	19250274 B/op	   96296 allocs/op
+BenchmarkPerfJournalReplay/gzip=false-2                      	      20	   3272432 ns/op	 640.85 MB/s	      1024 msgs/op	    312920 msgs/s	10998662 B/op	   26236 allocs/op
+BenchmarkPerfJournalReplay/gzip=true-2                       	      20	   8837983 ns/op	 237.29 MB/s	      1024 msgs/op	    115864 msgs/s	11105842 B/op	   26250 allocs/op
+PASS
+
+# components/2-before-journal-write.txt
+2026-09-23T12:05:01Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:05:01Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=0-2         	    4096	      4049 ns/op	 505.80 MB/s	         1.000 msgs/op	    246974 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=1-2         	    4096	    333560 ns/op	   6.14 MB/s	         1.000 msgs/op	      2998 msgs/s	     200 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=64-2        	    4096	     10910 ns/op	 187.72 MB/s	         1.000 msgs/op	     91662 msgs/s	       3 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=0-2          	    4096	      9864 ns/op	 207.63 MB/s	         1.000 msgs/op	    101383 msgs/s	     397 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=1-2          	    4096	    483367 ns/op	   4.24 MB/s	         1.000 msgs/op	      2069 msgs/s	     597 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=64-2         	    4096	     18286 ns/op	 112.00 MB/s	         1.000 msgs/op	     54687 msgs/s	     400 B/op	       0 allocs/op
+BenchmarkPerfJournalIDs/gzip=false-2                        	    4096	      1975 ns/op	         1.000 msgs/op	    506429 msgs/s	     129 B/op	       4 allocs/op
+BenchmarkPerfJournalIDs/gzip=true-2                         	    4096	       800.8 ns/op	         1.000 msgs/op	   1248742 msgs/s	     525 B/op	       4 allocs/op
+PASS
+
+# components/3-after-components.txt
+2026-09-23T12:05:15Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:05:15Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfAcceptorFilter-2   	   53080	      2159 ns/op	         1.000 msgs/op	    463144 msgs/s	    1386 B/op	      20 allocs/op
+BenchmarkPerfPostFilter/rename=false-2         	  104941	      1019 ns/op	         1.000 msgs/op	    981661 msgs/s	     832 B/op	       7 allocs/op
+BenchmarkPerfPostFilter/rename=true-2          	   55063	      2074 ns/op	         1.000 msgs/op	    482203 msgs/s	    1863 B/op	      17 allocs/op
+BenchmarkPerfParser-2                          	   35650	      3329 ns/op	         1.000 msgs/op	    300428 msgs/s	    1864 B/op	      22 allocs/op
+BenchmarkPerfConcatenator-2                    	   40963	      2971 ns/op	         2.000 msgs/op	    673163 msgs/s	    1036 B/op	      19 allocs/op
+BenchmarkPerfFluentEncoder/batch=1-2           	  176037	       616.9 ns/op	3319.64 MB/s	         1.000 msgs/op	   1620926 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfFluentEncoder/batch=64-2          	    6700	     17637 ns/op	7431.52 MB/s	        64.00 msgs/op	   3628691 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfFluentEncoder/batch=512-2         	     811	    144488 ns/op	7257.20 MB/s	       512.0 msgs/op	   3543573 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfDispatcher-2                      	  228715	       505.6 ns/op	         1.000 msgs/op	   1977713 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfProducer/sinks=1-2                	   84718	      1428 ns/op	         1.000 msgs/op	    700162 msgs/s	      18 B/op	       2 allocs/op
+BenchmarkPerfProducer/sinks=2-2                	   49945	      2402 ns/op	         1.000 msgs/op	    416249 msgs/s	      66 B/op	       3 allocs/op
+BenchmarkPerfMonitor-2                         	    2314	     49847 ns/op	         1.000 scrapes/op	     20062 scrapes/s	   42130 B/op	     489 allocs/op
+BenchmarkPerfHTTPReceive-2                     	   10000	     10293 ns/op	 206.64 MB/s	         1.000 msgs/op	     97151 msgs/s	   14387 B/op	      59 allocs/op
+BenchmarkPerfHTTPSender/http-2                 	      74	   1617814 ns/op	  81.02 MB/s	        64.00 msgs/op	     39560 msgs/s	  910993 B/op	    2847 allocs/op
+BenchmarkPerfHTTPSender/es-2                   	      57	   1836985 ns/op	  71.35 MB/s	        64.00 msgs/op	     34840 msgs/s	  914982 B/op	    4687 allocs/op
+BenchmarkPerfJournalTTL/hit-2                  	 2020332	        59.19 ns/op	         1.000 msgs/op	  16896030 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/miss-2                 	 1791787	        67.23 ns/op	         1.000 msgs/op	  14874121 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/refresh-2              	  885030	       135.4 ns/op	         1.000 msgs/op	   7384176 msgs/s	      63 B/op	       2 allocs/op
+BenchmarkPerfPendingMonitor/pending=0-2        	    2641	     48516 ns/op	         1.000 scrapes/op	     20612 scrapes/s	   40406 B/op	     476 allocs/op
+BenchmarkPerfPendingMonitor/pending=1000-2     	    1732	     65661 ns/op	         1.000 scrapes/op	     15230 scrapes/s	   42158 B/op	     492 allocs/op
+BenchmarkPerfPendingMonitor/pending=100000-2   	    2052	     54050 ns/op	         1.000 scrapes/op	     18501 scrapes/s	   42109 B/op	     492 allocs/op
+PASS
+
+# components/3-after-journal-recovery.txt
+2026-09-23T12:05:24Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:05:24Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalRecovery/gzip=false/records=64-2         	      20	    170321 ns/op	 769.56 MB/s	        64.00 msgs/op	    377969 msgs/s	  302989 B/op	    1494 allocs/op
+BenchmarkPerfJournalRecovery/gzip=false/records=4096-2       	      20	   7995069 ns/op	1049.22 MB/s	      4096 msgs/op	    512366 msgs/s	10821382 B/op	   94234 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=64-2          	      20	    551736 ns/op	 237.56 MB/s	        64.00 msgs/op	    117829 msgs/s	  475062 B/op	    1509 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=4096-2        	      20	  24640137 ns/op	 340.44 MB/s	      4096 msgs/op	    166295 msgs/s	10972954 B/op	   94247 allocs/op
+BenchmarkPerfJournalReplay/gzip=false-2                      	      20	   2439700 ns/op	 859.59 MB/s	      1024 msgs/op	    419728 msgs/s	 2729545 B/op	   25720 allocs/op
+BenchmarkPerfJournalReplay/gzip=true-2                       	      20	   7379094 ns/op	 284.20 MB/s	      1024 msgs/op	    138771 msgs/s	 2810960 B/op	   25733 allocs/op
+PASS
+
+# components/3-after-journal-write.txt
+2026-09-23T12:05:20Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:05:20Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=0-2         	    4096	      4073 ns/op	 502.76 MB/s	         1.000 msgs/op	    245489 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=1-2         	    4096	    329279 ns/op	   6.22 MB/s	         1.000 msgs/op	      3037 msgs/s	     200 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=64-2        	    4096	      9614 ns/op	 213.01 MB/s	         1.000 msgs/op	    104011 msgs/s	       3 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=0-2          	    4096	      9796 ns/op	 209.07 MB/s	         1.000 msgs/op	    102083 msgs/s	     397 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=1-2          	    4096	    485653 ns/op	   4.22 MB/s	         1.000 msgs/op	      2059 msgs/s	     597 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=64-2         	    4096	     18259 ns/op	 112.16 MB/s	         1.000 msgs/op	     54768 msgs/s	     400 B/op	       0 allocs/op
+BenchmarkPerfJournalIDs/gzip=false-2                        	    4096	      1817 ns/op	         1.000 msgs/op	    550401 msgs/s	     120 B/op	       3 allocs/op
+BenchmarkPerfJournalIDs/gzip=true-2                         	    4096	       758.3 ns/op	         1.000 msgs/op	   1318794 msgs/s	     519 B/op	       3 allocs/op
+PASS
+
+# components/3-before-components.txt
+2026-09-23T12:05:25Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:05:25Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfAcceptorFilter-2   	   52738	      2213 ns/op	         1.000 msgs/op	    451948 msgs/s	    1391 B/op	      20 allocs/op
+BenchmarkPerfPostFilter/rename=false-2         	   96402	      1043 ns/op	         1.000 msgs/op	    958443 msgs/s	     831 B/op	       7 allocs/op
+BenchmarkPerfPostFilter/rename=true-2          	   53985	      2051 ns/op	         1.000 msgs/op	    487549 msgs/s	    1863 B/op	      17 allocs/op
+BenchmarkPerfParser-2                          	   35534	      3249 ns/op	         1.000 msgs/op	    307762 msgs/s	    1864 B/op	      22 allocs/op
+BenchmarkPerfConcatenator-2                    	   37724	      3032 ns/op	         2.000 msgs/op	    659538 msgs/s	    1034 B/op	      19 allocs/op
+BenchmarkPerfFluentEncoder/batch=1-2           	  115798	       980.7 ns/op	2088.38 MB/s	         1.000 msgs/op	   1019721 msgs/s	     112 B/op	       5 allocs/op
+BenchmarkPerfFluentEncoder/batch=64-2          	    4011	     29608 ns/op	4426.84 MB/s	        64.00 msgs/op	   2161552 msgs/s	    3140 B/op	     131 allocs/op
+BenchmarkPerfFluentEncoder/batch=512-2         	     468	    242336 ns/op	4326.96 MB/s	       512.0 msgs/op	   2112780 msgs/s	   24885 B/op	    1029 allocs/op
+BenchmarkPerfDispatcher-2                      	  222808	       507.8 ns/op	         1.000 msgs/op	   1969273 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfProducer/sinks=1-2                	   82737	      1441 ns/op	         1.000 msgs/op	    694102 msgs/s	      18 B/op	       2 allocs/op
+BenchmarkPerfProducer/sinks=2-2                	   49086	      2448 ns/op	         1.000 msgs/op	    408462 msgs/s	      66 B/op	       3 allocs/op
+BenchmarkPerfMonitor-2                         	    2385	     51241 ns/op	         1.000 scrapes/op	     19516 scrapes/s	   42118 B/op	     489 allocs/op
+BenchmarkPerfHTTPReceive-2                     	   10000	     10542 ns/op	 201.77 MB/s	         1.000 msgs/op	     94861 msgs/s	   14388 B/op	      59 allocs/op
+BenchmarkPerfHTTPSender/http-2                 	      76	   1518289 ns/op	  86.33 MB/s	        64.00 msgs/op	     42153 msgs/s	  850040 B/op	    2843 allocs/op
+BenchmarkPerfHTTPSender/es-2                   	      58	   1831957 ns/op	  71.55 MB/s	        64.00 msgs/op	     34935 msgs/s	  910019 B/op	    4686 allocs/op
+BenchmarkPerfJournalTTL/hit-2                  	 2024685	        59.35 ns/op	         1.000 msgs/op	  16850505 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/miss-2                 	 1799550	        66.30 ns/op	         1.000 msgs/op	  15083654 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/refresh-2              	  516024	       243.5 ns/op	         1.000 msgs/op	   4106033 msgs/s	      95 B/op	       6 allocs/op
+BenchmarkPerfPendingMonitor/pending=0-2        	    2462	     48758 ns/op	         1.000 scrapes/op	     20510 scrapes/s	   40410 B/op	     476 allocs/op
+BenchmarkPerfPendingMonitor/pending=1000-2     	    1519	     75589 ns/op	         1.000 scrapes/op	     13230 scrapes/s	   42157 B/op	     492 allocs/op
+BenchmarkPerfPendingMonitor/pending=100000-2   	      42	   2789674 ns/op	         1.000 scrapes/op	       358.5 scrapes/s	   42104 B/op	     492 allocs/op
+PASS
+
+# components/3-before-journal-recovery.txt
+2026-09-23T12:05:32Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:05:32Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalRecovery/gzip=false/records=64-2         	      20	    595709 ns/op	 220.03 MB/s	        64.00 msgs/op	    107690 msgs/s	 8570133 B/op	    1528 allocs/op
+BenchmarkPerfJournalRecovery/gzip=false/records=4096-2       	      20	   7073904 ns/op	1185.85 MB/s	      4096 msgs/op	    579134 msgs/s	19095440 B/op	   96283 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=64-2          	      20	    993596 ns/op	 131.92 MB/s	        64.00 msgs/op	     64832 msgs/s	 8744016 B/op	    1543 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=4096-2        	      20	  26675385 ns/op	 314.47 MB/s	      4096 msgs/op	    153688 msgs/s	19254038 B/op	   96297 allocs/op
+BenchmarkPerfJournalReplay/gzip=false-2                      	      20	   3081736 ns/op	 680.51 MB/s	      1024 msgs/op	    332283 msgs/s	11006175 B/op	   26236 allocs/op
+BenchmarkPerfJournalReplay/gzip=true-2                       	      20	   8851538 ns/op	 236.93 MB/s	      1024 msgs/op	    115686 msgs/s	11099257 B/op	   26253 allocs/op
+PASS
+
+# components/3-before-journal-write.txt
+2026-09-23T12:05:29Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:05:29Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=0-2         	    4096	      4014 ns/op	 510.25 MB/s	         1.000 msgs/op	    249147 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=1-2         	    4096	    355876 ns/op	   5.75 MB/s	         1.000 msgs/op	      2810 msgs/s	     201 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=64-2        	    4096	     10231 ns/op	 200.17 MB/s	         1.000 msgs/op	     97741 msgs/s	       3 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=0-2          	    4096	      9569 ns/op	 214.02 MB/s	         1.000 msgs/op	    104501 msgs/s	     397 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=1-2          	    4096	    468188 ns/op	   4.37 MB/s	         1.000 msgs/op	      2136 msgs/s	     597 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=64-2         	    4096	     18253 ns/op	 112.20 MB/s	         1.000 msgs/op	     54786 msgs/s	     400 B/op	       0 allocs/op
+BenchmarkPerfJournalIDs/gzip=false-2                        	    4096	      1969 ns/op	         1.000 msgs/op	    507849 msgs/s	     130 B/op	       4 allocs/op
+BenchmarkPerfJournalIDs/gzip=true-2                         	    4096	       827.2 ns/op	         1.000 msgs/op	   1208829 msgs/s	     525 B/op	       4 allocs/op
+PASS
+
+# components/4-after-components.txt
+2026-09-23T12:05:42Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:05:42Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfAcceptorFilter-2   	   53034	      2140 ns/op	         1.000 msgs/op	    467321 msgs/s	    1388 B/op	      20 allocs/op
+BenchmarkPerfPostFilter/rename=false-2         	  102436	       995.3 ns/op	         1.000 msgs/op	   1004754 msgs/s	     831 B/op	       7 allocs/op
+BenchmarkPerfPostFilter/rename=true-2          	   54946	      2090 ns/op	         1.000 msgs/op	    478579 msgs/s	    1863 B/op	      17 allocs/op
+BenchmarkPerfParser-2                          	   35342	      3212 ns/op	         1.000 msgs/op	    311361 msgs/s	    1864 B/op	      22 allocs/op
+BenchmarkPerfConcatenator-2                    	   38817	      2844 ns/op	         2.000 msgs/op	    703136 msgs/s	    1034 B/op	      19 allocs/op
+BenchmarkPerfFluentEncoder/batch=1-2           	  180211	       602.6 ns/op	3398.72 MB/s	         1.000 msgs/op	   1659535 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfFluentEncoder/batch=64-2          	    5791	     17972 ns/op	7293.14 MB/s	        64.00 msgs/op	   3561125 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfFluentEncoder/batch=512-2         	     788	    148013 ns/op	7084.35 MB/s	       512.0 msgs/op	   3459172 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfDispatcher-2                      	  229407	       506.3 ns/op	         1.000 msgs/op	   1975273 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfProducer/sinks=1-2                	   82950	      1425 ns/op	         1.000 msgs/op	    701939 msgs/s	      18 B/op	       2 allocs/op
+BenchmarkPerfProducer/sinks=2-2                	   50866	      2400 ns/op	         1.000 msgs/op	    416658 msgs/s	      66 B/op	       3 allocs/op
+BenchmarkPerfMonitor-2                         	    2410	     50590 ns/op	         1.000 scrapes/op	     19767 scrapes/s	   42116 B/op	     489 allocs/op
+BenchmarkPerfHTTPReceive-2                     	   10000	     10540 ns/op	 201.81 MB/s	         1.000 msgs/op	     94881 msgs/s	   14387 B/op	      59 allocs/op
+BenchmarkPerfHTTPSender/http-2                 	      75	   1616157 ns/op	  81.10 MB/s	        64.00 msgs/op	     39600 msgs/s	  921442 B/op	    2850 allocs/op
+BenchmarkPerfHTTPSender/es-2                   	      54	   1863509 ns/op	  70.34 MB/s	        64.00 msgs/op	     34344 msgs/s	  915220 B/op	    4687 allocs/op
+BenchmarkPerfJournalTTL/hit-2                  	 2025847	        58.61 ns/op	         1.000 msgs/op	  17061182 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/miss-2                 	 1794430	        66.95 ns/op	         1.000 msgs/op	  14937745 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/refresh-2              	 1000000	       140.8 ns/op	         1.000 msgs/op	   7103023 msgs/s	      63 B/op	       2 allocs/op
+BenchmarkPerfPendingMonitor/pending=0-2        	    2197	     48884 ns/op	         1.000 scrapes/op	     20457 scrapes/s	   40404 B/op	     476 allocs/op
+BenchmarkPerfPendingMonitor/pending=1000-2     	    1704	     62875 ns/op	         1.000 scrapes/op	     15905 scrapes/s	   42169 B/op	     492 allocs/op
+BenchmarkPerfPendingMonitor/pending=100000-2   	    2820	     65665 ns/op	         1.000 scrapes/op	     15229 scrapes/s	   42107 B/op	     492 allocs/op
+PASS
+
+# components/4-after-journal-recovery.txt
+2026-09-23T12:05:50Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:05:50Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalRecovery/gzip=false/records=64-2         	      20	    188506 ns/op	 695.32 MB/s	        64.00 msgs/op	    341189 msgs/s	  301026 B/op	    1493 allocs/op
+BenchmarkPerfJournalRecovery/gzip=false/records=4096-2       	      20	   7866866 ns/op	1066.32 MB/s	      4096 msgs/op	    520822 msgs/s	10822941 B/op	   94234 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=64-2          	      20	    535771 ns/op	 244.64 MB/s	        64.00 msgs/op	    124708 msgs/s	  475085 B/op	    1509 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=4096-2        	      20	  24534665 ns/op	 341.91 MB/s	      4096 msgs/op	    167066 msgs/s	10970933 B/op	   94247 allocs/op
+BenchmarkPerfJournalReplay/gzip=false-2                      	      20	   2395868 ns/op	 875.32 MB/s	      1024 msgs/op	    427407 msgs/s	 2740934 B/op	   25723 allocs/op
+BenchmarkPerfJournalReplay/gzip=true-2                       	      20	   7534018 ns/op	 278.36 MB/s	      1024 msgs/op	    135917 msgs/s	 2821962 B/op	   25733 allocs/op
+PASS
+
+# components/4-after-journal-write.txt
+2026-09-23T12:05:47Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:05:47Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=0-2         	    4096	      4094 ns/op	 500.26 MB/s	         1.000 msgs/op	    244265 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=1-2         	    4096	    343765 ns/op	   5.96 MB/s	         1.000 msgs/op	      2909 msgs/s	     201 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=64-2        	    4096	      9902 ns/op	 206.83 MB/s	         1.000 msgs/op	    100991 msgs/s	       3 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=0-2          	    4096	      9655 ns/op	 212.11 MB/s	         1.000 msgs/op	    103571 msgs/s	     397 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=1-2          	    4096	    473986 ns/op	   4.32 MB/s	         1.000 msgs/op	      2110 msgs/s	     597 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=64-2         	    4096	     26734 ns/op	  76.61 MB/s	         1.000 msgs/op	     37406 msgs/s	     400 B/op	       0 allocs/op
+BenchmarkPerfJournalIDs/gzip=false-2                        	    4096	      2009 ns/op	         1.000 msgs/op	    497742 msgs/s	     122 B/op	       3 allocs/op
+BenchmarkPerfJournalIDs/gzip=true-2                         	    4096	       774.4 ns/op	         1.000 msgs/op	   1291331 msgs/s	     519 B/op	       3 allocs/op
+PASS
+
+# components/4-before-components.txt
+2026-09-23T12:05:34Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:05:34Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfAcceptorFilter-2   	   50229	      2247 ns/op	         1.000 msgs/op	    445029 msgs/s	    1387 B/op	      20 allocs/op
+BenchmarkPerfPostFilter/rename=false-2         	  103246	      1044 ns/op	         1.000 msgs/op	    958162 msgs/s	     831 B/op	       7 allocs/op
+BenchmarkPerfPostFilter/rename=true-2          	   54369	      2054 ns/op	         1.000 msgs/op	    486950 msgs/s	    1863 B/op	      17 allocs/op
+BenchmarkPerfParser-2                          	   33254	      3262 ns/op	         1.000 msgs/op	    306591 msgs/s	    1864 B/op	      22 allocs/op
+BenchmarkPerfConcatenator-2                    	   39462	      2903 ns/op	         2.000 msgs/op	    689006 msgs/s	    1036 B/op	      19 allocs/op
+BenchmarkPerfFluentEncoder/batch=1-2           	  121951	       931.3 ns/op	2199.14 MB/s	         1.000 msgs/op	   1073806 msgs/s	     112 B/op	       5 allocs/op
+BenchmarkPerfFluentEncoder/batch=64-2          	    3463	     29385 ns/op	4460.45 MB/s	        64.00 msgs/op	   2177967 msgs/s	    3142 B/op	     131 allocs/op
+BenchmarkPerfFluentEncoder/batch=512-2         	     482	    236480 ns/op	4434.10 MB/s	       512.0 msgs/op	   2165097 msgs/s	   24917 B/op	    1029 allocs/op
+BenchmarkPerfDispatcher-2                      	  230959	       507.4 ns/op	         1.000 msgs/op	   1970770 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfProducer/sinks=1-2                	   85873	      1454 ns/op	         1.000 msgs/op	    687541 msgs/s	      18 B/op	       2 allocs/op
+BenchmarkPerfProducer/sinks=2-2                	   50226	      2425 ns/op	         1.000 msgs/op	    412413 msgs/s	      66 B/op	       3 allocs/op
+BenchmarkPerfMonitor-2                         	    2370	     49582 ns/op	         1.000 scrapes/op	     20169 scrapes/s	   42127 B/op	     489 allocs/op
+BenchmarkPerfHTTPReceive-2                     	   11880	     10157 ns/op	 209.42 MB/s	         1.000 msgs/op	     98458 msgs/s	   14387 B/op	      59 allocs/op
+BenchmarkPerfHTTPSender/http-2                 	      67	   1547407 ns/op	  84.70 MB/s	        64.00 msgs/op	     41360 msgs/s	  894147 B/op	    2846 allocs/op
+BenchmarkPerfHTTPSender/es-2                   	      66	   1809697 ns/op	  72.43 MB/s	        64.00 msgs/op	     35365 msgs/s	  910842 B/op	    4686 allocs/op
+BenchmarkPerfJournalTTL/hit-2                  	 1994481	        60.50 ns/op	         1.000 msgs/op	  16529043 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/miss-2                 	 1759485	        68.63 ns/op	         1.000 msgs/op	  14570768 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalTTL/refresh-2              	  524721	       222.5 ns/op	         1.000 msgs/op	   4494530 msgs/s	      95 B/op	       6 allocs/op
+BenchmarkPerfPendingMonitor/pending=0-2        	    2326	     48417 ns/op	         1.000 scrapes/op	     20654 scrapes/s	   40407 B/op	     476 allocs/op
+BenchmarkPerfPendingMonitor/pending=1000-2     	    1509	     76727 ns/op	         1.000 scrapes/op	     13033 scrapes/s	   42161 B/op	     492 allocs/op
+BenchmarkPerfPendingMonitor/pending=100000-2   	      40	   2952062 ns/op	         1.000 scrapes/op	       338.7 scrapes/s	   42456 B/op	     492 allocs/op
+PASS
+
+# components/4-before-journal-recovery.txt
+2026-09-23T12:05:41Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:05:41Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalRecovery/gzip=false/records=64-2         	      20	    588522 ns/op	 222.71 MB/s	        64.00 msgs/op	    108951 msgs/s	 8570091 B/op	    1528 allocs/op
+BenchmarkPerfJournalRecovery/gzip=false/records=4096-2       	      20	   6921020 ns/op	1212.05 MB/s	      4096 msgs/op	    591953 msgs/s	19096765 B/op	   96284 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=64-2          	      20	    972325 ns/op	 134.80 MB/s	        64.00 msgs/op	     67703 msgs/s	 8738521 B/op	    1543 allocs/op
+BenchmarkPerfJournalRecovery/gzip=true/records=4096-2        	      20	  26738022 ns/op	 313.73 MB/s	      4096 msgs/op	    153275 msgs/s	19256128 B/op	   96297 allocs/op
+BenchmarkPerfJournalReplay/gzip=false-2                      	      20	   2754895 ns/op	 761.25 MB/s	      1024 msgs/op	    371706 msgs/s	10992676 B/op	   26233 allocs/op
+BenchmarkPerfJournalReplay/gzip=true-2                       	      20	   8608351 ns/op	 243.62 MB/s	      1024 msgs/op	    118955 msgs/s	11110065 B/op	   26253 allocs/op
+PASS
+
+# components/4-before-journal-write.txt
+2026-09-23T12:05:37Z	[34mINFO[0m	go-utils	go-utils@v1.14.6/logger.go:209	create logger	{"level": "info"}
+2026-09-23T12:05:37Z	[35mDEBUG[0m	gofluentd	go-utils@v1.14.6/logger.go:136	set lovel level	{"level": "debug"}
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+goos: linux
+goarch: amd64
+pkg: gofluentd/tests/performance
+cpu: AMD EPYC 7763 64-Core Processor                
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=0-2         	    4096	      4289 ns/op	 477.51 MB/s	         1.000 msgs/op	    233159 msgs/s	       0 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=1-2         	    4096	    351124 ns/op	   5.83 MB/s	         1.000 msgs/op	      2848 msgs/s	     200 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=false/syncEvery=64-2        	    4096	     10757 ns/op	 190.38 MB/s	         1.000 msgs/op	     92960 msgs/s	       3 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=0-2          	    4096	     21822 ns/op	  93.85 MB/s	         1.000 msgs/op	     45824 msgs/s	     397 B/op	       0 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=1-2          	    4096	    479359 ns/op	   4.27 MB/s	         1.000 msgs/op	      2086 msgs/s	     597 B/op	       3 allocs/op
+BenchmarkPerfJournalAppend/gzip=true/syncEvery=64-2         	    4096	     17605 ns/op	 116.33 MB/s	         1.000 msgs/op	     56801 msgs/s	     400 B/op	       0 allocs/op
+BenchmarkPerfJournalIDs/gzip=false-2                        	    4096	      1928 ns/op	         1.000 msgs/op	    518793 msgs/s	     129 B/op	       4 allocs/op
+BenchmarkPerfJournalIDs/gzip=true-2                         	    4096	       809.4 ns/op	         1.000 msgs/op	   1235443 msgs/s	     527 B/op	       4 allocs/op
+PASS

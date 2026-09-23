@@ -1,0 +1,407 @@
+{
+  "method": "alternating before/after; uninstrumented binaries; identical work units",
+  "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+  "gomaxprocs": "2",
+  "binaries": {
+    "before": {
+      "path": "/home/runner/work/_temp/bench-before.test",
+      "sha256": "2096c1a1133c9ce046185fdd3878054d269cbc788e6ac5c8444eaa3d5d0db8a6"
+    },
+    "after": {
+      "path": "/home/runner/work/_temp/bench-after.test",
+      "sha256": "87440ba5247eca2539f3d62d8680e5803d54708ccca1ce55c19bad622afa938a"
+    }
+  },
+  "execution": [
+    {
+      "sample": "0-before-components",
+      "command": [
+        "/home/runner/work/_temp/bench-before.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(AcceptorFilter|PostFilter|Parser|Concatenator|FluentEncoder|Dispatcher|Producer|Monitor|PendingMonitor|HTTPReceive|HTTPSender|JournalTTL)$",
+        "-test.benchtime=100ms",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 3.9212283869999993,
+      "returncode": 0
+    },
+    {
+      "sample": "0-before-journal-write",
+      "command": [
+        "/home/runner/work/_temp/bench-before.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalAppend|JournalIDs)$",
+        "-test.benchtime=4096x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 3.9246603140000076,
+      "returncode": 0
+    },
+    {
+      "sample": "0-before-journal-recovery",
+      "command": [
+        "/home/runner/work/_temp/bench-before.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalRecovery|JournalReplay)$",
+        "-test.benchtime=20x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 1.204422398999995,
+      "returncode": 0
+    },
+    {
+      "sample": "0-after-components",
+      "command": [
+        "/home/runner/work/_temp/bench-after.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(AcceptorFilter|PostFilter|Parser|Concatenator|FluentEncoder|Dispatcher|Producer|Monitor|PendingMonitor|HTTPReceive|HTTPSender|JournalTTL)$",
+        "-test.benchtime=100ms",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 4.4743320459999865,
+      "returncode": 0
+    },
+    {
+      "sample": "0-after-journal-write",
+      "command": [
+        "/home/runner/work/_temp/bench-after.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalAppend|JournalIDs)$",
+        "-test.benchtime=4096x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 3.684222727000005,
+      "returncode": 0
+    },
+    {
+      "sample": "0-after-journal-recovery",
+      "command": [
+        "/home/runner/work/_temp/bench-after.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalRecovery|JournalReplay)$",
+        "-test.benchtime=20x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 1.1147947569999985,
+      "returncode": 0
+    },
+    {
+      "sample": "1-after-components",
+      "command": [
+        "/home/runner/work/_temp/bench-after.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(AcceptorFilter|PostFilter|Parser|Concatenator|FluentEncoder|Dispatcher|Producer|Monitor|PendingMonitor|HTTPReceive|HTTPSender|JournalTTL)$",
+        "-test.benchtime=100ms",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 4.632814060000001,
+      "returncode": 0
+    },
+    {
+      "sample": "1-after-journal-write",
+      "command": [
+        "/home/runner/work/_temp/bench-after.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalAppend|JournalIDs)$",
+        "-test.benchtime=4096x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 3.782550239999992,
+      "returncode": 0
+    },
+    {
+      "sample": "1-after-journal-recovery",
+      "command": [
+        "/home/runner/work/_temp/bench-after.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalRecovery|JournalReplay)$",
+        "-test.benchtime=20x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 1.1103237589999964,
+      "returncode": 0
+    },
+    {
+      "sample": "1-before-components",
+      "command": [
+        "/home/runner/work/_temp/bench-before.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(AcceptorFilter|PostFilter|Parser|Concatenator|FluentEncoder|Dispatcher|Producer|Monitor|PendingMonitor|HTTPReceive|HTTPSender|JournalTTL)$",
+        "-test.benchtime=100ms",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 4.302414263000003,
+      "returncode": 0
+    },
+    {
+      "sample": "1-before-journal-write",
+      "command": [
+        "/home/runner/work/_temp/bench-before.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalAppend|JournalIDs)$",
+        "-test.benchtime=4096x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 3.5823271069999976,
+      "returncode": 0
+    },
+    {
+      "sample": "1-before-journal-recovery",
+      "command": [
+        "/home/runner/work/_temp/bench-before.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalRecovery|JournalReplay)$",
+        "-test.benchtime=20x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 1.2187434079999946,
+      "returncode": 0
+    },
+    {
+      "sample": "2-before-components",
+      "command": [
+        "/home/runner/work/_temp/bench-before.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(AcceptorFilter|PostFilter|Parser|Concatenator|FluentEncoder|Dispatcher|Producer|Monitor|PendingMonitor|HTTPReceive|HTTPSender|JournalTTL)$",
+        "-test.benchtime=100ms",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 4.245164936999998,
+      "returncode": 0
+    },
+    {
+      "sample": "2-before-journal-write",
+      "command": [
+        "/home/runner/work/_temp/bench-before.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalAppend|JournalIDs)$",
+        "-test.benchtime=4096x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 3.735563288999998,
+      "returncode": 0
+    },
+    {
+      "sample": "2-before-journal-recovery",
+      "command": [
+        "/home/runner/work/_temp/bench-before.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalRecovery|JournalReplay)$",
+        "-test.benchtime=20x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 1.21395634000001,
+      "returncode": 0
+    },
+    {
+      "sample": "2-after-components",
+      "command": [
+        "/home/runner/work/_temp/bench-after.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(AcceptorFilter|PostFilter|Parser|Concatenator|FluentEncoder|Dispatcher|Producer|Monitor|PendingMonitor|HTTPReceive|HTTPSender|JournalTTL)$",
+        "-test.benchtime=100ms",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 4.593402286,
+      "returncode": 0
+    },
+    {
+      "sample": "2-after-journal-write",
+      "command": [
+        "/home/runner/work/_temp/bench-after.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalAppend|JournalIDs)$",
+        "-test.benchtime=4096x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 3.812082281000002,
+      "returncode": 0
+    },
+    {
+      "sample": "2-after-journal-recovery",
+      "command": [
+        "/home/runner/work/_temp/bench-after.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalRecovery|JournalReplay)$",
+        "-test.benchtime=20x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 1.1539512619999925,
+      "returncode": 0
+    },
+    {
+      "sample": "3-after-components",
+      "command": [
+        "/home/runner/work/_temp/bench-after.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(AcceptorFilter|PostFilter|Parser|Concatenator|FluentEncoder|Dispatcher|Producer|Monitor|PendingMonitor|HTTPReceive|HTTPSender|JournalTTL)$",
+        "-test.benchtime=100ms",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 4.377301189000008,
+      "returncode": 0
+    },
+    {
+      "sample": "3-after-journal-write",
+      "command": [
+        "/home/runner/work/_temp/bench-after.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalAppend|JournalIDs)$",
+        "-test.benchtime=4096x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 3.710017966999999,
+      "returncode": 0
+    },
+    {
+      "sample": "3-after-journal-recovery",
+      "command": [
+        "/home/runner/work/_temp/bench-after.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalRecovery|JournalReplay)$",
+        "-test.benchtime=20x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 1.1336475149999927,
+      "returncode": 0
+    },
+    {
+      "sample": "3-before-components",
+      "command": [
+        "/home/runner/work/_temp/bench-before.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(AcceptorFilter|PostFilter|Parser|Concatenator|FluentEncoder|Dispatcher|Producer|Monitor|PendingMonitor|HTTPReceive|HTTPSender|JournalTTL)$",
+        "-test.benchtime=100ms",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 3.893303449000001,
+      "returncode": 0
+    },
+    {
+      "sample": "3-before-journal-write",
+      "command": [
+        "/home/runner/work/_temp/bench-before.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalAppend|JournalIDs)$",
+        "-test.benchtime=4096x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 3.759250882999993,
+      "returncode": 0
+    },
+    {
+      "sample": "3-before-journal-recovery",
+      "command": [
+        "/home/runner/work/_temp/bench-before.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalRecovery|JournalReplay)$",
+        "-test.benchtime=20x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 1.221069760000006,
+      "returncode": 0
+    },
+    {
+      "sample": "4-before-components",
+      "command": [
+        "/home/runner/work/_temp/bench-before.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(AcceptorFilter|PostFilter|Parser|Concatenator|FluentEncoder|Dispatcher|Producer|Monitor|PendingMonitor|HTTPReceive|HTTPSender|JournalTTL)$",
+        "-test.benchtime=100ms",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 3.759021587999996,
+      "returncode": 0
+    },
+    {
+      "sample": "4-before-journal-write",
+      "command": [
+        "/home/runner/work/_temp/bench-before.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalAppend|JournalIDs)$",
+        "-test.benchtime=4096x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 3.843093734000007,
+      "returncode": 0
+    },
+    {
+      "sample": "4-before-journal-recovery",
+      "command": [
+        "/home/runner/work/_temp/bench-before.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalRecovery|JournalReplay)$",
+        "-test.benchtime=20x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 1.2038490029999878,
+      "returncode": 0
+    },
+    {
+      "sample": "4-after-components",
+      "command": [
+        "/home/runner/work/_temp/bench-after.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(AcceptorFilter|PostFilter|Parser|Concatenator|FluentEncoder|Dispatcher|Producer|Monitor|PendingMonitor|HTTPReceive|HTTPSender|JournalTTL)$",
+        "-test.benchtime=100ms",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 4.304534165999996,
+      "returncode": 0
+    },
+    {
+      "sample": "4-after-journal-write",
+      "command": [
+        "/home/runner/work/_temp/bench-after.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalAppend|JournalIDs)$",
+        "-test.benchtime=4096x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 3.766978636999994,
+      "returncode": 0
+    },
+    {
+      "sample": "4-after-journal-recovery",
+      "command": [
+        "/home/runner/work/_temp/bench-after.test",
+        "-test.run=^$",
+        "-test.bench=^BenchmarkPerf(JournalRecovery|JournalReplay)$",
+        "-test.benchtime=20x",
+        "-test.count=1",
+        "-test.timeout=180s"
+      ],
+      "seconds": 1.131927324000003,
+      "returncode": 0
+    }
+  ]
+}

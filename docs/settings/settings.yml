@@ -89,6 +89,8 @@ settings:
         wechat_mini_program_forward:
           # 指定插件类型
           type: http
+          # Wait for local journal Sync before HTTP 200; false keeps legacy queue acceptance.
+          require_durable_ack: false
 
           # 激活的环境，取决于命令行参数 `--env`
           active_env: *all-env

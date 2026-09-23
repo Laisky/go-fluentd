@@ -32,15 +32,14 @@ type Acceptor struct {
 func NewAcceptor(cfg *AcceptorCfg, recvs ...recvs.AcceptorRecvItf) *Acceptor {
 	a := &Acceptor{
 		AcceptorCfg: cfg,
-
-		recvs: recvs,
+		recvs:       recvs,
 	}
 	if err := a.valid(); err != nil {
 		log.Logger.Panic("new acceptor", zap.Error(err))
 	}
-
 	a.syncOutChan = make(chan *library.FluentMsg, cfg.SyncOutChanSize)
 	a.asyncOutChan = make(chan *library.FluentMsg, cfg.AsyncOutChanSize)
+
 	log.Logger.Info("create acceptor",
 		zap.Int64("max_rotate_id", a.MaxRotateID),
 		zap.Int("sync_out_chan_size", a.SyncOutChanSize),
@@ -57,12 +56,12 @@ func (a *Acceptor) valid() error {
 		log.Logger.Warn("max_rotate_id should not too small", zap.Int64("max_rotate_id", a.MaxRotateID))
 	}
 
-	if a.SyncOutChanSize <= 0 {
+	if a.SyncOutChanSize == 0 {
 		a.SyncOutChanSize = 10000
 		log.Logger.Info("reset sync_out_chan_size", zap.Int("sync_out_chan_size", a.SyncOutChanSize))
 	}
 
-	if a.AsyncOutChanSize <= 0 {
+	if a.AsyncOutChanSize == 0 {
 		a.AsyncOutChanSize = 10000
 		log.Logger.Info("reset async_out_chan_size", zap.Int("async_out_chan_size", a.AsyncOutChanSize))
 	}

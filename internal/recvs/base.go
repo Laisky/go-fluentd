@@ -48,9 +48,9 @@ func (r *BaseRecv) SetCounter(counter library.CounterIft) {
 	r.counter = counter
 }
 
-// getMsg starts a new ownership lifetime. A pooled message may have been a
-// concatenated journal record; its IDs must never leak into a new input.
-func (r *BaseRecv) getMsg() *library.FluentMsg {
+// newMsg starts a new receiver-owned record. Pool contents may come from failed
+// deliveries or concatenation and must never carry acknowledgement IDs forward.
+func (r *BaseRecv) newMsg() *library.FluentMsg {
 	msg := r.msgPool.Get().(*library.FluentMsg)
 	*msg = library.FluentMsg{}
 	return msg

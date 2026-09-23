@@ -54,11 +54,11 @@ func (f *BaseTagFilterFactory) runLB(ctx context.Context, lbkey string, inChan c
 			zap.Int("inchans_len", len(inchans)))
 	}
 
-	// The balancer is the sole producer of these worker inputs. Closing them
-	// lets parsers and concatenators drain when the caller closes the input.
+	// This router is the only sender to its private worker inputs. Closing
+	// them lets each worker drain on a normal upstream close.
 	defer func() {
-		for _, ch := range inchans {
-			close(ch)
+		for _, in := range inchans {
+			close(in)
 		}
 	}()
 

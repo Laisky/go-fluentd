@@ -92,28 +92,31 @@ func TemplateWithMap(tpl string, data map[string]interface{}) string {
 
 // TemplateWithMapAndRegexp replace `${var}` in template string
 func TemplateWithMapAndRegexp(tplReg *regexp.Regexp, tpl string, data map[string]interface{}) string {
-	if tplReg == nil || tplReg.NumSubexp() < 1 {
-		return tpl
-	}
-	return tplReg.ReplaceAllStringFunc(tpl, func(expr string) string {
-		key := tplReg.FindStringSubmatch(expr)[1]
-		switch value := data[key].(type) {
-		case nil:
-			return ""
-		case string:
-			return value
-		case []byte:
-			return string(value)
-		case int:
-			return strconv.Itoa(value)
-		case int64:
-			return strconv.FormatInt(value, 10)
-		case float64:
-			return strconv.FormatFloat(value, 'f', -1, 64)
-		default:
-			return ""
+	var (
+		k, vs string
+	)
+	for _, kg := range tplReg.FindAllStringSubmatch(tpl, -1) {
+		if len(kg) < 2 {
+			continue
 		}
-	})
+		k = kg[1]
+		vs = ""
+		switch v := data[k].(type) {
+		case string:
+			vs = v
+		case []byte:
+			vs = string(v)
+		case int:
+			vs = strconv.FormatInt(int64(v), 10)
+		case int64:
+			vs = strconv.FormatInt(v, 10)
+		case float64:
+			vs = strconv.FormatFloat(v, 'f', -1, 64)
+		}
+		tpl = strings.ReplaceAll(tpl, kg[0], vs)
+	}
+
+	return tpl
 }
 
 // AbsInt return abs(int)

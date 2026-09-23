@@ -1,19 +1,21 @@
 package monitor
 
 import (
+	"net/http"
+	"sync"
+
+	"gofluentd/library/log"
+
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 	jsoniter "github.com/json-iterator/go"
-	"gofluentd/library/log"
-	"net/http"
-	"sync"
 )
 
 var (
 	json         = jsoniter.ConfigCompatibleWithStandardLibrary
-	metricGetter = map[string]func() map[string]interface{}{}
 	metricMu     sync.RWMutex
+	metricGetter = map[string]func() map[string]interface{}{}
 )
 
 func AddMetric(name string, metric func() map[string]interface{}) {
@@ -21,10 +23,11 @@ func AddMetric(name string, metric func() map[string]interface{}) {
 	defer metricMu.Unlock()
 	metricGetter[name] = metric
 }
+
 func BindHTTP(srv *gin.Engine) {
 	srv.GET("/monitor", func(ctx *gin.Context) {
-		// Call user-supplied getters outside the registry lock: a getter can
-		// register another metric or acquire a component's own locks.
+		// Snapshot callbacks under the lock, but execute them outside it. A getter
+		// may itself register a metric, or take locks owned by another component.
 		metricMu.RLock()
 		getters := make(map[string]func() map[string]interface{}, len(metricGetter))
 		for name, getter := range metricGetter {
@@ -40,7 +43,7 @@ func BindHTTP(srv *gin.Engine) {
 		b, err := json.Marshal(metrics)
 		if err != nil {
 			log.Logger.Error("marshal metrics", zap.Error(err))
-			ctx.AbortWithStatus(http.StatusInternalServerError)
+			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "cannot encode metrics"})
 			return
 		}
 		ctx.Data(http.StatusOK, "application/json; charset=utf-8", b)

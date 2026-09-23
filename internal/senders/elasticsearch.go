@@ -228,8 +228,7 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) error {
 	// A missing result is not evidence of successful delivery. Keep accepting
 	// filter_path=errors responses, but require an explicit boolean result.
 	var result struct {
-		Errors *bool                     `json:"errors"`
-		Items  []map[string]*ESIndexResp `json:"items"`
+		Errors *bool `json:"errors"`
 	}
 	if err = utils.JSON.Unmarshal(body, &result); err != nil {
 		return errors.Wrap(err, "decode Elasticsearch response")
@@ -240,18 +239,6 @@ func (s *ElasticSearchSender) checkResp(resp *http.Response) error {
 	if *result.Errors {
 		return fmt.Errorf("Elasticsearch rejected one or more bulk items: %s", body)
 	}
-	// filter_path=errors is valid. When item results are supplied, however,
-	// a contradictory or malformed result cannot establish delivery.
-	for i, item := range result.Items {
-		if len(item) != 1 {
-			return fmt.Errorf("invalid Elasticsearch bulk item %d", i)
-		}
-		for _, operation := range item {
-			if operation == nil || !isStatusCodeOk(operation.Status) {
-				return fmt.Errorf("unsuccessful Elasticsearch bulk item %d", i)
-			}
-		}
-	}
 	return nil
 }
 
@@ -260,7 +247,25 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context) chan<- *library.FluentM
 	for i := 0; i < s.NFork; i++ {
 		go func() {
 			bulk := &bulkOpCtx{}
-			s.runBatches(ctx, in, s.BatchSize, s.MaxWait, func(ctx context.Context, msgs []*library.FluentMsg) error { return s.sendBulkMsgs(ctx, bulk, msgs) })
+			runBatchWorker(ctx, in, s.BatchSize, s.MaxWait, func(msgs []*library.FluentMsg) bool {
+				if ctx.Err() != nil {
+					return false
+				}
+				if utils.Settings.GetBool("dry") {
+					return s.reportBatch(ctx, msgs, true)
+				}
+				var err error
+				for attempt := 0; attempt < 4; attempt++ {
+					if ctx.Err() != nil {
+						return false
+					}
+					err = s.sendBulkMsgs(ctx, bulk, msgs)
+					if err == nil {
+						break
+					}
+				}
+				return s.reportBatch(ctx, msgs, err == nil)
+			})
 		}()
 	}
 	return in

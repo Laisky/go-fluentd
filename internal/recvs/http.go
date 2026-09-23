@@ -23,6 +23,9 @@ import (
 type HTTPRecvCfg struct {
 	HTTPSrv     *gin.Engine
 	MaxBodySize int64
+	// RequireDurableAck waits for the journal's successful Sync before HTTP 200.
+	// False retains the legacy best-effort queue-acceptance contract.
+	RequireDurableAck bool
 	// Name: recv name
 	// Path: url endpoint
 	Name, Path, Env string
@@ -181,7 +184,7 @@ func (r *HTTPRecv) HTTPLogHandler(ctx *gin.Context) {
 		return
 	}
 
-	msg := r.getMsg()
+	msg := r.newMsg()
 	ctx.Request.Body = http.MaxBytesReader(ctx.Writer, ctx.Request.Body, r.MaxBodySize)
 	msgData, err := ioutil.ReadAll(ctx.Request.Body)
 	if err != nil {
@@ -214,17 +217,40 @@ func (r *HTTPRecv) HTTPLogHandler(ctx *gin.Context) {
 	msg.Message[r.TagKey] = r.OrigTag + "." + env
 	msg.ID = r.counter.Count()
 	log.Logger.Debug("receive new msg", zap.String("tag", msg.Tag), zap.Int64("id", msg.ID))
-	id := msg.ID // the receiver must not read the message after handing it off
+	// Retain only immutable values after publication: a fast pipeline may
+	// complete and recycle msg before the handler resumes.
+	id := msg.ID
+	out := r.asyncOutChan
+	var receipt chan error
+	if r.RequireDurableAck {
+		receipt = make(chan error, 1)
+		msg.DurableAck = receipt
+		out = r.syncOutChan
+	}
 	if ctx.Request.Context().Err() != nil {
 		r.msgPool.Put(msg)
-		ctx.AbortWithStatus(http.StatusRequestTimeout)
+		ctx.AbortWithStatus(http.StatusServiceUnavailable)
 		return
 	}
 	select {
-	case r.asyncOutChan <- msg:
-		ctx.JSON(http.StatusOK, map[string]int64{"msgid": id})
+	case out <- msg:
 	case <-ctx.Request.Context().Done():
 		r.msgPool.Put(msg)
-		ctx.AbortWithStatus(http.StatusRequestTimeout)
+		ctx.AbortWithStatus(http.StatusServiceUnavailable)
+		return
 	}
+	if receipt != nil {
+		select {
+		case err := <-receipt:
+			if err != nil {
+				ctx.AbortWithStatus(http.StatusServiceUnavailable)
+				return
+			}
+		case <-ctx.Request.Context().Done():
+			// Ownership is already in the pipeline; never recycle it here.
+			ctx.AbortWithStatus(http.StatusServiceUnavailable)
+			return
+		}
+	}
+	ctx.JSON(http.StatusOK, map[string]int64{"msgid": id})
 }

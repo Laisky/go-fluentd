@@ -1,6 +1,7 @@
 package postfilters
 
 import (
+	"fmt"
 	"strings"
 
 	"gofluentd/library"
@@ -48,17 +49,20 @@ func NewESDispatcherFilter(cfg *ESDispatcherFilterCfg) *ESDispatcherFilter {
 }
 
 func (f *ESDispatcherFilter) Filter(msg *library.FluentMsg) *library.FluentMsg {
-	if _, supported := f.supportedTags[msg.Tag]; !supported {
+	var ok bool
+	if _, ok = f.supportedTags[msg.Tag]; !ok {
 		return msg
 	}
-	origin, valid := msg.Message[f.TagKey].(string)
-	target, mapped := f.ReTagMap[origin]
-	if !valid || origin == "" || !mapped || target == "" {
-		log.Logger.Warn("discard record with unmapped origin tag", zap.String("tag", msg.Tag))
-		// Keep the journal tag intact until the discard reaches the commit writer.
+
+	origin, valid := textField(msg.Message[f.TagKey])
+	target, configured := f.ReTagMap[origin]
+	if !valid || origin == "" || !configured || target == "" {
+		log.Logger.Warn("discard log with invalid route", zap.String("tag", fmt.Sprint(msg.Message[f.TagKey])))
+		// Keep the original journal route until the rejected record is committed.
 		f.DiscardMsg(msg)
 		return nil
 	}
 	msg.Tag = target
+
 	return msg
 }

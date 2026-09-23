@@ -42,8 +42,8 @@ func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 	if err := d.valid(); err != nil {
 		log.Logger.Panic("config invalid", zap.Error(err))
 	}
-
 	d.outChan = make(chan *library.FluentMsg, cfg.OutChanSize)
+
 	log.Logger.Info("create Dispatcher",
 		zap.Int("n_fork", d.NFork),
 		zap.Int("out_chan_size", d.OutChanSize),
@@ -137,9 +137,6 @@ func (d *Dispatcher) Run(ctx context.Context) {
 
 				// count
 				if counterI, ok = d.tag2Counter.Load(msg.Tag); !ok {
-					if ctx.Err() != nil {
-						return
-					}
 					log.Logger.Panic("counter must exists", zap.String("tag", msg.Tag))
 				}
 				counterI.(*utils.Counter).Count()

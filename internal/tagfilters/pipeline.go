@@ -28,8 +28,8 @@ type TagPipelineCfg struct {
 type TagPipeline struct {
 	*TagPipelineCfg
 	TagFilterFactoryItfs []TagFilterFactoryItf
-	monitorChans         map[string]chan<- *library.FluentMsg
 	monitorMu            sync.RWMutex
+	monitorChans         map[string]chan<- *library.FluentMsg
 }
 
 // NewTagPipeline create new TagPipeline
@@ -83,8 +83,8 @@ func (p *TagPipeline) Spawn(ctx context.Context, tag string, outChan chan<- *lib
 			isTagSupported = true
 			downstreamChan = f.Spawn(ctx, tag, downstreamChan) // downstream's inChan is upstream's outChan
 			p.monitorMu.Lock()
-			p.monitorChans[tag+"."+f.GetName()] = downstreamChan // instream
-			p.monitorMu.Unlock()
+			p.monitorChans[tag+"."+f.GetName()] = downstreamChan
+			p.monitorMu.Unlock() // instream
 		}
 	}
 

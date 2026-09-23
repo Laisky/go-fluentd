@@ -57,53 +57,93 @@ type AddCfg map[string][]map[string]interface{}
 //   - `%{@lower:key}`     ->    `xxxx`
 //   - `%{@upper:key}`     ->    `XXXX`
 func ReplaceStrByMsg(msg *FluentMsg, v string) string {
-	// Cache by the entire expression, not the underlying field: upper/lower
-	// and plain lookups of one field are different substitutions.
-	values := make(map[string]string)
-	return keyReplaceRegexp.ReplaceAllStringFunc(v, func(expr string) string {
-		if text, ok := values[expr]; ok {
-			return text
+	var (
+		keys   = map[string]struct{}{}
+		key    string
+		cmds   []string
+		newVal interface{}
+		ok,
+		isLower, isUpper bool
+	)
+
+	// fmt.Println(">>>>>>>>>>>>>>>>>>>>>>>>")
+
+	for _, grp := range keyReplaceRegexp.FindAllStringSubmatch(v, -1) {
+		isLower, isUpper = false, false
+		if len(grp) < 2 || grp[1] == "" {
+			continue
 		}
-		key := expr[2 : len(expr)-1]
-		var value interface{}
-		command := ""
+
+		// fmt.Println("grp", grp)
+
+		key = grp[1]
+		// already replaced this key
+		if _, ok = keys[key]; ok {
+			continue
+		}
+
 		switch key {
 		case variableRandomString:
-			value = utils.RandomStringWithLength(8)
+			newVal = utils.RandomStringWithLength(8)
 		case variableMsgTag:
-			value = msg.Tag
+			newVal = msg.Tag
 		case variableMsgID:
-			value = msg.ID
+			newVal = msg.ID
 		case variableNow:
-			value = utils.Clock.GetUTCNow().Format(time.RFC3339)
+			newVal = utils.Clock.GetUTCNow().Format(time.RFC3339)
 		case variableNowUnix:
-			value = utils.Clock.GetUTCNow().Unix()
+			newVal = utils.Clock.GetUTCNow().Unix()
 		default:
-			if prefix, field, found := strings.Cut(key, ":"); found && (prefix == variableLower || prefix == variableUpper) {
-				command, key = prefix, field
+			cmds = strings.Split(key, ":")
+			if len(cmds) == 2 {
+				switch cmds[0] {
+				case variableLower:
+					key = cmds[1]
+					isLower = true
+				case variableUpper:
+					key = cmds[1]
+					isUpper = true
+				}
 			}
-			var ok bool
-			if value, ok = msg.Message[key]; !ok {
-				value = GetValFromMap(msg.Message, key)
+
+			if newVal, ok = msg.Message[key]; !ok {
+				// replace val from map
+				if strings.Contains(key, ".") {
+					newVal = GetValFromMap(msg.Message, key)
+				} else {
+					newVal = ""
+				}
 			}
 		}
-		text := ""
-		switch val := value.(type) {
-		case nil:
+
+		// fmt.Println("key", key)
+		// fmt.Println("isLower", isLower)
+		// fmt.Println("isUpper", isUpper)
+		// fmt.Println("newVal", newVal)
+
+		switch v := newVal.(type) {
+		case string:
+			if isLower {
+				newVal = strings.ToLower(v)
+			} else if isUpper {
+				newVal = strings.ToUpper(v)
+			}
 		case []byte:
-			text = string(val)
-		default:
-			text = fmt.Sprint(val)
+			newVal = string(v)
+			if isLower {
+				newVal = strings.ToLower(string(v))
+			} else if isUpper {
+				newVal = strings.ToUpper(string(v))
+			}
+		case nil:
+			newVal = ""
 		}
-		switch command {
-		case variableLower:
-			text = strings.ToLower(text)
-		case variableUpper:
-			text = strings.ToUpper(text)
-		}
-		values[expr] = text
-		return text
-	})
+
+		keys[grp[1]] = struct{}{}
+		v = strings.ReplaceAll(v, grp[0], fmt.Sprint(newVal))
+	}
+
+	return v
 }
 
 // ParseAddCfg load auto config

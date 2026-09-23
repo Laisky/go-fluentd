@@ -48,12 +48,7 @@ func NewHTTPSender(cfg *HTTPSenderCfg) *HTTPSender {
 	if cfg.MaxWait <= 0 {
 		cfg.MaxWait = 5 * time.Second
 	}
-	if cfg.InChanSize < 0 {
-		cfg.InChanSize = 0
-	}
-	if cfg.RetryChanSize < 0 {
-		cfg.RetryChanSize = 0
-	}
+
 	s := &HTTPSender{
 		BaseSender: &BaseSender{
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
@@ -80,7 +75,25 @@ func (s *HTTPSender) Spawn(ctx context.Context) chan<- *library.FluentMsg {
 	for i := 0; i < s.NFork; i++ {
 		go func() {
 			bulk := &bulkOpCtx{}
-			s.runBatches(ctx, in, s.BatchSize, s.MaxWait, func(ctx context.Context, msgs []*library.FluentMsg) error { return s.sendBulkMsgs(ctx, bulk, msgs) })
+			runBatchWorker(ctx, in, s.BatchSize, s.MaxWait, func(msgs []*library.FluentMsg) bool {
+				if ctx.Err() != nil {
+					return false
+				}
+				if utils.Settings.GetBool("dry") {
+					return s.reportBatch(ctx, msgs, true)
+				}
+				var err error
+				for attempt := 0; attempt < 4; attempt++ {
+					if ctx.Err() != nil {
+						return false
+					}
+					err = s.sendBulkMsgs(ctx, bulk, msgs)
+					if err == nil {
+						break
+					}
+				}
+				return s.reportBatch(ctx, msgs, err == nil)
+			})
 		}()
 	}
 	return in

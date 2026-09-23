@@ -53,6 +53,7 @@ func TestHTTPRecv(t *testing.T) {
 
 	srv := httptest.NewServer(httpsrv)
 	defer srv.Close()
+
 	resp := map[string]interface{}{}
 	if err = utils.RequestJSON("post", srv.URL+"/api/v1/log/wechat/sit", &utils.RequestData{Data: fakeReq()}, &resp); err != nil {
 		t.Fatalf("got error: %+v", err)

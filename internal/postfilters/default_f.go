@@ -53,36 +53,39 @@ func (f *DefaultFilter) valid() error {
 }
 
 func (f *DefaultFilter) Filter(msg *library.FluentMsg) *library.FluentMsg {
-	keys := make([]string, 0, len(msg.Message))
-	for key := range msg.Message {
+	// Normalize from a stable snapshot: inserting renamed keys while ranging
+	// can revisit them or resurrect the old key. Existing canonical keys win.
+	original := msg.Message
+	normalized := make(map[string]interface{}, len(original))
+	keys := make([]string, 0, len(original))
+	for key := range original {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	normalized := make(map[string]interface{}, len(msg.Message))
 	for _, key := range keys {
 		if key == "" {
 			continue
 		}
 		target := strings.ReplaceAll(key, ".", "__")
 		if target != key {
-			if _, exists := msg.Message[target]; exists {
+			if _, exists := original[target]; exists {
+				continue
+			}
+			if _, exists := normalized[target]; exists {
 				continue
 			}
 		}
-		value := msg.Message[key]
-		if b, ok := value.([]byte); ok {
-			value = string(b)
+		value := original[key]
+		if raw, ok := value.([]byte); ok {
+			value = string(raw)
 		}
 		if text, ok := value.(string); ok && f.MaxLen > 0 && len(text) > f.MaxLen {
 			value = text[:f.MaxLen]
 		}
 		normalized[target] = value
 	}
-	// Preserve the caller's map identity.
-	clear(msg.Message)
-	for key, value := range normalized {
-		msg.Message[key] = value
-	}
+	msg.Message = normalized
+
 	library.ProcessAdd(f.AddCfg, msg)
 	return msg
 }

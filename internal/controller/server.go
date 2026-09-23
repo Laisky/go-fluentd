@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"errors"
-	"net"
 	"net/http"
 	"time"
 
@@ -42,40 +41,26 @@ func RunServer(ctx context.Context, addr string) {
 	pprof.Register(server, "pprof")
 	middlewares.BindPrometheus(server)
 
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		log.Logger.Error("listen on HTTP", zap.Error(err))
-		return
-	}
-	log.Logger.Info("listening on http", zap.String("addr", ln.Addr().String()))
-	if err := serveHTTP(ctx, &httpSrv, ln); err != nil {
-		log.Logger.Error("HTTP server stopped", zap.Error(err))
-	}
-}
-
-func serveHTTP(ctx context.Context, srv *http.Server, ln net.Listener) error {
-	done := make(chan error, 1)
-	go func() { done <- srv.Serve(ln) }()
+	log.Logger.Info("listening on http", zap.String("addr", addr))
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- httpSrv.ListenAndServe() }()
 	select {
-	case err := <-done:
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
+	case err := <-serveErr:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Logger.Error("HTTP server stopped", zap.Error(err))
 		}
-		return err
+		return
 	case <-ctx.Done():
-		// The parent is already cancelled. Deriving from it would cancel the
-		// grace period immediately and interrupt otherwise healthy requests.
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), defaultGraceShutdownWait)
-		defer cancel()
-		if err := srv.Shutdown(shutdownCtx); err != nil {
-			srv.Close()
-			<-done
-			return err
-		}
-		err := <-done
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
-		}
-		return err
+	}
+	// The parent has already been canceled. Draining active requests requires
+	// an independent bounded context, not a child of the canceled parent.
+	srvCtx, cancel := context.WithTimeout(context.Background(), defaultGraceShutdownWait)
+	defer cancel()
+	if err := httpSrv.Shutdown(srvCtx); err != nil {
+		log.Logger.Error("shutdown monitor server", zap.Error(err))
+		httpSrv.Close()
+	}
+	if err := <-serveErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Logger.Error("HTTP server stopped", zap.Error(err))
 	}
 }

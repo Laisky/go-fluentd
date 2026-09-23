@@ -48,29 +48,11 @@ type PendingMsg struct {
 //	maybe set one concator for each identifier in the future for better performance
 func (cf *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCfg, outChan chan<- *library.FluentMsg, inChan <-chan *library.FluentMsg) {
 	defer log.Logger.Info("concator exit")
-	// Pending records belong to this worker, never the shared factory. Tags
-	// remain part of the key even when identifiers happen to be identical.
-	type key struct{ tag, identifier string }
-	slot := map[key]*PendingMsg{}
-	const timeout = 5 * time.Second
-	timer := time.NewTimer(timeout)
-	timer.Stop()
-	defer timer.Stop()
-	var tick <-chan time.Time
-	recycle := func(msg *library.FluentMsg) {
-		msg.ExtIds = nil
-		if cf.msgPool != nil {
-			cf.msgPool.Put(msg)
-		}
-	}
-	release := func(k key, p *PendingMsg) { delete(slot, k); p.msg = nil; cf.pMsgPool.Put(p) }
-	defer func() {
-		for k, p := range slot {
-			recycle(p.msg)
-			release(k, p)
-		}
-	}()
-	forward := func(msg *library.FluentMsg) bool {
+	// A factory is shared by tags and workers, but pending records must not be.
+	slot := make(map[string]*PendingMsg)
+	ticker := time.NewTicker(40 * time.Millisecond)
+	defer ticker.Stop()
+	emit := func(msg *library.FluentMsg) bool {
 		select {
 		case outChan <- msg:
 			return true
@@ -78,107 +60,99 @@ func (cf *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCf
 			return false
 		}
 	}
-	text := func(v interface{}) ([]byte, bool) {
-		switch v := v.(type) {
-		case string:
-			return []byte(v), true
-		case []byte:
-			return v, true
-		default:
-			return nil, false
-		}
+	release := func(key string, pending *PendingMsg) {
+		delete(slot, key)
+		pending.msg = nil
+		cf.pMsgPool.Put(pending)
 	}
+	defer func() {
+		for key, pending := range slot {
+			release(key, pending)
+		}
+	}()
 	for {
 		select {
 		case <-ctx.Done():
+			// Do not acknowledge unfinished records: their journal copies must replay.
 			return
-		case <-tick:
-			now := time.Now()
-			wait := timeout
-			for k, p := range slot {
-				remaining := timeout - now.Sub(p.lastT)
-				if remaining <= 0 {
-					if !forward(p.msg) {
+		case now := <-ticker.C:
+			for key, pending := range slot {
+				if now.Sub(pending.lastT) >= 5*time.Second {
+					if !emit(pending.msg) {
 						return
 					}
-					release(k, p)
-				} else if remaining < wait {
-					wait = remaining
+					release(key, pending)
 				}
-			}
-			if len(slot) == 0 {
-				tick = nil
-			} else {
-				timer.Reset(wait)
 			}
 		case msg, ok := <-inChan:
 			if !ok {
-				for k, p := range slot {
-					if !forward(p.msg) {
+				for key, pending := range slot {
+					if !emit(pending.msg) {
 						return
 					}
-					release(k, p)
+					release(key, pending)
 				}
 				return
 			}
-			if msg == nil {
-				continue
-			}
-			identifier, valid := text(msg.Message[cfg.Identifier])
-			data, validData := text(msg.Message[cfg.MsgKey])
-			if !valid || !validData {
-				if !forward(msg) {
-					recycle(msg)
+			var identifier string
+			switch value := msg.Message[cfg.Identifier].(type) {
+			case string:
+				identifier = value
+			case []byte:
+				identifier = string(value)
+			default:
+				if !emit(msg) {
 					return
 				}
 				continue
 			}
-			msg.Message[cfg.MsgKey] = data
-			k := key{msg.Tag, string(identifier)}
-			p, exists := slot[k]
+			var text []byte
+			switch value := msg.Message[cfg.MsgKey].(type) {
+			case string:
+				text = []byte(value)
+				msg.Message[cfg.MsgKey] = text
+			case []byte:
+				text = value
+			default:
+				if !emit(msg) {
+					return
+				}
+				continue
+			}
+			pending, exists := slot[identifier]
+			isHead := cfg.Regexp.Match(text)
 			if !exists {
-				if !cfg.Regexp.Match(data) {
-					if !forward(msg) {
-						recycle(msg)
+				if !isHead {
+					if !emit(msg) {
 						return
 					}
 					continue
 				}
-				if len(slot) == 0 {
-					timer.Reset(timeout)
-					tick = timer.C
-				}
-				p = cf.pMsgPool.Get().(*PendingMsg)
-				p.msg = msg
-				p.lastT = time.Now()
-				slot[k] = p
+				pending = cf.pMsgPool.Get().(*PendingMsg)
+				pending.msg, pending.lastT = msg, time.Now()
+				slot[identifier] = pending
 				continue
 			}
-			if cfg.Regexp.Match(data) {
-				if !forward(p.msg) {
-					recycle(msg)
+			if isHead {
+				if !emit(pending.msg) {
 					return
 				}
-				p.msg = msg
-				p.lastT = time.Now()
+				pending.msg, pending.lastT = msg, time.Now()
 				continue
 			}
-			p.msg.Message[cfg.MsgKey] = append(p.msg.Message[cfg.MsgKey].([]byte), data...)
-			// The head owns every constituent ID until downstream success. Returning
-			// the tail to the object pool is not an acknowledgement of its contents.
-			p.msg.ExtIds = append(p.msg.ExtIds, msg.ID)
-			p.msg.ExtIds = append(p.msg.ExtIds, msg.ExtIds...)
-			p.lastT = time.Now()
-			recycle(msg)
-			if len(p.msg.Message[cfg.MsgKey].([]byte)) >= cf.MaxLen {
-				if !forward(p.msg) {
+			pending.msg.Message[cfg.MsgKey] = append(pending.msg.Message[cfg.MsgKey].([]byte), text...)
+			pending.msg.ExtIds = append(pending.msg.ExtIds, msg.ID)
+			pending.msg.ExtIds = append(pending.msg.ExtIds, msg.ExtIds...)
+			pending.lastT = time.Now()
+			// Transfer acknowledgement ownership to the head. Recycling a wrapper is
+			// not a successful delivery and must never publish an ACK for the tail.
+			msg.ExtIds = nil
+			cf.msgPool.Put(msg)
+			if len(pending.msg.Message[cfg.MsgKey].([]byte)) >= cf.MaxLen {
+				if !emit(pending.msg) {
 					return
 				}
-				release(k, p)
-				if len(slot) == 0 {
-					timer.Stop()
-					tick = nil
-				}
+				release(identifier, pending)
 			}
 		}
 	}

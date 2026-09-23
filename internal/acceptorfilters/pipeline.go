@@ -38,8 +38,8 @@ func NewAcceptorPipeline(ctx context.Context, cfg *AcceptorPipelineCfg, filters 
 	if err := a.valid(); err != nil {
 		log.Logger.Panic("invalid cfg for acceptor pipeline")
 	}
-
 	a.reEnterChan = make(chan *library.FluentMsg, cfg.ReEnterChanSize)
+
 	a.registerMonitor()
 	for _, filter := range a.filters {
 		filter.SetUpstream(a.reEnterChan)
@@ -118,6 +118,7 @@ func (f *AcceptorPipeline) registerMonitor() {
 }
 
 func (f *AcceptorPipeline) DiscardMsg(msg *library.FluentMsg) {
+	msg.CompleteAcceptance(errors.New("message rejected before persistence"))
 	msg.ExtIds = nil
 	f.MsgPool.Put(msg)
 }
@@ -167,6 +168,16 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 					}
 				}
 
+				if msg.DurableAck != nil {
+					select {
+					case outChan <- msg:
+					case <-ctx.Done():
+						msg.CompleteAcceptance(ctx.Err())
+						f.MsgPool.Put(msg)
+						return
+					}
+					continue
+				}
 				select {
 				case outChan <- msg:
 				default:
@@ -218,7 +229,13 @@ func (f *AcceptorPipeline) Wrap(ctx context.Context, asyncInChan, syncInChan cha
 					}
 				}
 
-				outChan <- msg
+				select {
+				case outChan <- msg:
+				case <-ctx.Done():
+					msg.CompleteAcceptance(ctx.Err())
+					f.MsgPool.Put(msg)
+					return
+				}
 			}
 
 		}()

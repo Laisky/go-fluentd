@@ -209,7 +209,7 @@ func (r *KafkaRecv) Run(ctx context.Context) {
 
 // parse2Msg parse kafkamsg to fluentdmsg
 func (r *KafkaRecv) parse2Msg(kmsg *kafka.KafkaMsg) (msg *library.FluentMsg, err error) {
-	msg = r.getMsg()
+	msg = r.newMsg()
 	msg.ID = r.counter.Count()
 	msg.Tag = r.Tag
 
@@ -240,7 +240,7 @@ func (r *KafkaRecv) parse2Msg(kmsg *kafka.KafkaMsg) (msg *library.FluentMsg, err
 			}
 		}
 	} else {
-		msg.Message[r.MsgKey] = append([]byte(nil), kmsg.Message...)
+		msg.Message[r.MsgKey] = kmsg.Message
 	}
 
 	if r.TagKey != "" {

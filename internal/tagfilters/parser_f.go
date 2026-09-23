@@ -82,26 +82,22 @@ func (cf *ParserFact) StartNewParser(ctx context.Context, outChan chan<- *librar
 			}
 		}
 
-		// Decode into a temporary object: malformed JSON and JSON null must
-		// not partially overwrite or erase an already valid record.
+		// Decode into a temporary map. Invalid or null JSON must not erase
+		// or partially overwrite fields in the original record.
 		if cf.ParseJSONKey != "" {
-			var encoded []byte
+			var payload []byte
 			switch value := msg.Message[cf.ParseJSONKey].(type) {
 			case string:
-				encoded = []byte(value)
+				payload = []byte(value)
 			case []byte:
-				encoded = value
+				payload = value
 			}
-			if encoded != nil {
-				var parsed map[string]interface{}
-				if err = json.Unmarshal(encoded, &parsed); err == nil && parsed != nil {
-					delete(msg.Message, cf.ParseJSONKey)
-					for key, value := range parsed {
-						msg.Message[key] = value
-					}
-				} else {
-					log.Logger.Warn("keep original record after invalid JSON object", zap.String("tag", msg.Tag), zap.Error(err))
+			var parsed map[string]interface{}
+			if len(payload) > 0 && json.Unmarshal(payload, &parsed) == nil && parsed != nil {
+				for key, value := range parsed {
+					msg.Message[key] = value
 				}
+				delete(msg.Message, cf.ParseJSONKey)
 			}
 		}
 		// flatten messages

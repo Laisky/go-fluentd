@@ -77,6 +77,7 @@ func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 
 	j.commitChan = make(chan *library.FluentMsg, cfg.CommitIDChanLen)
 	j.outChan = make(chan *library.FluentMsg, cfg.JournalOutChanLen)
+
 	j.initLegacyJJ(ctx)
 	j.registerMonitor()
 	j.startCommitRunner(ctx)
@@ -177,7 +178,9 @@ func (j *Journal) initLegacyJJ(ctx context.Context) {
 
 	for _, dir := range files {
 		if dir.IsDir() {
-			j.createJournalRunner(ctx, dir.Name())
+			if err := j.createJournalRunner(ctx, dir.Name()); err != nil {
+				log.Logger.Panic("open retained journal", zap.Error(err))
+			}
 		}
 	}
 }
@@ -282,7 +285,7 @@ func (j *Journal) processLegacyMsg(ctx context.Context, out chan *library.Fluent
 					innerMax = data.ID
 				}
 				msg := j.MsgPool.Get().(*library.FluentMsg)
-				*msg = library.FluentMsg{ID: data.ID, Tag: storedTag, Message: message}
+				*msg = library.FluentMsg{ID: data.ID, Tag: storedTag, JournalTag: tag, Message: message}
 				select {
 				case out <- msg:
 				case <-ctx.Done():
@@ -300,13 +303,13 @@ func (j *Journal) processLegacyMsg(ctx context.Context, out chan *library.Fluent
 
 // createJournalRunner create journal for a tag,
 // and return commit channel and dump channel
-func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
+func (j *Journal) createJournalRunner(ctx context.Context, tag string) error {
 	j.jjLock.Lock()
 	defer j.jjLock.Unlock()
 
 	var ok bool
 	if _, ok = j.tag2JMap.Load(tag); ok {
-		return // double check to prevent duplicate create jj runner
+		return nil // double check to prevent duplicate create jj runner
 	}
 
 	log.Logger.Info("create new journal.Journal", zap.String("tag", tag))
@@ -319,10 +322,11 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 		journal.WithIsAggresiveGC(false),
 	)
 	if err != nil {
-		log.Logger.Panic("new journal", zap.Error(err))
+		return errors.Wrap(err, "new journal")
 	}
 	if err = jj.Start(ctx); err != nil {
-		log.Logger.Panic("run journal", zap.Error(err))
+		jj.Close()
+		return errors.Wrap(err, "run journal")
 	}
 
 	if _, ok = j.tag2JMap.LoadOrStore(tag, jj); ok {
@@ -429,6 +433,9 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 				}
 			}
 
+			// Routing filters may change Tag after persistence. Keep the journal
+			// owner separately so all acknowledgements return to this writer.
+			msg.JournalTag = tag
 			data.ID = msg.ID
 			data.Data["message"] = msg.Message
 			data.Data["tag"] = msg.Tag
@@ -442,12 +449,16 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 				break
 			}
 
-			if err != nil && nRetry == maxRetry {
-				log.Logger.Error("try to write msg to journal got error",
-					zap.Error(err),
-					zap.String("tag", msg.Tag),
-				)
+			if err == nil && msg.DurableAck != nil {
+				err = jj.Sync()
 			}
+			if err != nil {
+				log.Logger.Error("persist message", zap.Error(err), zap.String("tag", msg.Tag))
+				msg.CompleteAcceptance(err)
+				j.MsgPool.Put(msg)
+				continue
+			}
+			msg.CompleteAcceptance(nil)
 
 			select {
 			case j.outChan <- msg:
@@ -458,6 +469,7 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 			}
 		}
 	}()
+	return nil
 }
 
 func (j *Journal) GetOutChan() chan *library.FluentMsg {
@@ -471,15 +483,58 @@ func (j *Journal) ConvertMsg2Buf(msg *library.FluentMsg, data *map[string]interf
 }
 
 func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan, skipDumpChan chan *library.FluentMsg) chan *library.FluentMsg {
-	// Each helper owns its blocking work, so cancellation can be tested without
-	// relying on global goroutine counts or a production filesystem.
-	go j.runJournalMaintenance(ctx, intervalToStartingLegacy, func() {
-		if _, err := j.processLegacyMsg(ctx, j.outChan); err != nil {
-			log.Logger.Error("process legacy", zap.Error(err))
+	// deal with legacy
+	go func() {
+		defer log.Logger.Info("legacy processor exit")
+		var err error
+		for { // try to starting legacy loading
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				if _, err = j.processLegacyMsg(ctx, j.outChan); err != nil {
+					log.Logger.Error("process legacy got error", zap.Error(err))
+				}
+				time.Sleep(intervalToStartingLegacy)
+			}
 		}
-	})
-	go j.runJournalMaintenance(ctx, j.GCIntervalSec, utils.ForceGCBlocking)
-	go j.runSkipDump(ctx, skipDumpChan)
+	}()
+
+	// start periodic gc
+	go func() {
+		defer log.Logger.Info("gc runner exit")
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				utils.ForceGCBlocking()
+				time.Sleep(j.GCIntervalSec)
+			}
+		}
+	}()
+
+	// deal with msgs that skip dump
+	go func() {
+		var (
+			msg *library.FluentMsg
+			ok  bool
+		)
+		defer log.Logger.Info("skipDumpChan goroutine exit", zap.String("msg", fmt.Sprint(msg)))
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg, ok = <-skipDumpChan:
+				if !ok {
+					log.Logger.Info("skipDumpChan closed")
+					return
+				}
+
+				j.outChan <- msg
+			}
+		}
+	}()
 
 	// deal with msgs that need dump
 	go func() {
@@ -502,8 +557,23 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 
 			log.Logger.Debug("try to dump msg", zap.String("tag", msg.Tag))
 			if jji, ok = j.tag2JJInchanMap.Load(msg.Tag); !ok {
-				j.createJournalRunner(ctx, msg.Tag)
+				if err := j.createJournalRunner(ctx, msg.Tag); err != nil {
+					log.Logger.Error("create message journal", zap.Error(err))
+					msg.CompleteAcceptance(err)
+					j.MsgPool.Put(msg)
+					continue
+				}
 				jji, _ = j.tag2JJInchanMap.Load(msg.Tag)
+			}
+			if msg.DurableAck != nil {
+				select {
+				case jji.(chan *library.FluentMsg) <- msg:
+				case <-ctx.Done():
+					msg.CompleteAcceptance(ctx.Err())
+					j.MsgPool.Put(msg)
+					return
+				}
+				continue
 			}
 
 			select {
@@ -556,9 +626,18 @@ func (j *Journal) startCommitRunner(ctx context.Context) {
 			log.Logger.Debug("try to commit msg",
 				zap.String("tag", msg.Tag),
 				zap.Int64("id", msg.ID))
-			if chani, ok = j.tag2JJCommitChanMap.Load(msg.Tag); !ok {
-				j.createJournalRunner(ctx, msg.Tag)
-				chani, _ = j.tag2JJCommitChanMap.Load(msg.Tag)
+			commitTag := msg.JournalTag
+			if commitTag == "" {
+				// Explicit skip-dump paths have no persisted journal owner.
+				commitTag = msg.Tag
+			}
+			if chani, ok = j.tag2JJCommitChanMap.Load(commitTag); !ok {
+				if err := j.createJournalRunner(ctx, commitTag); err != nil {
+					log.Logger.Error("create acknowledgement journal", zap.Error(err))
+					j.MsgPool.Put(msg)
+					continue
+				}
+				chani, _ = j.tag2JJCommitChanMap.Load(commitTag)
 			}
 
 			select {
@@ -632,40 +711,4 @@ func writeCommittedID(write func(int64) error, id int64) (err error) {
 		}
 	}
 	return err
-}
-
-func (j *Journal) runJournalMaintenance(ctx context.Context, interval time.Duration, action func()) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-		}
-		action()
-		timer := time.NewTimer(interval)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return
-		case <-timer.C:
-		}
-	}
-}
-
-func (j *Journal) runSkipDump(ctx context.Context, input <-chan *library.FluentMsg) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case msg, ok := <-input:
-			if !ok {
-				return
-			}
-			select {
-			case j.outChan <- msg:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}
 }

@@ -221,6 +221,10 @@ historical fixes; use the current `go.mod` for the exact dependency revision.
 
 ## Architecture
 
+![Go-Fluentd architecture](docs/architecture.jpg)
+
+[Editable diagram source](docs/architecture.xml).
+
 ```text
 Receivers → admission filters → journal → dispatcher → per-tag filters
                                                      → post-filters → producer → senders

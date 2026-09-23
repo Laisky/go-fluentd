@@ -12,10 +12,25 @@ concurrency:
   cancel-in-progress: true
 jobs:
   paired:
+    name: Group commit (${{ matrix.name }})
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: service, mode: service, profiles: '', controls: ''}
+          - {name: plain-1, mode: pipeline, profiles: 'gzip=false/clients=1', controls: '--single-client-controls'}
+          - {name: plain-16, mode: pipeline, profiles: 'gzip=false/clients=16', controls: ''}
+          - {name: plain-64, mode: pipeline, profiles: 'gzip=false/clients=64', controls: ''}
+          - {name: gzip-1, mode: pipeline, profiles: 'gzip=true/clients=1', controls: '--single-client-controls'}
+          - {name: gzip-16, mode: pipeline, profiles: 'gzip=true/clients=16', controls: ''}
+          - {name: gzip-64, mode: pipeline, profiles: 'gzip=true/clients=64', controls: ''}
     env:
       GOMAXPROCS: '2'
+      MEASUREMENT_MODE: ${{ matrix.mode }}
+      MEASUREMENT_PROFILES: ${{ matrix.profiles }}
+      MEASUREMENT_CONTROLS: ${{ matrix.controls }}
       PYTHONDONTWRITEBYTECODE: '1'
       BASELINE: 76717b288a170acc0e1e12daf19def9fa7da1bb1
       SERVICE_BASELINE: cf9833b451298c800789f4be06035c44baa7d703
@@ -53,21 +68,26 @@ jobs:
           } > "$RUNNER_TEMP/group-results/environment.txt"
       - name: Six counterbalanced journal and full-process delivery pairs
         run: |
+          args=(--mode "$MEASUREMENT_MODE")
+          if [ -n "$MEASUREMENT_PROFILES" ]; then args+=(--profiles "$MEASUREMENT_PROFILES"); fi
+          if [ -n "$MEASUREMENT_CONTROLS" ]; then args+=("$MEASUREMENT_CONTROLS"); fi
           python3 tests/performance/group_compare.py \
             --before "$RUNNER_TEMP/group-before-app" --after "$RUNNER_TEMP/group-after-app" \
             --before-service "$RUNNER_TEMP/group-before-service" --after-service "$RUNNER_TEMP/group-after-service" \
-            --output "$RUNNER_TEMP/group-results/measurements" --repeats 6 --count 2048 --pipeline-count 8192 --single-client-controls \
+            --output "$RUNNER_TEMP/group-results/measurements" --repeats 6 --count 2048 --pipeline-count 8192 "${args[@]}" \
             > "$RUNNER_TEMP/group-results/run.log" 2>&1
           git diff --exit-code -- go.mod go.sum
       - name: Independently verify barrier ordering, errors and rotation under race detection
+        if: matrix.mode == 'service'
         run: go test -mod=readonly -race -count=20 -shuffle=on -timeout=180s -run '^TestJournal' ./internal/controller
       - name: Verify that tests reject missing, early and falsely successful barriers
+        if: matrix.mode == 'service'
         run: python3 .scripts/verify_group_commit_contracts.py --evidence "$RUNNER_TEMP/group-results/barrier-controls"
       - name: Retain every timing sample and both independent sink ledgers
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: durable-group-commit-${{ github.sha }}
+          name: durable-group-commit-${{ matrix.name }}-${{ github.sha }}
           path: |
             ${{ runner.temp }}/group-results/
             !${{ runner.temp }}/group-results/**/wal/**

@@ -57,9 +57,22 @@ def stats(values):
     return dict(median=statistics.median(values), min=min(values), max=max(values), samples=values)
 
 
-def summarize(rows, kind, repeats):
+def selected_profiles(requested=None):
+    if requested is None:
+        return set(PROFILES)
+    profiles = set(requested)
+    if not profiles or not profiles <= PROFILES or len(profiles) != len(requested):
+        raise ValueError('empty, unknown or duplicate workload shard')
+    return profiles
+
+
+def summarize(rows, kind, repeats, profiles=None):
     names = sorted({r['profile'] for r in rows})
-    expected_names = PROFILES
+    expected_names = selected_profiles(profiles)
+    if kind not in ('service', 'pipeline') or repeats < 1:
+        raise ValueError('invalid measurement kind/repetitions')
+    if any(r['variant'] not in ('before', 'after') for r in rows):
+        raise ValueError('unknown measurement variant')
     if set(names) != expected_names:
         raise ValueError(f'incomplete {kind} profiles')
     answer = {}
@@ -91,12 +104,18 @@ def main():
     p.add_argument('--pipeline-count',type=int,default=8192)
     p.add_argument('--single-client-controls',action='store_true')
     p.add_argument('--mode',choices=('all','service','pipeline'),default='all')
+    p.add_argument('--profiles', nargs='+', choices=sorted(PROFILES), help='Exact workload shard; default requires every profile')
     args = p.parse_args()
     if any(n<64 or n%64 or n>262144 for n in (args.count,args.pipeline_count)) or args.repeats<3:
         p.error('count must be a bounded multiple of 64; at least 3 pairs required')
+    try:
+        profiles = selected_profiles(args.profiles)
+    except ValueError as exc:
+        p.error(str(exc))
     args.output.mkdir(parents=True,exist_ok=False)
     files = {v:getattr(args,v.replace('-','_')).resolve(strict=True) for v in ('before','after','before-service','after-service')}
     metadata = {'binaries':{v:{'path':str(f),'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for v,f in files.items()},'count':args.count,'pipeline_count':args.pipeline_count,'repeats':args.repeats,'GOMAXPROCS':os.environ.get('GOMAXPROCS'),'policy':'before per-record; after default bounded ready-only grouping; same success-after-Sync contract; no batching timer'}
+    metadata.update(profiles=sorted(profiles), mode=args.mode, single_client_controls=args.single_client_controls)
     (args.output/'manifest.json').write_text(json.dumps(metadata,indent=2))
     service_rows, pipeline_rows = [],[]
     for n in range(args.repeats):
@@ -112,12 +131,16 @@ def main():
                 if variant=='before' and any(v['syncs/msg']!=1 for v in values.values()):
                     raise ValueError('baseline must use one Sync per record')
                 for profile,metrics in values.items():
+                    if profile not in profiles:
+                        continue
                     service_rows.append(dict(repeat=n,variant=variant,profile=profile,metrics=metrics))
                 (args.output/'service-samples.json').write_text(json.dumps(service_rows,indent=2))
         if args.mode in ('all','pipeline'):
             for gz in (False,True):
                 for clients in (1,16,64):
                     profile=f'gzip={str(gz).lower()}/clients={clients}'
+                    if profile not in profiles:
+                        continue
                     for variant in order:
                         folder=args.output/f'pipeline-{n}-{gz}-{clients}-{variant}'
                         r=sample(files[variant],folder,args.pipeline_count,clients,gz)
@@ -132,12 +155,14 @@ def main():
                         # WAL files are excluded from artifacts and never reused.
                         shutil.rmtree(folder/'wal')
     summary={'manifest':metadata,'method':'same-host counterbalanced pairs; medians, full ranges and paired ratios; no statistical significance claim'}
-    if service_rows:summary['service']=summarize(service_rows,'service',args.repeats)
-    if pipeline_rows:summary['pipeline']=summarize(pipeline_rows,'pipeline',args.repeats)
+    if service_rows:summary['service']=summarize(service_rows,'service',args.repeats, profiles)
+    if pipeline_rows:summary['pipeline']=summarize(pipeline_rows,'pipeline',args.repeats, profiles)
     if args.single_client_controls:
         controls=[]
         for n in range(args.repeats):
             for gz in (False,True):
+                if f'gzip={str(gz).lower()}/clients=1' not in profiles:
+                    continue
                 for maximum in ((1,64) if n%2==0 else (64,1)):
                     folder=args.output/f'single-control-{n}-{gz}-{maximum}'
                     result=sample(files['after'],folder,args.pipeline_count,1,gz,group_max_messages=maximum)

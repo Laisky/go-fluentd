@@ -1,0 +1,31 @@
+File: bench-before.test
+Build ID: 71ae73a6f6c0386eccae7617ca1f16ccbc66073d
+Type: alloc_space
+Time: 2026-09-23 12:19:31 UTC
+Showing nodes accounting for 1669.60MB, 99.67% of 1675.12MB total
+Dropped 29 nodes (cum <= 8.38MB)
+      flat  flat%   sum%        cum   cum%
+  804.27MB 48.01% 48.01%   804.27MB 48.01%  bufio.NewReaderSize (inline)
+  804.27MB 48.01% 96.03%   804.27MB 48.01%  github.com/philhofer/fwd.NewReaderSize (inline)
+   24.55MB  1.47% 97.49%    24.55MB  1.47%  github.com/tinylib/msgp/msgp.(*Reader).ReadString
+   16.01MB  0.96% 98.45%    16.01MB  0.96%  bufio.NewWriterSize (inline)
+   16.01MB  0.96% 99.40%    16.01MB  0.96%  github.com/tinylib/msgp/msgp.NewWriterSize (inline)
+    2.50MB  0.15% 99.55%    29.05MB  1.73%  github.com/Laisky/go-journal.(*Data).DecodeMsg
+       2MB  0.12% 99.67%    26.05MB  1.55%  github.com/tinylib/msgp/msgp.(*Reader).ReadIntf
+         0     0% 99.67%    31.55MB  1.88%  github.com/Laisky/go-journal.(*DataDecoder).Read
+         0     0% 99.67%  1640.60MB 97.94%  github.com/Laisky/go-journal.(*Journal).LoadMaxId
+         0     0% 99.67%    32.01MB  1.91%  github.com/Laisky/go-journal.(*Journal).Rotate
+         0     0% 99.67%    32.01MB  1.91%  github.com/Laisky/go-journal.(*Journal).Start
+         0     0% 99.67%    32.01MB  1.91%  github.com/Laisky/go-journal.(*Journal).initBufDir
+         0     0% 99.67%  1640.60MB 97.94%  github.com/Laisky/go-journal.(*LegacyLoader).LoadMaxId
+         0     0% 99.67%   804.27MB 48.01%  github.com/Laisky/go-journal.NewDataDecoder
+         0     0% 99.67%    16.01MB  0.96%  github.com/Laisky/go-journal.NewDataEncoder
+         0     0% 99.67%   804.27MB 48.01%  github.com/Laisky/go-journal.NewIdsDecoder
+         0     0% 99.67%    16.01MB  0.96%  github.com/Laisky/go-journal.NewIdsEncoder
+         0     0% 99.67%   835.82MB 49.90%  github.com/Laisky/go-journal.maxDataID
+         0     0% 99.67%   804.27MB 48.01%  github.com/tinylib/msgp/msgp.NewReaderSize (inline)
+         0     0% 99.67%  1672.61MB 99.85%  gofluentd/tests/performance.BenchmarkPerfJournalRecovery.func1
+         0     0% 99.67%    32.01MB  1.91%  gofluentd/tests/performance.openJournal
+         0     0% 99.67%  1647.60MB 98.36%  testing.(*B).launch
+         0     0% 99.67%    25.01MB  1.49%  testing.(*B).run1.func1
+         0     0% 99.67%  1672.61MB 99.85%  testing.(*B).runN

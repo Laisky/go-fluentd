@@ -24,8 +24,7 @@ jobs:
           go version | tee /tmp/pr7-offline/version.txt
           go mod download
           go mod verify | tee /tmp/pr7-offline/modules.txt
-          go mod vendor -o /tmp/pr7-vendor
-          tar -czf /tmp/pr7-offline/vendor.tar.gz -C /tmp/pr7-vendor .
+          tar -czf /tmp/pr7-offline/modules.tar.gz -C "$(go env GOMODCACHE)" .
           tar -czf /tmp/pr7-offline/toolchain.tar.gz -C "$(go env GOROOT)" .
           git diff --exit-code -- go.mod go.sum
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

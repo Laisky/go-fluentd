@@ -36,7 +36,7 @@ def process_stats(pid):
     return cpu, peak
 
 
-def sample(binary, root, count, concurrency, compressed):
+def sample(binary, root, count, concurrency, compressed, group_max_messages=None):
     root.mkdir(parents=True, exist_ok=False)
     sinks = [Ledger(root, f'sink-{i}') for i in range(2)]
     # Avoid measuring the Python peer's Nagle/delayed-ACK interaction as Go cost.
@@ -51,6 +51,8 @@ def sample(binary, root, count, concurrency, compressed):
     def overrides(cfg):
         cfg['journal']['buf_file_bytes'] = 64 << 20
         cfg['journal']['committed_id_sec'] = 3600
+        if group_max_messages is not None:
+            cfg['journal']['group_commit_max_messages'] = group_max_messages
         for sender in cfg['producer']['plugins'].values():
             sender['msg_batch_size'] = 64
     app.overrides = overrides
@@ -120,7 +122,7 @@ def sample(binary, root, count, concurrency, compressed):
                 raise AssertionError('duplicate delivery in failure-free performance run')
         latencies = [r['latency_ms'] for r in responses]
         result = {'count': count, 'concurrency': concurrency, 'gzip': compressed,
-                  'durable_ack': True, 'payload_characters': 2048, 'sink_batch': 64,
+                  'durable_ack': True, 'group_commit_max_messages': group_max_messages, 'payload_characters': 2048, 'sink_batch': 64,
                   'mean_wire_bytes': sum(map(len, bodies)) / count,
                   'accepted': len(responses), 'delivered_per_sink': [len(s.keys()) - 1 for s in sinks],
                   'accepted_seconds': accepted_seconds, 'delivered_seconds': delivered_seconds,

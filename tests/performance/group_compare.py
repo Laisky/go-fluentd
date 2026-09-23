@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 import statistics
 import subprocess
+import shutil
 
 from pipeline import sample
 
@@ -87,13 +88,15 @@ def main():
         p.add_argument('--'+flag,type=Path,required=True)
     p.add_argument('--repeats',type=int,default=6)
     p.add_argument('--count',type=int,default=2048)
+    p.add_argument('--pipeline-count',type=int,default=8192)
+    p.add_argument('--single-client-controls',action='store_true')
     p.add_argument('--mode',choices=('all','service','pipeline'),default='all')
     args = p.parse_args()
-    if args.count<64 or args.count%64 or args.count>262144 or args.repeats<3:
+    if any(n<64 or n%64 or n>262144 for n in (args.count,args.pipeline_count)) or args.repeats<3:
         p.error('count must be a bounded multiple of 64; at least 3 pairs required')
     args.output.mkdir(parents=True,exist_ok=False)
     files = {v:getattr(args,v.replace('-','_')).resolve(strict=True) for v in ('before','after','before-service','after-service')}
-    metadata = {'binaries':{v:{'path':str(f),'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for v,f in files.items()},'count':args.count,'repeats':args.repeats,'GOMAXPROCS':os.environ.get('GOMAXPROCS'),'policy':'before per-record; after default bounded ready-only grouping; same success-after-Sync contract; no batching timer'}
+    metadata = {'binaries':{v:{'path':str(f),'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for v,f in files.items()},'count':args.count,'pipeline_count':args.pipeline_count,'repeats':args.repeats,'GOMAXPROCS':os.environ.get('GOMAXPROCS'),'policy':'before per-record; after default bounded ready-only grouping; same success-after-Sync contract; no batching timer'}
     (args.output/'manifest.json').write_text(json.dumps(metadata,indent=2))
     service_rows, pipeline_rows = [],[]
     for n in range(args.repeats):
@@ -116,17 +119,33 @@ def main():
                 for clients in (1,16,64):
                     profile=f'gzip={str(gz).lower()}/clients={clients}'
                     for variant in order:
-                        r=sample(files[variant],args.output/f'pipeline-{n}-{gz}-{clients}-{variant}',args.count,clients,gz)
-                        if r['accepted']!=args.count or r['delivered_per_sink']!=[args.count,args.count] or not r['durable_ack']:
+                        folder=args.output/f'pipeline-{n}-{gz}-{clients}-{variant}'
+                        r=sample(files[variant],folder,args.pipeline_count,clients,gz)
+                        if r['accepted']!=args.pipeline_count or r['delivered_per_sink']!=[args.pipeline_count,args.pipeline_count] or not r['durable_ack']:
                             raise ValueError('pipeline delivery contract failed')
                         m={k:r[k] for k in ('delivered_per_second','accepted_per_second','app_cpu_seconds','app_peak_rss_kib')}
                         m['p99_ms']=r['latency_ms']['p99']
                         pipeline_rows.append(dict(repeat=n,variant=variant,profile=profile,metrics=m,details=r))
                         (args.output/'pipeline-samples.json').write_text(json.dumps(pipeline_rows,indent=2))
                         print(n,variant,profile,json.dumps(m),flush=True)
+                        # Each sample is complete and reconciled; these test-owned
+                        # WAL files are excluded from artifacts and never reused.
+                        shutil.rmtree(folder/'wal')
     summary={'manifest':metadata,'method':'same-host counterbalanced pairs; medians, full ranges and paired ratios; no statistical significance claim'}
     if service_rows:summary['service']=summarize(service_rows,'service',args.repeats)
     if pipeline_rows:summary['pipeline']=summarize(pipeline_rows,'pipeline',args.repeats)
+    if args.single_client_controls:
+        controls=[]
+        for n in range(args.repeats):
+            for gz in (False,True):
+                for maximum in ((1,64) if n%2==0 else (64,1)):
+                    folder=args.output/f'single-control-{n}-{gz}-{maximum}'
+                    result=sample(files['after'],folder,args.pipeline_count,1,gz,group_max_messages=maximum)
+                    controls.append(dict(repeat=n,maximum=maximum,gzip=gz,result=result))
+                    (args.output/'single-client-controls.json').write_text(json.dumps(controls,indent=2))
+                    print('same-binary-control',n,gz,maximum,result['delivered_per_second'],result['latency_ms'],flush=True)
+                    shutil.rmtree(folder/'wal')
+        summary['single_client_controls']=controls
     (args.output/'summary.json').write_text(json.dumps(summary,indent=2))
     print(json.dumps(summary,indent=2),flush=True)
 

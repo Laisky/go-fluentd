@@ -1,0 +1,93 @@
+name: Performance measurements
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: Baseline ref to compare using exactly the current benchmark harness
+        required: false
+        default: d5b3e67fcf22daad1e6c667b66277bc8bbb29b7c
+permissions:
+  contents: read
+concurrency:
+  group: performance-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  paired:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GOMAXPROCS: '2'
+      BASE_REF: ${{ inputs.baseline || 'd5b3e67fcf22daad1e6c667b66277bc8bbb29b7c' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.x'
+      - name: Build both versions with the identical performance harness
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/perf-results" "$RUNNER_TEMP/perf-tmp"
+          echo "TMPDIR=$RUNNER_TEMP/perf-tmp" >> "$GITHUB_ENV"
+          base=$(git rev-parse --verify --end-of-options "${BASE_REF}^{commit}")
+          git worktree add --detach "$RUNNER_TEMP/perf-before" "$base"
+          mkdir -p "$RUNNER_TEMP/perf-before/tests/performance"
+          cp tests/performance/*_test.go "$RUNNER_TEMP/perf-before/tests/performance/"
+          python3 -m unittest discover -s tests/performance -p 'test_*.py'
+          (cd "$RUNNER_TEMP/perf-before" && go mod verify && go test -mod=readonly -c -o "$RUNNER_TEMP/bench-before.test" ./tests/performance && go build -mod=readonly -o "$RUNNER_TEMP/app-before" .)
+          go mod verify
+          go test -mod=readonly -c -o "$RUNNER_TEMP/bench-after.test" ./tests/performance
+          go build -mod=readonly -o "$RUNNER_TEMP/app-after" .
+          {
+            go version
+            printf 'baseline=%s\ncandidate=%s\nGOMAXPROCS=%s\n' "$base" "$(git rev-parse HEAD)" "$GOMAXPROCS"
+            go env GOOS GOARCH GOTOOLCHAIN
+            uname -a
+            lscpu
+            findmnt -T "$RUNNER_TEMP/perf-tmp"
+            stat -f -c 'filesystem=%T blocksize=%S' "$RUNNER_TEMP/perf-tmp"
+            cat /sys/fs/cgroup/cpu.max /sys/fs/cgroup/memory.max 2>/dev/null || true
+            sha256sum "$RUNNER_TEMP/bench-before.test" "$RUNNER_TEMP/bench-after.test" "$RUNNER_TEMP/app-before" "$RUNNER_TEMP/app-after"
+            printf '\nBaseline journal\n'
+            (cd "$RUNNER_TEMP/perf-before" && go list -m github.com/Laisky/go-journal)
+            printf '\nCandidate journal\n'
+            go list -m github.com/Laisky/go-journal
+          } > "$RUNNER_TEMP/perf-results/environment.txt"
+      - name: Five counterbalanced samples of every component workload
+        run: |
+          python3 tests/performance/compare.py --before "$RUNNER_TEMP/bench-before.test" --after "$RUNNER_TEMP/bench-after.test" --output "$RUNNER_TEMP/perf-results/components" --repeats 5
+      - name: Three paired full-process samples, per-record durable acceptance and two sinks
+        run: |
+          set -euo pipefail
+          for repeat in 0 1 2; do
+            order='before after'
+            if [ "$repeat" = 1 ]; then order='after before'; fi
+            for version in $order; do
+              python3 tests/performance/pipeline.py --binary "$RUNNER_TEMP/app-$version" --output "$RUNNER_TEMP/perf-results/pipeline-$repeat-$version" --count 1024 --repeats 1 --concurrency 1 16
+            done
+          done
+      - name: Separate diagnostic allocation and CPU profiles
+        run: |
+          set -euo pipefail
+          for version in before after; do
+            "$RUNNER_TEMP/bench-$version.test" -test.run='^$' -test.bench='^BenchmarkPerfJournalRecovery/gzip=false/records=64$' -test.benchtime=200x -test.memprofile="$RUNNER_TEMP/perf-results/recovery-$version.mem" > "$RUNNER_TEMP/perf-results/recovery-$version-profile.txt"
+            go tool pprof -top -alloc_space "$RUNNER_TEMP/bench-$version.test" "$RUNNER_TEMP/perf-results/recovery-$version.mem" > "$RUNNER_TEMP/perf-results/recovery-$version-alloc-top.txt"
+            "$RUNNER_TEMP/bench-$version.test" -test.run='^$' -test.bench='^BenchmarkPerfFluentEncoder/batch=64$' -test.benchtime=1s -test.cpuprofile="$RUNNER_TEMP/perf-results/encoder-$version.cpu" > "$RUNNER_TEMP/perf-results/encoder-$version-profile.txt"
+            go tool pprof -top "$RUNNER_TEMP/bench-$version.test" "$RUNNER_TEMP/perf-results/encoder-$version.cpu" > "$RUNNER_TEMP/perf-results/encoder-$version-cpu-top.txt"
+          done
+          git diff --exit-code -- go.mod go.sum
+      - name: Retain all samples, units, payload ledgers and diagnostic profiles
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: paired-performance-${{ github.sha }}
+          retention-days: 14
+          path: |
+            ${{ runner.temp }}/perf-results/
+            !${{ runner.temp }}/perf-results/**/wal/**

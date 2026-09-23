@@ -1,0 +1,55 @@
+File: bench-after.test
+Build ID: 268c58deeadeaff245b144c0f5b1994f9bd46e2b
+Type: cpu
+Time: 2026-09-23 12:19:37 UTC
+Duration: 1.39s, Total samples = 1.40s (100.79%)
+Showing nodes accounting for 1.40s, 100% of 1.40s total
+      flat  flat%   sum%        cum   cum%
+     0.22s 15.71% 15.71%      0.43s 30.71%  github.com/tinylib/msgp/msgp.(*Writer).writeString
+     0.19s 13.57% 29.29%      0.19s 13.57%  runtime.memmove
+     0.16s 11.43% 40.71%      0.22s 15.71%  internal/runtime/maps.(*Iter).Next
+     0.15s 10.71% 51.43%      0.15s 10.71%  github.com/tinylib/msgp/msgp.(*Writer).push
+     0.12s  8.57% 60.00%      0.52s 37.14%  github.com/tinylib/msgp/msgp.(*Writer).WriteIntf
+     0.11s  7.86% 67.86%      1.27s 90.71%  github.com/tinylib/msgp/msgp.(*Writer).WriteMapStrIntf
+     0.10s  7.14% 75.00%      0.62s 44.29%  github.com/tinylib/msgp/msgp.(*Writer).WriteString
+     0.03s  2.14% 77.14%      0.03s  2.14%  internal/chacha8rand.block
+     0.03s  2.14% 79.29%      0.24s 17.14%  runtime.mapIterNext
+     0.03s  2.14% 81.43%      0.08s  5.71%  runtime.rand
+     0.02s  1.43% 82.86%      0.02s  1.43%  github.com/tinylib/msgp/msgp.(*Writer).WriteArrayHeader
+     0.02s  1.43% 84.29%      0.02s  1.43%  github.com/tinylib/msgp/msgp.(*Writer).avail (inline)
+     0.02s  1.43% 85.71%      1.34s 95.71%  gofluentd/library.(*FluentEncoder).EncodeBatch
+     0.02s  1.43% 87.14%      0.02s  1.43%  internal/abi.(*MapType).IndirectKey (inline)
+     0.02s  1.43% 88.57%      0.12s  8.57%  internal/runtime/maps.(*Iter).Init
+     0.01s  0.71% 89.29%      0.06s  4.29%  github.com/tinylib/msgp/msgp.(*Writer).WriteInt64
+     0.01s  0.71% 90.00%      0.01s  0.71%  internal/abi.(*MapType).IndirectElem (inline)
+     0.01s  0.71% 90.71%      0.01s  0.71%  internal/chacha8rand.(*State).Next (inline)
+     0.01s  0.71% 91.43%      0.04s  2.86%  internal/chacha8rand.(*State).Refill
+     0.01s  0.71% 92.14%      0.01s  0.71%  internal/runtime/maps.(*groupReference).ctrls (inline)
+     0.01s  0.71% 92.86%      0.01s  0.71%  internal/runtime/maps.(*groupReference).elem (inline)
+     0.01s  0.71% 93.57%      0.01s  0.71%  internal/runtime/maps.(*groupReference).key (inline)
+     0.01s  0.71% 94.29%      0.01s  0.71%  internal/runtime/maps.ctrlGroup.matchFull (inline)
+     0.01s  0.71% 95.00%      0.09s  6.43%  internal/runtime/maps.rand
+     0.01s  0.71% 95.71%      0.03s  2.14%  runtime.(*unwinder).initAt
+     0.01s  0.71% 96.43%      0.01s  0.71%  runtime.(*unwinder).next
+     0.01s  0.71% 97.14%      0.01s  0.71%  runtime.(*unwinder).resolveInternal
+     0.01s  0.71% 97.86%      0.01s  0.71%  runtime.asyncPreempt
+     0.01s  0.71% 98.57%      0.01s  0.71%  runtime.findmoduledatap (inline)
+     0.01s  0.71% 99.29%      0.06s  4.29%  runtime.systemstack
+     0.01s  0.71%   100%      0.01s  0.71%  runtime.tryDeferToSpanScan
+         0     0%   100%      0.01s  0.71%  gcWriteBarrier
+         0     0%   100%      0.01s  0.71%  github.com/tinylib/msgp/msgp.(*Writer).WriteMapHeader
+         0     0%   100%      1.39s 99.29%  gofluentd/tests/performance.BenchmarkPerfFluentEncoder.func1
+         0     0%   100%      0.05s  3.57%  gofluentd/tests/performance.require
+         0     0%   100%      0.04s  2.86%  runtime.Callers (inline)
+         0     0%   100%      0.04s  2.86%  runtime.callers
+         0     0%   100%      0.04s  2.86%  runtime.callers.func1
+         0     0%   100%      0.01s  0.71%  runtime.findfunc
+         0     0%   100%      0.13s  9.29%  runtime.mapIterStart
+         0     0%   100%      0.01s  0.71%  runtime.mapaccess2_fast64
+         0     0%   100%      0.01s  0.71%  runtime.tracebackPCs
+         0     0%   100%      0.01s  0.71%  runtime.wbBufFlush
+         0     0%   100%      0.01s  0.71%  runtime.wbBufFlush.func1
+         0     0%   100%      0.01s  0.71%  runtime.wbBufFlush1
+         0     0%   100%      1.39s 99.29%  testing.(*B).launch
+         0     0%   100%      1.39s 99.29%  testing.(*B).runN
+         0     0%   100%      0.05s  3.57%  testing.(*common).Helper

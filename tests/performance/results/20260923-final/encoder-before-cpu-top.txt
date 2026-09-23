@@ -1,0 +1,80 @@
+File: bench-before.test
+Build ID: 71ae73a6f6c0386eccae7617ca1f16ccbc66073d
+Type: cpu
+Time: 2026-09-23 12:19:35 UTC
+Duration: 1.49s, Total samples = 1.51s (101.66%)
+Showing nodes accounting for 1.51s, 100% of 1.51s total
+      flat  flat%   sum%        cum   cum%
+     0.20s 13.25% 13.25%      1.22s 80.79%  github.com/tinylib/msgp/msgp.(*Writer).WriteIntf
+     0.14s  9.27% 22.52%      0.14s  9.27%  runtime.memmove
+     0.13s  8.61% 31.13%      0.13s  8.61%  github.com/tinylib/msgp/msgp.(*Writer).push
+     0.13s  8.61% 39.74%      0.15s  9.93%  runtime.mallocgcSmallScanNoHeaderSC3
+     0.10s  6.62% 46.36%      0.24s 15.89%  github.com/tinylib/msgp/msgp.(*Writer).writeString
+     0.09s  5.96% 52.32%      0.85s 56.29%  github.com/tinylib/msgp/msgp.(*Writer).WriteMapStrIntf
+     0.07s  4.64% 56.95%      0.10s  6.62%  internal/runtime/maps.(*Iter).Next
+     0.07s  4.64% 61.59%      0.10s  6.62%  reflect.(*rtype).Name
+     0.06s  3.97% 65.56%      0.36s 23.84%  github.com/tinylib/msgp/msgp.(*Writer).WriteString
+     0.05s  3.31% 68.87%      0.05s  3.31%  reflect.Value.Index
+     0.04s  2.65% 71.52%      1.22s 80.79%  github.com/tinylib/msgp/msgp.(*Writer).writeSlice
+     0.04s  2.65% 74.17%      0.19s 12.58%  runtime.convTslice
+     0.03s  1.99% 76.16%      0.03s  1.99%  reflect.(*rtype).NumMethod
+     0.03s  1.99% 78.15%      0.07s  4.64%  reflect.valueInterface
+     0.02s  1.32% 79.47%      1.50s 99.34%  gofluentd/library.(*FluentEncoder).EncodeBatch
+     0.02s  1.32% 80.79%      0.06s  3.97%  internal/runtime/maps.(*Iter).Init
+     0.02s  1.32% 82.12%      0.12s  7.95%  reflect.haveIdenticalType
+     0.02s  1.32% 83.44%      0.04s  2.65%  runtime.rand
+     0.02s  1.32% 84.77%      0.02s  1.32%  sync.(*Pool).pin
+     0.02s  1.32% 86.09%      0.03s  1.99%  sync.(*poolDequeue).popHead
+     0.01s  0.66% 86.75%      0.01s  0.66%  gcWriteBarrier
+     0.01s  0.66% 87.42%      0.02s  1.32%  github.com/tinylib/msgp/msgp.(*Writer).WriteMapHeader
+     0.01s  0.66% 88.08%      0.01s  0.66%  github.com/tinylib/msgp/msgp.(*Writer).prefix16
+     0.01s  0.66% 88.74%      0.01s  0.66%  internal/abi.(*MapType).IndirectKey (inline)
+     0.01s  0.66% 89.40%      0.01s  0.66%  internal/chacha8rand.(*State).Next (inline)
+     0.01s  0.66% 90.07%      0.01s  0.66%  internal/chacha8rand.block
+     0.01s  0.66% 90.73%      0.01s  0.66%  internal/runtime/maps.(*groupReference).key (inline)
+     0.01s  0.66% 91.39%      0.14s  9.27%  reflect.(*rtype).ConvertibleTo
+     0.01s  0.66% 92.05%      0.03s  1.99%  reflect.(*rtype).String
+     0.01s  0.66% 92.72%      0.08s  5.30%  reflect.Value.Interface (inline)
+     0.01s  0.66% 93.38%      0.13s  8.61%  reflect.convertOp
+     0.01s  0.66% 94.04%      0.01s  0.66%  reflect.flag.kind (inline)
+     0.01s  0.66% 94.70%      0.02s  1.32%  reflect.resolveNameOff
+     0.01s  0.66% 95.36%      0.10s  6.62%  runtime.mapIterNext
+     0.01s  0.66% 96.03%      0.01s  0.66%  runtime.memclrNoHeapPointers
+     0.01s  0.66% 96.69%      0.01s  0.66%  runtime.readUintptr (inline)
+     0.01s  0.66% 97.35%      0.01s  0.66%  runtime.resolveNameOff
+     0.01s  0.66% 98.01%      0.01s  0.66%  runtime.wbBufFlush1
+     0.01s  0.66% 98.68%      0.02s  1.32%  sync.(*poolChain).pushHead
+     0.01s  0.66% 99.34%      0.01s  0.66%  sync.(*poolDequeue).pushHead
+     0.01s  0.66%   100%      0.01s  0.66%  sync/atomic.(*Uint64).CompareAndSwap (inline)
+         0     0%   100%      0.01s  0.66%  github.com/tinylib/msgp/msgp.(*Writer).WriteArrayHeader
+         0     0%   100%      0.01s  0.66%  github.com/tinylib/msgp/msgp.(*Writer).WriteInt (inline)
+         0     0%   100%      0.06s  3.97%  github.com/tinylib/msgp/msgp.(*Writer).WriteInt64
+         0     0%   100%      1.22s 80.79%  gofluentd/library.FluentBatchMsg.EncodeMsg
+         0     0%   100%      1.50s 99.34%  gofluentd/tests/performance.BenchmarkPerfFluentEncoder.func1
+         0     0%   100%      0.01s  0.66%  internal/chacha8rand.(*State).Refill
+         0     0%   100%      0.04s  2.65%  internal/runtime/maps.rand
+         0     0%   100%      0.02s  1.32%  reflect.(*rtype).nameOff (inline)
+         0     0%   100%      0.03s  1.99%  reflect.Value.NumMethod
+         0     0%   100%      0.12s  7.95%  reflect.haveIdenticalUnderlyingType
+         0     0%   100%      0.10s  6.62%  reflect.nameFor (inline)
+         0     0%   100%      0.03s  1.99%  reflect.packIfaceValueIntoEmptyIface (inline)
+         0     0%   100%      0.01s  0.66%  runtime.(*mcache).nextFree
+         0     0%   100%      0.01s  0.66%  runtime.(*mcache).refill
+         0     0%   100%      0.01s  0.66%  runtime.(*mcentral).cacheSpan
+         0     0%   100%      0.01s  0.66%  runtime.(*mcentral).grow
+         0     0%   100%      0.01s  0.66%  runtime.(*mspan).initHeapBits
+         0     0%   100%      0.01s  0.66%  runtime.findRunnable
+         0     0%   100%      0.01s  0.66%  runtime.gcMarkDone.func1
+         0     0%   100%      0.01s  0.66%  runtime.gopreempt_m (inline)
+         0     0%   100%      0.01s  0.66%  runtime.goschedImpl
+         0     0%   100%      0.15s  9.93%  runtime.mallocgc
+         0     0%   100%      0.07s  4.64%  runtime.mapIterStart
+         0     0%   100%      0.01s  0.66%  runtime.morestack
+         0     0%   100%      0.01s  0.66%  runtime.newstack
+         0     0%   100%      0.01s  0.66%  runtime.runSafePointFn
+         0     0%   100%      0.01s  0.66%  runtime.schedule
+         0     0%   100%      0.05s  3.31%  sync.(*Pool).Get
+         0     0%   100%      0.02s  1.32%  sync.(*Pool).Put
+         0     0%   100%      0.03s  1.99%  sync.(*poolChain).popHead
+         0     0%   100%      1.50s 99.34%  testing.(*B).launch
+         0     0%   100%      1.50s 99.34%  testing.(*B).runN

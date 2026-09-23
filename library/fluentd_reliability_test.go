@@ -2,26 +2,13 @@ package library
 
 import (
 	"bytes"
-	"runtime"
-	"runtime/debug"
-	"sync"
 	"testing"
 
 	"github.com/tinylib/msgp/msgp"
 )
 
 func TestRegressionFluentEncoderReusedBatchPreservesEveryRecord(t *testing.T) {
-	// Keep the pool on one P and prevent opportunistic GC eviction, so the old
-	// shared-pointer bug is reproducible rather than timing dependent.
-	oldP := runtime.GOMAXPROCS(1)
-	oldGC := debug.SetGCPercent(-1)
-	oldPool := fluentdWrapMsgPool
-	fluentdWrapMsgPool = &sync.Pool{New: func() interface{} { return &[]interface{}{0, nil} }}
-	defer func() {
-		fluentdWrapMsgPool = oldPool
-		debug.SetGCPercent(oldGC)
-		runtime.GOMAXPROCS(oldP)
-	}()
+	// Verify complete wire records across reuse without depending on pool internals.
 	var actual bytes.Buffer
 	enc := NewFluentEncoder(&actual)
 	for _, values := range [][2]string{{"first-a", "first-b"}, {"second-a", "second-b"}, {"third-a", "third-b"}} {

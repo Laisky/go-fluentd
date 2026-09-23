@@ -72,7 +72,7 @@ func testWriter(t *testing.T) (*Journal, context.Context, context.CancelFunc) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	j := &Journal{JournalCfg: &JournalCfg{MsgPool: &sync.Pool{}}, outChan: make(chan *library.FluentMsg, 256)}
+	j := &Journal{JournalCfg: &JournalCfg{MsgPool: &sync.Pool{}, GroupCommitMaxMessages: 64}, outChan: make(chan *library.FluentMsg, 256)}
 	return j, ctx, cancel
 }
 func writerRun(j *Journal, ctx context.Context, s journalDataWriter, in <-chan *library.FluentMsg) <-chan struct{} {
@@ -507,10 +507,11 @@ func TestJournalGroupConfigBounds(t *testing.T) {
 	}
 	j, _, _ := testWriter(t)
 	j.BufDirPath = t.TempDir()
+	j.GroupCommitMaxMessages = 0
 	if err := j.valid(); err != nil {
 		t.Fatal(err)
 	}
-	if j.GroupCommitMaxMessages != 64 {
+	if j.GroupCommitMaxMessages != 1 {
 		t.Fatal("wrong default group bound")
 	}
 }

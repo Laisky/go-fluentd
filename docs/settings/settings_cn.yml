@@ -557,7 +557,7 @@ settings:
   # 绝大部分情况下，journal 都可以利用页缓存，对磁盘的读写性能要求并不高。
   journal:
     # Reliable acceptance: drain ready records, then Sync once. 1 disables grouping.
-    group_commit_max_messages: 64 # 0 = default 64; maximum 1024; no timer delay
+    group_commit_max_messages: 1 # 0/1 = per-record Sync; opt in with 64; maximum 1024; no timer delay
     # 执行 gc 的间隔时间
     gc_inteval_sec: 45
 

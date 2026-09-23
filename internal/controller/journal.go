@@ -29,7 +29,7 @@ const (
 )
 
 type JournalCfg struct {
-	// GroupCommitMaxMessages bounds reliable groups; 0 selects 64, 1 disables grouping.
+	// GroupCommitMaxMessages bounds reliable groups; 0 or 1 keeps per-record Sync.
 	GroupCommitMaxMessages int
 	BufDirPath             string
 	BufSizeBytes           int64

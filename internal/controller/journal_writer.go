@@ -18,7 +18,8 @@ type journalDataWriter interface {
 	Sync() error
 }
 
-const defaultGroupCommitMaxMessages = 64
+// Keep the prior per-record policy unless grouping is explicitly enabled.
+const defaultGroupCommitMaxMessages = 1
 const maximumGroupCommitMaxMessages = 1024
 
 // Groups are formed only from immediately available messages. There is no

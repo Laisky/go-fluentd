@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -45,6 +46,12 @@ func BenchmarkJournalDurableService(b *testing.B) {
 				defer jj.Close()
 				backend := &measuredJournal{Journal: jj}
 				j := &Journal{JournalCfg: &JournalCfg{MsgPool: &sync.Pool{}}, outChan: make(chan *library.FluentMsg, b.N)}
+				// Configure the exported option outside timing. The same benchmark
+				// source also runs on the historical per-record writer, whose
+				// config predates this option and ignores the unknown JSON field.
+				if err := json.Unmarshal([]byte(`{"GroupCommitMaxMessages":64}`), j.JournalCfg); err != nil {
+					b.Fatal(err)
+				}
 				in := make(chan *library.FluentMsg, clients*2)
 				messages := make([]*library.FluentMsg, b.N)
 				receipts := make([]chan error, b.N)

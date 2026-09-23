@@ -114,7 +114,7 @@ def main():
         p.error(str(exc))
     args.output.mkdir(parents=True,exist_ok=False)
     files = {v:getattr(args,v.replace('-','_')).resolve(strict=True) for v in ('before','after','before-service','after-service')}
-    metadata = {'binaries':{v:{'path':str(f),'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for v,f in files.items()},'count':args.count,'pipeline_count':args.pipeline_count,'repeats':args.repeats,'GOMAXPROCS':os.environ.get('GOMAXPROCS'),'policy':'before per-record; after default bounded ready-only grouping; same success-after-Sync contract; no batching timer'}
+    metadata = {'binaries':{v:{'path':str(f),'sha256':hashlib.sha256(f.read_bytes()).hexdigest()} for v,f in files.items()},'count':args.count,'pipeline_count':args.pipeline_count,'repeats':args.repeats,'GOMAXPROCS':os.environ.get('GOMAXPROCS'),'policy':'before explicit per-record (1); after explicit bounded ready-only grouping (64); same success-after-Sync contract; no batching timer'}
     metadata.update(profiles=sorted(profiles), mode=args.mode, single_client_controls=args.single_client_controls)
     (args.output/'manifest.json').write_text(json.dumps(metadata,indent=2))
     service_rows, pipeline_rows = [],[]
@@ -143,7 +143,7 @@ def main():
                         continue
                     for variant in order:
                         folder=args.output/f'pipeline-{n}-{gz}-{clients}-{variant}'
-                        r=sample(files[variant],folder,args.pipeline_count,clients,gz)
+                        r=sample(files[variant],folder,args.pipeline_count,clients,gz,group_max_messages=(1 if variant=='before' else 64))
                         if r['accepted']!=args.pipeline_count or r['delivered_per_sink']!=[args.pipeline_count,args.pipeline_count] or not r['durable_ack']:
                             raise ValueError('pipeline delivery contract failed')
                         m={k:r[k] for k in ('delivered_per_second','accepted_per_second','app_cpu_seconds','app_peak_rss_kib')}

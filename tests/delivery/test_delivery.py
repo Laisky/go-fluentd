@@ -204,6 +204,9 @@ class App:
                                                   "msg_batch_size": 7, "max_wait_sec": 1, "forks": 1,
                                                   "is_discard_when_blocked": False}
                                      for i, sink in enumerate(self.sinks)}}}}
+        group_maximum = os.environ.get("DELIVERY_GROUP_MAX_MESSAGES")
+        if group_maximum is not None:
+            cfg["settings"]["journal"]["group_commit_max_messages"] = int(group_maximum)
         if self.overrides:
             self.overrides(cfg["settings"])
         path = self.root / "config.json"

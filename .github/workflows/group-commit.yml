@@ -1,0 +1,104 @@
+name: Durable group-commit measurements
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: group-commit-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  paired:
+    name: Group commit (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: service, mode: service, profiles: '', controls: ''}
+          - {name: plain-1, mode: pipeline, profiles: 'gzip=false/clients=1', controls: '--single-client-controls'}
+          - {name: plain-16, mode: pipeline, profiles: 'gzip=false/clients=16', controls: ''}
+          - {name: plain-64, mode: pipeline, profiles: 'gzip=false/clients=64', controls: ''}
+          - {name: gzip-1, mode: pipeline, profiles: 'gzip=true/clients=1', controls: '--single-client-controls'}
+          - {name: gzip-16, mode: pipeline, profiles: 'gzip=true/clients=16', controls: ''}
+          - {name: gzip-64, mode: pipeline, profiles: 'gzip=true/clients=64', controls: ''}
+    env:
+      GOMAXPROCS: '2'
+      MEASUREMENT_MODE: ${{ matrix.mode }}
+      MEASUREMENT_PROFILES: ${{ matrix.profiles }}
+      MEASUREMENT_CONTROLS: ${{ matrix.controls }}
+      PYTHONDONTWRITEBYTECODE: '1'
+      BASELINE: 76717b288a170acc0e1e12daf19def9fa7da1bb1
+      SERVICE_BASELINE: cf9833b451298c800789f4be06035c44baa7d703
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.x'
+      - name: Build exact per-record and grouped versions with identical work units
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/group-results" "$RUNNER_TEMP/group-files"
+          echo "TMPDIR=$RUNNER_TEMP/group-files" >> "$GITHUB_ENV"
+          git worktree add --detach "$RUNNER_TEMP/group-before" "$BASELINE"
+          git worktree add --detach "$RUNNER_TEMP/group-service-before" "$SERVICE_BASELINE"
+          # Both implementations receive identical benchmark code. The historical
+          # config ignores the new optional JSON field and remains per-record.
+          cp internal/controller/journal_writer_bench_test.go "$RUNNER_TEMP/group-service-before/internal/controller/journal_writer_bench_test.go"
+          cmp internal/controller/journal_writer_bench_test.go "$RUNNER_TEMP/group-service-before/internal/controller/journal_writer_bench_test.go"
+          python3 -m unittest discover -s tests/performance -p 'test_*.py'
+          go mod verify
+          (cd "$RUNNER_TEMP/group-before" && go mod verify && go build -mod=readonly -o "$RUNNER_TEMP/group-before-app" .)
+          (cd "$RUNNER_TEMP/group-service-before" && go test -mod=readonly -c -o "$RUNNER_TEMP/group-before-service" ./internal/controller)
+          go build -mod=readonly -o "$RUNNER_TEMP/group-after-app" .
+          go test -mod=readonly -c -o "$RUNNER_TEMP/group-after-service" ./internal/controller
+          {
+            go version
+            printf 'baseline=%s\nservice-baseline=%s\ncandidate=%s\npr-head=%s\nGOMAXPROCS=%s\n' "$BASELINE" "$SERVICE_BASELINE" "$(git rev-parse HEAD)" '${{ github.event.pull_request.head.sha || github.sha }}' "$GOMAXPROCS"
+            go list -m github.com/Laisky/go-journal
+            uname -a
+            lscpu
+            findmnt -T "$RUNNER_TEMP/group-files"
+            stat -f -c 'filesystem=%T blocksize=%S' "$RUNNER_TEMP/group-files"
+            sha256sum internal/controller/journal_writer_bench_test.go tests/performance/group_compare.py tests/performance/pipeline.py
+          } > "$RUNNER_TEMP/group-results/environment.txt"
+      - name: Six counterbalanced journal and full-process delivery pairs
+        run: |
+          args=(--mode "$MEASUREMENT_MODE")
+          if [ -n "$MEASUREMENT_PROFILES" ]; then args+=(--profiles "$MEASUREMENT_PROFILES"); fi
+          if [ -n "$MEASUREMENT_CONTROLS" ]; then args+=("$MEASUREMENT_CONTROLS"); fi
+          python3 tests/performance/group_compare.py \
+            --before "$RUNNER_TEMP/group-before-app" --after "$RUNNER_TEMP/group-after-app" \
+            --before-service "$RUNNER_TEMP/group-before-service" --after-service "$RUNNER_TEMP/group-after-service" \
+            --output "$RUNNER_TEMP/group-results/measurements" --repeats 6 --count 2048 --pipeline-count 8192 "${args[@]}" \
+            > "$RUNNER_TEMP/group-results/run.log" 2>&1
+          git diff --exit-code -- go.mod go.sum
+      - name: Independently reconcile persisted cohorts, policies and reported measurements
+        if: matrix.mode == 'pipeline'
+        run: |
+          python3 tests/performance/audit_group_evidence.py \
+            --input "$RUNNER_TEMP/group-results/measurements" \
+            --output "$RUNNER_TEMP/group-results/ledger-audit.json" --repeats 6 --count 8192
+      - name: Independently verify barrier ordering, errors and rotation under race detection
+        if: matrix.mode == 'service'
+        run: go test -mod=readonly -race -count=20 -shuffle=on -timeout=180s -run '^TestJournal' ./internal/controller
+      - name: Verify that tests reject missing, early and falsely successful barriers
+        if: matrix.mode == 'service'
+        run: python3 .scripts/verify_group_commit_contracts.py --evidence "$RUNNER_TEMP/group-results/barrier-controls"
+      - name: Retain every timing sample and both independent sink ledgers
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: durable-group-commit-${{ matrix.name }}-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/group-results/
+            !${{ runner.temp }}/group-results/**/wal/**
+          retention-days: 14
+          if-no-files-found: error

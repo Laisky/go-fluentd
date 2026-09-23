@@ -204,6 +204,9 @@ class App:
                                                   "msg_batch_size": 7, "max_wait_sec": 1, "forks": 1,
                                                   "is_discard_when_blocked": False}
                                      for i, sink in enumerate(self.sinks)}}}}
+        group_maximum = os.environ.get("DELIVERY_GROUP_MAX_MESSAGES")
+        if group_maximum is not None:
+            cfg["settings"]["journal"]["group_commit_max_messages"] = int(group_maximum)
         if self.overrides:
             self.overrides(cfg["settings"])
         path = self.root / "config.json"
@@ -651,6 +654,118 @@ class DeliveryTests(unittest.TestCase):
         self.app.start()
         self.delivered(accepted)
 
+
+    def concurrent_acceptance_cut(self, compressed):
+        self.launch(sinks=2, compressed=compressed, queue=512)
+        for sink in self.sinks:
+            sink.set_policy("reject")
+        expected = events("concurrent-cut", 257)
+        self.send_all(expected, concurrency=32)
+        # The only barrier before SIGKILL is the external HTTP responses.
+        # No sink wait, extra rotation, journal helper or graceful close.
+        self.app.crash()
+        for sink in self.sinks:
+            sink.set_policy("accept")
+        self.app.start()
+        self.delivered(expected)
+        for sink in self.sinks:
+            verify_manifest(expected, [json.loads(line) for line in sink.path.read_text().splitlines()])
+
+    def test_concurrent_accepted_group_survives_kill_plain(self):
+        self.concurrent_acceptance_cut(False)
+
+    def test_concurrent_accepted_group_survives_kill_gzip(self):
+        self.concurrent_acceptance_cut(True)
+
+    def unfinished_request_cut(self, compressed):
+        self.launch(sinks=2, compressed=compressed, queue=512)
+        for sink in self.sinks:
+            sink.set_policy("reject")
+        expected = events("unfinished", 257)
+        with (self.root / "producer.jsonl").open("w") as output:
+            for item in expected:
+                output.write(json.dumps(item) + "\n")
+            output.flush()
+            os.fsync(output.fileno())
+        def submit(item):
+            try:
+                code, body = self.app.send(item)
+                return {"event": item["event"], "status": code,
+                        "body": body.decode(errors="replace")}
+            except (OSError, http.client.HTTPException) as exc:
+                return {"event": item["event"], "status": None, "network_error": repr(exc)}
+        results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=32) as pool:
+            futures = [pool.submit(submit, item) for item in expected]
+            accepted_so_far = 0
+            crashed = False
+            for future in concurrent.futures.as_completed(futures):
+                observation = future.result(timeout=20)
+                results.append(observation)
+                accepted_so_far += observation["status"] == 200
+                if accepted_so_far >= 8 and not crashed:
+                    self.app.crash()
+                    crashed = True
+        self.assertTrue(crashed, "did not exercise the requested crash cut")
+        (self.root / "responses.jsonl").write_text("".join(json.dumps(r) + "\n" for r in results))
+        accepted = {r["event"] for r in results if r["status"] == 200}
+        self.assertGreaterEqual(len(accepted), 8)
+        self.assertLess(len(accepted), len(expected), "fixture never exercised unfinished requests")
+        for r in results:
+            self.assertIn(r["status"], (None, 200, 503))
+        for sink in self.sinks:
+            sink.set_policy("accept")
+        self.app.start()
+        sentinel = events("new-after-cut", 1)[0]
+        self.send_all([sentinel])
+        accepted.add(sentinel["event"])
+        submitted = {item["event"]: item for item in expected + [sentinel]}
+        for sink in self.sinks:
+            wait_for(lambda: accepted <= sink.keys(), "an acknowledged request was lost after a mixed crash cut")
+            received = [json.loads(line) for line in sink.path.read_text().splitlines()]
+            keys = {row["event"] for row in received}
+            self.assertTrue(keys <= submitted.keys(), "fabricated record after crash")
+            # Unanswered requests may exist or be absent. Every observed record
+            # must still match an actual submission, including duplicate IDs.
+            verify_manifest([submitted[key] for key in keys], received)
+            self.assertFalse(sink.errors)
+
+    def test_partial_response_group_cut_plain(self):
+        self.unfinished_request_cut(False)
+
+    def test_partial_response_group_cut_gzip(self):
+        self.unfinished_request_cut(True)
+
+    def concurrent_append_refusal(self, compressed):
+        self.launch(sinks=2, compressed=compressed, file_limit=8192)
+        for sink in self.sinks:
+            sink.set_policy("reject")
+        accepted = events("before-refusal", 1)
+        self.send_all(accepted)
+        refused = events("group-refused", 32)
+        rng = random.Random(SEED ^ 99127)
+        # High-entropy input also exceeds the kernel's limit when compressed.
+        for item in refused:
+            item["payload"] = rng.randbytes(32768).hex()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
+            results = list(pool.map(self.app.send, refused))
+        (self.root / "refused-responses.jsonl").write_text("".join(json.dumps({"event": e["event"], "status": r[0]}) + "\n" for e, r in zip(refused, results)))
+        self.assertTrue(all(code == 503 for code, _ in results), "kernel-refused append reported acceptance")
+        self.assertIn("file too large", self.app.logpath.read_text(errors="replace").lower())
+        for sink in self.sinks:
+            self.assertFalse({item["event"] for item in refused} & sink.keys(True), "failed live group was forwarded")
+        self.app.crash()
+        self.app.file_limit = None
+        for sink in self.sinks:
+            sink.set_policy("accept")
+        self.app.start()
+        self.delivered(accepted)
+
+    def test_concurrent_kernel_refusal_preserves_accepted_plain(self):
+        self.concurrent_append_refusal(False)
+
+    def test_concurrent_kernel_refusal_preserves_accepted_gzip(self):
+        self.concurrent_append_refusal(True)
 
     def test_oracle_rejects_loss_corruption_and_fabrication(self):
         expected = events("oracle", 2)

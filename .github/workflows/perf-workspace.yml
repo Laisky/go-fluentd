@@ -1,0 +1,37 @@
+name: Performance workspace
+on:
+  push:
+    branches: [perf/measured-journal-20260923]
+    paths: [.github/workflows/perf-workspace.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Snapshot source and benchmark tooling
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/perf-workspace
+          git bundle create /tmp/perf-workspace/application.bundle --all
+          git clone https://github.com/Laisky/go-journal /tmp/perf-journal
+          git -C /tmp/perf-journal checkout 665e193ecd7b07886308614e4e4c4f44d28eef97
+          git -C /tmp/perf-journal bundle create /tmp/perf-workspace/journal.bundle --all
+          go mod download
+          go install golang.org/x/perf/cmd/benchstat@latest
+          cp "$(go env GOPATH)/bin/benchstat" /tmp/perf-workspace/
+          go version -m /tmp/perf-workspace/benchstat > /tmp/perf-workspace/benchstat-version.txt
+          tar -czf /tmp/perf-workspace/journal-module.tar.gz -C "$(go env GOMODCACHE)" github.com/\!\laisky/go-journal@v1.1.7-0.20260922221748-5e9621527726 cache/download/github.com/\!\laisky/go-journal
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: performance-workspace
+          path: /tmp/perf-workspace/*
+          retention-days: 3

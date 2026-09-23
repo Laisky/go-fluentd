@@ -1,0 +1,28 @@
+name: Journal benchmark dependencies
+on:
+  push:
+    branches: [perf/measured-journal-20260923]
+    paths: [.github/workflows/perf-journal-deps.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Laisky/go-journal
+          ref: 665e193ecd7b07886308614e4e4c4f44d28eef97
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - run: |
+          go mod download
+          tar -czf /tmp/journal-dependencies.tar.gz -C "$(go env GOMODCACHE)" .
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: journal-dependencies
+          path: /tmp/journal-dependencies.tar.gz
+          retention-days: 3

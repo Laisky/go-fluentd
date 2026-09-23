@@ -276,7 +276,8 @@ func BenchmarkPerfMonitor(b *testing.B) {
 			b.Fatal(w.Code)
 		}
 	}
-	rate(b, 1)
+	b.ReportMetric(1, "scrapes/op")
+	b.ReportMetric(float64(b.N)/b.Elapsed().Seconds(), "scrapes/s")
 }
 func BenchmarkPerfHTTPReceive(b *testing.B) {
 	e := gin.New()

@@ -8,7 +8,7 @@ class ReportingTests(unittest.TestCase):
         raw = 'BenchmarkPerfExample-2 100 2000 ns/op 64 msgs/op 32000000 msgs/s 80 B/op 2 allocs/op\n'
         data = parse(raw)
         row = summarize(data, data, 1)['BenchmarkPerfExample']
-        self.assertEqual(row['after']['messages_per_second'], 32000000)
+        self.assertEqual(row['after']['work_units_per_second'], 32000000)
         self.assertEqual(row['time_change_percent'], 0)
 
     def test_missing_and_malformed_fail_closed(self):
@@ -25,6 +25,12 @@ class ReportingTests(unittest.TestCase):
         b = parse('BenchmarkPerfExample-2 100 2 ns/op 2 msgs/op 5 msgs/s 0 B/op 0 allocs/op')
         with self.assertRaises(ValueError):
             summarize(a, b, 1)
+
+    def test_scrapes_are_not_reported_as_messages(self):
+        data = parse('BenchmarkPerfMonitor-2 100 2000 ns/op 1 scrapes/op 500000 scrapes/s 80 B/op 2 allocs/op')
+        row = summarize(data, data, 1)['BenchmarkPerfMonitor']
+        self.assertEqual(row['work_unit'], 'scrape')
+        self.assertEqual(row['after']['work_units_per_second'], 500000)
 
     def test_latency_nearest_rank(self):
         self.assertEqual(percentile([3, 1, 2, 4], .5), 2)

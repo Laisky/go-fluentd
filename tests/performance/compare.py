@@ -20,11 +20,11 @@ import subprocess
 import time
 
 GROUPS = [
-    ('components', r'^BenchmarkPerf(AcceptorFilter|PostFilter|Parser|Concatenator|FluentEncoder|Dispatcher|Producer|Monitor|HTTPReceive|HTTPSender|JournalTTL)$', '100ms'),
+    ('components', r'^BenchmarkPerf(AcceptorFilter|PostFilter|Parser|Concatenator|FluentEncoder|Dispatcher|Producer|Monitor|PendingMonitor|HTTPReceive|HTTPSender|JournalTTL)$', '100ms'),
     ('journal-write', r'^BenchmarkPerf(JournalAppend|JournalIDs)$', '4096x'),
     ('journal-recovery', r'^BenchmarkPerf(JournalRecovery|JournalReplay)$', '20x'),
 ]
-EXPECTED_CASES = 32
+EXPECTED_CASES = 35
 
 
 def parse(text):
@@ -37,11 +37,16 @@ def parse(text):
             raise ValueError('malformed benchmark row: ' + line)
         name = re.sub(r'-\d+$', '', tokens[0])
         metrics = {tokens[i + 1]: float(tokens[i]) for i in range(2, len(tokens), 2)}
-        if not {'ns/op', 'msgs/op', 'msgs/s', 'B/op', 'allocs/op'} <= metrics.keys():
+        units = [(op, rate, kind) for op, rate, kind in
+                 [('msgs/op', 'msgs/s', 'message'), ('scrapes/op', 'scrapes/s', 'scrape')]
+                 if op in metrics and rate in metrics]
+        if len(units) != 1 or not {'ns/op', 'B/op', 'allocs/op'} <= metrics.keys():
             raise ValueError('missing metrics for ' + name)
         if (not all(math.isfinite(v) and v >= 0 for v in metrics.values()) or
-                metrics['ns/op'] <= 0 or metrics['msgs/op'] <= 0 or int(tokens[1]) < 1):
+                metrics['ns/op'] <= 0 or metrics[units[0][0]] <= 0 or int(tokens[1]) < 1):
             raise ValueError('invalid work denominator: ' + name)
+        metrics['units/op'] = metrics[units[0][0]]
+        metrics['work_unit'] = units[0][2]
         metrics['iterations'] = int(tokens[1])
         result.setdefault(name, []).append(metrics)
     if not result:
@@ -57,18 +62,19 @@ def summarize(before, after, repeats):
         a, b = before[name], after[name]
         if len(a) != repeats or len(b) != repeats:
             raise ValueError('missing or duplicate repetition: ' + name)
-        units = {v['msgs/op'] for v in a + b}
-        if len(units) != 1:
+        units = {v['units/op'] for v in a + b}
+        kinds = {v['work_unit'] for v in a + b}
+        if len(units) != 1 or len(kinds) != 1:
             raise ValueError('work unit changed: ' + name)
         unit = next(iter(units))
-        row = {'messages_per_operation': unit, 'samples': {'before': a, 'after': b}}
+        row = {'work_units_per_operation': unit, 'work_unit': next(iter(kinds)), 'samples': {'before': a, 'after': b}}
         for label, samples in [('before', a), ('after', b)]:
             times = [v['ns/op'] for v in samples]
             med = statistics.median(times)
             row[label] = {'ns_per_op': med, 'ns_range': [min(times), max(times)],
                           'bytes_per_op': statistics.median(v['B/op'] for v in samples),
                           'allocs_per_op': statistics.median(v['allocs/op'] for v in samples),
-                          'messages_per_second': unit * 1e9 / med}
+                          'work_units_per_second': unit * 1e9 / med}
         row['time_change_percent'] = (row['after']['ns_per_op'] / row['before']['ns_per_op'] - 1) * 100
         row['observed_time_ranges_overlap'] = not (
             row['before']['ns_range'][1] < row['after']['ns_range'][0] or

@@ -29,8 +29,10 @@ const (
 )
 
 type JournalCfg struct {
-	BufDirPath   string
-	BufSizeBytes int64
+	// GroupCommitMaxMessages bounds reliable groups; 0 selects 64, 1 disables grouping.
+	GroupCommitMaxMessages int
+	BufDirPath             string
+	BufSizeBytes           int64
 	JournalOutChanLen,
 	CommitIDChanLen,
 	ChildJournalDataInchanLen,
@@ -95,6 +97,13 @@ func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 }
 
 func (j *Journal) valid() error {
+	if j.GroupCommitMaxMessages < 0 || j.GroupCommitMaxMessages > maximumGroupCommitMaxMessages {
+		return fmt.Errorf("group_commit_max_messages must be between 0 and %d", maximumGroupCommitMaxMessages)
+	}
+	if j.GroupCommitMaxMessages == 0 {
+		j.GroupCommitMaxMessages = defaultGroupCommitMaxMessages
+	}
+
 	if j.BufSizeBytes <= 0 {
 		j.BufSizeBytes = defaultBufSizeByte
 		log.Logger.Info("reset buf_file_bytes", zap.Int64("buf_file_bytes", j.BufSizeBytes))

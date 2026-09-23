@@ -48,6 +48,7 @@ func NewControllor() (c *Controllor) {
 
 func (c *Controllor) initJournal(ctx context.Context) *Journal {
 	return NewJournal(ctx, &JournalCfg{
+		GroupCommitMaxMessages:    gutils.Settings.GetInt("settings.journal.group_commit_max_messages"),
 		MsgPool:                   c.msgPool,
 		BufDirPath:                gutils.Settings.GetString("settings.journal.buf_dir_path"),
 		BufSizeBytes:              gutils.Settings.GetInt64("settings.journal.buf_file_bytes"),

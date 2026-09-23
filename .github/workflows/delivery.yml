@@ -47,7 +47,7 @@ jobs:
           import json,os
           from pathlib import Path
           result=json.loads((Path(os.environ['RUNNER_TEMP'])/'delivery-results/results.json').read_text())
-          assert result['passed'] and result['run']==result['expected']==21,result
+          assert result['passed'] and result['run']==result['expected']==27,result
           PY
           git diff --exit-code -- go.mod go.sum
       - name: Retain independent producer and sink evidence, including failures

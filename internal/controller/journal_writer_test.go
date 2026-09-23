@@ -326,3 +326,323 @@ func TestJournalWriterReopenHasEveryAcceptedRecord(t *testing.T) {
 		})
 	}
 }
+
+func TestJournalGroupBoundedAndFinalPartialGroup(t *testing.T) {
+	for _, limit := range []int{1, 7, 64} {
+		t.Run(fmt.Sprint(limit), func(t *testing.T) {
+			j, ctx, _ := testWriter(t)
+			j.GroupCommitMaxMessages = limit
+			in := make(chan *library.FluentMsg, 137)
+			rs := make([]chan error, 137)
+			for i := range rs {
+				m, r := writerMessage(int64(i+1), true)
+				in <- m
+				rs[i] = r
+			}
+			close(in)
+			last := 0
+			s := &writerStore{syncHook: func(ids []int64) error {
+				n := len(ids) - last
+				if n < 1 || n > limit {
+					t.Errorf("unbounded/empty group: %d, limit=%d", n, limit)
+				}
+				last = len(ids)
+				return nil
+			}}
+			waitWriter(t, writerRun(j, ctx, s, in))
+			if s.syncCalls != (137+limit-1)/limit {
+				t.Fatalf("ready backlog required %d Sync calls, expected %d", s.syncCalls, (137+limit-1)/limit)
+			}
+			for _, r := range rs {
+				if err := writerReceipt(t, r); err != nil {
+					t.Fatal(err)
+				}
+			}
+		})
+	}
+}
+func TestJournalGroupSharedFailureAndSubsequentSuccess(t *testing.T) {
+	for _, stage := range []string{"write", "sync"} {
+		t.Run(stage, func(t *testing.T) {
+			j, ctx, _ := testWriter(t)
+			j.GroupCommitMaxMessages = 7
+			in := make(chan *library.FluentMsg, 14)
+			rs := make([]chan error, 14)
+			for i := range rs {
+				m, r := writerMessage(int64(i+1), true)
+				in <- m
+				rs[i] = r
+			}
+			close(in)
+			want := errors.New("injected group refusal")
+			s := &writerStore{}
+			if stage == "write" {
+				s.writeHook = func(id int64) error {
+					if id == 4 {
+						return want
+					}
+					return nil
+				}
+			} else {
+				s.syncHook = func(ids []int64) error {
+					if len(ids) == 7 {
+						return want
+					}
+					return nil
+				}
+			}
+			waitWriter(t, writerRun(j, ctx, s, in))
+			for i, r := range rs {
+				err := writerReceipt(t, r)
+				if i < 7 && !errors.Is(err, want) {
+					t.Fatalf("group member %d falsely accepted: %v", i+1, err)
+				}
+				if i >= 7 && err != nil {
+					t.Fatalf("next successful group rejected: %v", err)
+				}
+			}
+			if len(j.outChan) != 7 {
+				t.Fatalf("live output count=%d, want only next successful group", len(j.outChan))
+			}
+			for len(j.outChan) > 0 {
+				if m := <-j.outChan; m.ID <= 7 {
+					t.Fatalf("failed group leaked live record %d", m.ID)
+				}
+			}
+		})
+	}
+}
+func TestJournalGroupCancellationAfterPartialAppend(t *testing.T) {
+	j, ctx, cancel := testWriter(t)
+	j.GroupCommitMaxMessages = 7
+	in := make(chan *library.FluentMsg, 7)
+	rs := make([]chan error, 7)
+	for i := range rs {
+		m, r := writerMessage(int64(i+1), true)
+		in <- m
+		rs[i] = r
+	}
+	close(in)
+	entered, release := make(chan struct{}), make(chan struct{})
+	s := &writerStore{writeHook: func(id int64) error {
+		if id == 2 {
+			close(entered)
+			<-release
+		}
+		return nil
+	}}
+	done := writerRun(j, ctx, s, in)
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		close(release)
+		t.Fatal("second write not reached")
+	}
+	cancel()
+	close(release)
+	waitWriter(t, done)
+	for _, r := range rs {
+		if err := writerReceipt(t, r); !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancelled group result=%v", err)
+		}
+	}
+	if s.syncCalls != 0 || len(j.outChan) != 0 {
+		t.Fatal("cancelled incomplete group accepted")
+	}
+}
+func TestJournalGroupMixedReliabilityAndSeparateTags(t *testing.T) {
+	j, ctx, _ := testWriter(t)
+	j.GroupCommitMaxMessages = 7
+	in := make(chan *library.FluentMsg, 3)
+	a, ra := writerMessage(1, true)
+	b, _ := writerMessage(2, false)
+	c, rc := writerMessage(3, true)
+	in <- a
+	in <- b
+	in <- c
+	close(in)
+	s := &writerStore{}
+	waitWriter(t, writerRun(j, ctx, s, in))
+	if s.syncCalls != 1 || len(j.outChan) != 3 {
+		t.Fatal("mixed group lost data or its barrier")
+	}
+	if writerReceipt(t, ra) != nil || writerReceipt(t, rc) != nil {
+		t.Fatal("reliable receipts failed")
+	}
+	// A blocked tag must not impose a global batching lock on another tag.
+	entered, release := make(chan struct{}), make(chan struct{})
+	blocked := &writerStore{syncHook: func([]int64) error { close(entered); <-release; return nil }}
+	input := make(chan *library.FluentMsg, 1)
+	m, r := writerMessage(4, true)
+	input <- m
+	close(input)
+	done := writerRun(j, ctx, blocked, input)
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		close(release)
+		t.Fatal("blocked tag not at barrier")
+	}
+	second := &writerStore{}
+	otherIn := make(chan *library.FluentMsg, 1)
+	m2, r2 := writerMessage(5, true)
+	otherIn <- m2
+	close(otherIn)
+	otherDone := make(chan struct{})
+	go func() { defer close(otherDone); j.runDataWriter(ctx, "other", second, otherIn, utils.NewCounter()) }()
+	waitWriter(t, otherDone)
+	if writerReceipt(t, r2) != nil || len(r) != 0 {
+		t.Error("independent tag blocked or first tag accepted prematurely")
+	}
+	close(release)
+	waitWriter(t, done)
+}
+func TestJournalGroupConfigBounds(t *testing.T) {
+	for _, limit := range []int{-1, 1025} {
+		j, _, _ := testWriter(t)
+		j.GroupCommitMaxMessages = limit
+		if j.valid() == nil {
+			t.Fatalf("unsafe group size %d accepted", limit)
+		}
+	}
+	j, _, _ := testWriter(t)
+	j.BufDirPath = t.TempDir()
+	if err := j.valid(); err != nil {
+		t.Fatal(err)
+	}
+	if j.GroupCommitMaxMessages != 64 {
+		t.Fatal("wrong default group bound")
+	}
+}
+
+// Rotation may occur between group appends. It must sync the sealed predecessor
+// before the final group Sync covers the new active file. This uses actual
+// journal public APIs and reads every accepted record without an extra flush.
+type rotatingGroupStore struct {
+	*journal.Journal
+	ctx              context.Context
+	syncs, rotations int
+}
+
+func (s *rotatingGroupStore) WriteData(d *journal.Data) error {
+	if err := s.Journal.WriteData(d); err != nil {
+		return err
+	}
+	if d.ID == 3 {
+		s.rotations++
+		return s.Journal.Rotate(s.ctx)
+	}
+	return nil
+}
+func (s *rotatingGroupStore) Sync() error { s.syncs++; return s.Journal.Sync() }
+
+func TestJournalGroupFinalBarrierCoversRotatedPredecessor(t *testing.T) {
+	for _, compressed := range []bool{false, true} {
+		t.Run(fmt.Sprint(compressed), func(t *testing.T) {
+			j, ctx, _ := testWriter(t)
+			dir := t.TempDir()
+			jj, err := journal.NewJournal(journal.WithBufDirPath(dir), journal.WithIsCompress(compressed), journal.WithIsAggresiveGC(false), journal.WithFlushInterval(time.Hour))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = jj.Start(ctx); err != nil {
+				t.Fatal(err)
+			}
+			defer jj.Close()
+			s := &rotatingGroupStore{Journal: jj, ctx: ctx}
+			in := make(chan *library.FluentMsg, 17)
+			receipts := make([]chan error, 17)
+			for i := range receipts {
+				m, r := writerMessage(int64(i+1), true)
+				in <- m
+				receipts[i] = r
+			}
+			close(in)
+			waitWriter(t, writerRun(j, ctx, s, in))
+			for _, r := range receipts {
+				if err := writerReceipt(t, r); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if s.syncs != 1 || s.rotations != 1 {
+				t.Fatalf("barriers=%d rotations=%d", s.syncs, s.rotations)
+			}
+			names, err := filepath.Glob(filepath.Join(dir, "*.buf*"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(names) < 2 {
+				t.Fatal("rotation did not produce separate files")
+			}
+			seen := map[int64]bool{}
+			for _, name := range names {
+				fp, err := os.Open(name)
+				if err != nil {
+					t.Fatal(err)
+				}
+				dec, err := journal.NewDataDecoder(fp, compressed)
+				if err != nil {
+					fp.Close()
+					t.Fatal(err)
+				}
+				for {
+					d := &journal.Data{}
+					err = dec.Read(d)
+					if err == io.EOF {
+						break
+					}
+					if err != nil {
+						fp.Close()
+						t.Fatal(err)
+					}
+					if seen[d.ID] || d.ID < 1 || d.ID > 17 || d.Data["message"].(map[string]interface{})["payload"] != fmt.Sprintf("payload-%d", d.ID) {
+						fp.Close()
+						t.Fatal("rotated data corrupted")
+					}
+					seen[d.ID] = true
+				}
+				fp.Close()
+			}
+			if len(seen) != 17 {
+				t.Fatalf("only %d records durable after rotated group acceptance", len(seen))
+			}
+		})
+	}
+}
+func TestJournalGroupLaterSyncFailureDoesNotRevokeEarlierSuccess(t *testing.T) {
+	j, ctx, _ := testWriter(t)
+	j.GroupCommitMaxMessages = 7
+	in := make(chan *library.FluentMsg, 14)
+	rs := make([]chan error, 14)
+	for i := range rs {
+		m, r := writerMessage(int64(i+1), true)
+		in <- m
+		rs[i] = r
+	}
+	close(in)
+	want := errors.New("second group failed")
+	s := &writerStore{syncHook: func(ids []int64) error {
+		if len(ids) > 7 {
+			return want
+		}
+		return nil
+	}}
+	waitWriter(t, writerRun(j, ctx, s, in))
+	for i, r := range rs {
+		err := writerReceipt(t, r)
+		if i < 7 && err != nil {
+			t.Fatal(err)
+		}
+		if i >= 7 && !errors.Is(err, want) {
+			t.Fatalf("late failed barrier falsely accepted %d", i+1)
+		}
+	}
+	if len(j.outChan) != 7 {
+		t.Fatalf("output=%d", len(j.outChan))
+	}
+	for len(j.outChan) > 0 {
+		if (<-j.outChan).ID > 7 {
+			t.Fatal("failed group escaped")
+		}
+	}
+}

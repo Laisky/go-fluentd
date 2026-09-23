@@ -399,76 +399,11 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) error {
 		}
 	}()
 
-	// create data writer
-	go func() {
-		var (
-			data            = &journal.Data{Data: map[string]interface{}{}}
-			err             error
-			nRetry          int
-			maxRetry        = 2
-			ok              bool
-			msg             *library.FluentMsg
-			chani, counteri interface{}
-			msgChan         chan *library.FluentMsg
-			counter         *utils.Counter
-		)
-		if chani, ok = j.tag2JJInchanMap.Load(tag); !ok {
-			log.Logger.Panic("tag should in `j.tag2JJInchanMap`", zap.String("tag", tag))
-		}
-		msgChan = chani.(chan *library.FluentMsg)
-		if counteri, ok = j.tag2DataCounter.Load(tag); !ok {
-			log.Logger.Panic("tag should in `j.tag2DataCounter`", zap.String("tag", tag))
-		}
-		counter = counteri.(*utils.Counter)
+	// A single worker owns each tag's data writes and acceptance receipts.
+	dataChan, _ := j.tag2JJInchanMap.Load(tag)
+	dataCounter, _ := j.tag2DataCounter.Load(tag)
+	go j.runDataWriter(ctx, tag, jj, dataChan.(chan *library.FluentMsg), dataCounter.(*utils.Counter))
 
-		defer log.Logger.Info("journal data writer exit", zap.String("msg", fmt.Sprint(msg)))
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case msg, ok = <-msgChan:
-				if !ok {
-					log.Logger.Info("tag2JJInchan closed", zap.String("tag", tag))
-					return
-				}
-			}
-
-			// Routing filters may change Tag after persistence. Keep the journal
-			// owner separately so all acknowledgements return to this writer.
-			msg.JournalTag = tag
-			data.ID = msg.ID
-			data.Data["message"] = msg.Message
-			data.Data["tag"] = msg.Tag
-			nRetry = 0
-			counter.Count()
-			for nRetry < maxRetry {
-				if err = jj.WriteData(data); err != nil {
-					nRetry++
-					continue
-				}
-				break
-			}
-
-			if err == nil && msg.DurableAck != nil {
-				err = jj.Sync()
-			}
-			if err != nil {
-				log.Logger.Error("persist message", zap.Error(err), zap.String("tag", msg.Tag))
-				msg.CompleteAcceptance(err)
-				j.MsgPool.Put(msg)
-				continue
-			}
-			msg.CompleteAcceptance(nil)
-
-			select {
-			case j.outChan <- msg:
-			default:
-				// msg will reproduce in legacy stage,
-				// so you can discard msg without any side-effect.
-				j.MsgPool.Put(msg)
-			}
-		}
-	}()
 	return nil
 }
 

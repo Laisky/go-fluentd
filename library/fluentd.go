@@ -1,20 +1,12 @@
 package library
 
 import (
-	"bytes"
 	"io"
-	"sync"
 
 	"github.com/tinylib/msgp/msgp"
 )
 
 const BufByte = 1024 * 1024 * 4
-
-var fluentdWrapMsgPool = &sync.Pool{
-	New: func() interface{} {
-		return &[]interface{}{0, nil}
-	},
-}
 
 type TinyFluentRecord struct {
 	Timestamp uint64
@@ -22,10 +14,8 @@ type TinyFluentRecord struct {
 }
 
 type FluentEncoder struct {
-	batchEntries    []*[]interface{}
-	wrap, batchWrap FluentBatchMsg
-	writer          *msgp.Writer
-	msgBuf          *bytes.Buffer
+	wrap   FluentBatchMsg
+	writer *msgp.Writer
 }
 
 func NewFluentEncoder(writer io.Writer) *FluentEncoder {
@@ -34,9 +24,7 @@ func NewFluentEncoder(writer io.Writer) *FluentEncoder {
 		wrap: FluentBatchMsg{0, []interface{}{
 			[]interface{}{0, nil},
 		}},
-		batchWrap: FluentBatchMsg{0, []interface{}{}},
-		writer:    msgp.NewWriterSize(writer, BufByte),
-		msgBuf:    &bytes.Buffer{},
+		writer: msgp.NewWriterSize(writer, BufByte),
 	}
 
 	return enc
@@ -48,28 +36,31 @@ func (e *FluentEncoder) Encode(msg *FluentMsg) error {
 	return e.wrap.EncodeMsg(e.writer)
 }
 
-// EncodeBatch borrows distinct wrappers and returns each original pool object once.
-// Message references are cleared before returning wrappers to the shared pool.
-func (e *FluentEncoder) EncodeBatch(tag string, msgBatch []*FluentMsg) (err error) {
-	e.batchWrap[1] = e.batchWrap[1].([]interface{})[:0]
-	e.batchEntries = e.batchEntries[:0]
+// EncodeBatch writes the Forward envelope directly. Only payload values use
+// dynamic encoding; the fixed [tag, [[0, record], ...]] framing needs no pooled
+// interface wrappers or per-record temporary slices.
+func (e *FluentEncoder) EncodeBatch(tag string, msgBatch []*FluentMsg) error {
+	if err := e.writer.WriteArrayHeader(2); err != nil {
+		return err
+	}
+	if err := e.writer.WriteString(tag); err != nil {
+		return err
+	}
+	if err := e.writer.WriteArrayHeader(uint32(len(msgBatch))); err != nil {
+		return err
+	}
 	for _, msg := range msgBatch {
-		entry := fluentdWrapMsgPool.Get().(*[]interface{})
-		(*entry)[1] = msg.Message
-		e.batchEntries = append(e.batchEntries, entry)
-		e.batchWrap[1] = append(e.batchWrap[1].([]interface{}), *entry)
+		if err := e.writer.WriteArrayHeader(2); err != nil {
+			return err
+		}
+		if err := e.writer.WriteInt64(0); err != nil {
+			return err
+		}
+		if err := e.writer.WriteMapStrIntf(msg.Message); err != nil {
+			return err
+		}
 	}
-	e.batchWrap[0] = tag
-	err = e.batchWrap.EncodeMsg(e.writer)
-	for i, entry := range e.batchEntries {
-		(*entry)[1] = nil
-		fluentdWrapMsgPool.Put(entry)
-		e.batchEntries[i] = nil
-		e.batchWrap[1].([]interface{})[i] = nil
-	}
-	e.batchEntries = e.batchEntries[:0]
-	e.batchWrap[1] = e.batchWrap[1].([]interface{})[:0]
-	return err
+	return nil
 }
 
 func (e *FluentEncoder) Flush() error {

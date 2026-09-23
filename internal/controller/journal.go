@@ -178,7 +178,9 @@ func (j *Journal) initLegacyJJ(ctx context.Context) {
 
 	for _, dir := range files {
 		if dir.IsDir() {
-			j.createJournalRunner(ctx, dir.Name())
+			if err := j.createJournalRunner(ctx, dir.Name()); err != nil {
+				log.Logger.Panic("open retained journal", zap.Error(err))
+			}
 		}
 	}
 }
@@ -301,13 +303,13 @@ func (j *Journal) processLegacyMsg(ctx context.Context, out chan *library.Fluent
 
 // createJournalRunner create journal for a tag,
 // and return commit channel and dump channel
-func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
+func (j *Journal) createJournalRunner(ctx context.Context, tag string) error {
 	j.jjLock.Lock()
 	defer j.jjLock.Unlock()
 
 	var ok bool
 	if _, ok = j.tag2JMap.Load(tag); ok {
-		return // double check to prevent duplicate create jj runner
+		return nil // double check to prevent duplicate create jj runner
 	}
 
 	log.Logger.Info("create new journal.Journal", zap.String("tag", tag))
@@ -320,10 +322,11 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 		journal.WithIsAggresiveGC(false),
 	)
 	if err != nil {
-		log.Logger.Panic("new journal", zap.Error(err))
+		return errors.Wrap(err, "new journal")
 	}
 	if err = jj.Start(ctx); err != nil {
-		log.Logger.Panic("run journal", zap.Error(err))
+		jj.Close()
+		return errors.Wrap(err, "run journal")
 	}
 
 	if _, ok = j.tag2JMap.LoadOrStore(tag, jj); ok {
@@ -446,12 +449,16 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 				break
 			}
 
-			if err != nil && nRetry == maxRetry {
-				log.Logger.Error("try to write msg to journal got error",
-					zap.Error(err),
-					zap.String("tag", msg.Tag),
-				)
+			if err == nil && msg.DurableAck != nil {
+				err = jj.Sync()
 			}
+			if err != nil {
+				log.Logger.Error("persist message", zap.Error(err), zap.String("tag", msg.Tag))
+				msg.CompleteAcceptance(err)
+				j.MsgPool.Put(msg)
+				continue
+			}
+			msg.CompleteAcceptance(nil)
 
 			select {
 			case j.outChan <- msg:
@@ -462,6 +469,7 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) {
 			}
 		}
 	}()
+	return nil
 }
 
 func (j *Journal) GetOutChan() chan *library.FluentMsg {
@@ -549,8 +557,23 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 
 			log.Logger.Debug("try to dump msg", zap.String("tag", msg.Tag))
 			if jji, ok = j.tag2JJInchanMap.Load(msg.Tag); !ok {
-				j.createJournalRunner(ctx, msg.Tag)
+				if err := j.createJournalRunner(ctx, msg.Tag); err != nil {
+					log.Logger.Error("create message journal", zap.Error(err))
+					msg.CompleteAcceptance(err)
+					j.MsgPool.Put(msg)
+					continue
+				}
 				jji, _ = j.tag2JJInchanMap.Load(msg.Tag)
+			}
+			if msg.DurableAck != nil {
+				select {
+				case jji.(chan *library.FluentMsg) <- msg:
+				case <-ctx.Done():
+					msg.CompleteAcceptance(ctx.Err())
+					j.MsgPool.Put(msg)
+					return
+				}
+				continue
 			}
 
 			select {
@@ -609,7 +632,11 @@ func (j *Journal) startCommitRunner(ctx context.Context) {
 				commitTag = msg.Tag
 			}
 			if chani, ok = j.tag2JJCommitChanMap.Load(commitTag); !ok {
-				j.createJournalRunner(ctx, commitTag)
+				if err := j.createJournalRunner(ctx, commitTag); err != nil {
+					log.Logger.Error("create acknowledgement journal", zap.Error(err))
+					j.MsgPool.Put(msg)
+					continue
+				}
 				chani, _ = j.tag2JJCommitChanMap.Load(commitTag)
 			}
 

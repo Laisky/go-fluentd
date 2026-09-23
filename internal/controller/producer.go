@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"sync/atomic"
 
 	"gofluentd/internal/monitor"
 	"gofluentd/internal/senders"
@@ -44,6 +45,7 @@ type Producer struct {
 	// stores the count of each msg, if msg's count equals to the number of sender,
 	// will put the msg into successedChan.
 	discardMsgCountMap *sync.Map
+	pendingCount       atomic.Int64
 	counter            *utils.Counter
 	pMsgPool           *sync.Pool // pending msg pool
 
@@ -136,13 +138,7 @@ func (p *Producer) registerMonitor() {
 		metrics["discardChanLen"] = len(p.successedChan)
 		metrics["discardChanCap"] = cap(p.successedChan)
 
-		// get discardMsgCountMap length
-		nMsg := 0
-		p.discardMsgCountMap.Range(func(k, v interface{}) bool {
-			nMsg++
-			return true
-		})
-		metrics["waitToDiscardMsgNum"] = nMsg
+		metrics["waitToDiscardMsgNum"] = p.pendingCount.Load()
 		return metrics
 	})
 }
@@ -161,6 +157,7 @@ func (p *Producer) discardMsg(pmsg *pendingDiscardMsg) {
 func (p *Producer) runMsgCollector(ctx context.Context, tag2NSender *sync.Map, successedChan chan *library.FluentMsg) {
 	var (
 		cntToDiscard    int
+		wasPending      bool
 		ok, isSuccessed bool
 		itf             interface{}
 		msg             *library.FluentMsg
@@ -196,7 +193,7 @@ func (p *Producer) runMsgCollector(ctx context.Context, tag2NSender *sync.Map, s
 			cntToDiscard = itf.(int)
 		}
 
-		if itf, ok = p.discardMsgCountMap.Load(msg); !ok {
+		if itf, wasPending = p.discardMsgCountMap.Load(msg); !wasPending {
 			// create new pmsg
 			pmsg = p.pMsgPool.Get().(*pendingDiscardMsg)
 			pmsg.isAllSuccessed = isSuccessed
@@ -212,9 +209,15 @@ func (p *Producer) runMsgCollector(ctx context.Context, tag2NSender *sync.Map, s
 		if pmsg.count == cntToDiscard {
 			// msg already sent by all sender
 			p.discardMsgCountMap.Delete(pmsg.msg)
+			if wasPending {
+				p.pendingCount.Add(-1)
+			}
 			p.discardMsg(pmsg)
 		} else {
 			p.discardMsgCountMap.Store(pmsg.msg, pmsg)
+			if !wasPending {
+				p.pendingCount.Add(1)
+			}
 		}
 	}
 }

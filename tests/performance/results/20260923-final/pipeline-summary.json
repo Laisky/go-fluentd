@@ -1,0 +1,714 @@
+{
+  "gzip=False,concurrency=1": {
+    "before": {
+      "rate": 1265.0310973366354,
+      "rate_range": [
+        1249.677379736318,
+        1301.2164381208759
+      ],
+      "p99": 2.969789,
+      "samples": [
+        {
+          "count": 1024,
+          "concurrency": 1,
+          "gzip": false,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.810489028,
+          "delivered_seconds": 0.819411487,
+          "accepted_per_second": 1263.434746953786,
+          "delivered_per_second": 1249.677379736318,
+          "latency_ms": {
+            "p50": 0.628445,
+            "p95": 1.843861,
+            "p99": 3.318904,
+            "max": 4.951873
+          },
+          "app_cpu_seconds": 0.47,
+          "app_peak_rss_kib": 40476
+        },
+        {
+          "count": 1024,
+          "concurrency": 1,
+          "gzip": false,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.777822964,
+          "delivered_seconds": 0.786955936,
+          "accepted_per_second": 1316.4949447288368,
+          "delivered_per_second": 1301.2164381208759,
+          "latency_ms": {
+            "p50": 0.640189,
+            "p95": 1.52762,
+            "p99": 2.890042,
+            "max": 6.746283
+          },
+          "app_cpu_seconds": 0.45999999999999996,
+          "app_peak_rss_kib": 42416
+        },
+        {
+          "count": 1024,
+          "concurrency": 1,
+          "gzip": false,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.801121082,
+          "delivered_seconds": 0.809466267,
+          "accepted_per_second": 1278.2087789321215,
+          "delivered_per_second": 1265.0310973366354,
+          "latency_ms": {
+            "p50": 0.64778,
+            "p95": 1.538544,
+            "p99": 2.969789,
+            "max": 5.254906
+          },
+          "app_cpu_seconds": 0.45999999999999996,
+          "app_peak_rss_kib": 44448
+        }
+      ]
+    },
+    "after": {
+      "rate": 1249.5450173522388,
+      "rate_range": [
+        1236.1849749741837,
+        1278.8873887537043
+      ],
+      "p99": 3.051502,
+      "samples": [
+        {
+          "count": 1024,
+          "concurrency": 1,
+          "gzip": false,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.811310607,
+          "delivered_seconds": 0.819498286,
+          "accepted_per_second": 1262.1553214821952,
+          "delivered_per_second": 1249.5450173522388,
+          "latency_ms": {
+            "p50": 0.645739,
+            "p95": 1.535155,
+            "p99": 2.981452,
+            "max": 27.866603
+          },
+          "app_cpu_seconds": 0.45999999999999996,
+          "app_peak_rss_kib": 40328
+        },
+        {
+          "count": 1024,
+          "concurrency": 1,
+          "gzip": false,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.819020261,
+          "delivered_seconds": 0.828354996,
+          "accepted_per_second": 1250.2743201367518,
+          "delivered_per_second": 1236.1849749741837,
+          "latency_ms": {
+            "p50": 0.663553,
+            "p95": 1.648849,
+            "p99": 3.096989,
+            "max": 6.017107
+          },
+          "app_cpu_seconds": 0.45999999999999996,
+          "app_peak_rss_kib": 40400
+        },
+        {
+          "count": 1024,
+          "concurrency": 1,
+          "gzip": false,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.791921866,
+          "delivered_seconds": 0.800695987,
+          "accepted_per_second": 1293.0568582128278,
+          "delivered_per_second": 1278.8873887537043,
+          "latency_ms": {
+            "p50": 0.644096,
+            "p95": 1.569249,
+            "p99": 3.051502,
+            "max": 5.703551
+          },
+          "app_cpu_seconds": 0.45999999999999996,
+          "app_peak_rss_kib": 42576
+        }
+      ]
+    }
+  },
+  "gzip=False,concurrency=16": {
+    "before": {
+      "rate": 1837.2931048725864,
+      "rate_range": [
+        1827.0703695456973,
+        1900.551726639829
+      ],
+      "p99": 14.031404,
+      "samples": [
+        {
+          "count": 1024,
+          "concurrency": 16,
+          "gzip": false,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.528775154,
+          "delivered_seconds": 0.538790913,
+          "accepted_per_second": 1936.5508992882824,
+          "delivered_per_second": 1900.551726639829,
+          "latency_ms": {
+            "p50": 7.714216,
+            "p95": 11.981548,
+            "p99": 14.031404,
+            "max": 18.230881
+          },
+          "app_cpu_seconds": 0.43,
+          "app_peak_rss_kib": 42460
+        },
+        {
+          "count": 1024,
+          "concurrency": 16,
+          "gzip": false,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.551043074,
+          "delivered_seconds": 0.560460077,
+          "accepted_per_second": 1858.2939307572171,
+          "delivered_per_second": 1827.0703695456973,
+          "latency_ms": {
+            "p50": 8.002288,
+            "p95": 12.295554,
+            "p99": 13.975891,
+            "max": 15.971928
+          },
+          "app_cpu_seconds": 0.43,
+          "app_peak_rss_kib": 42516
+        },
+        {
+          "count": 1024,
+          "concurrency": 16,
+          "gzip": false,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.548241303,
+          "delivered_seconds": 0.557341666,
+          "accepted_per_second": 1867.7906870508077,
+          "delivered_per_second": 1837.2931048725864,
+          "latency_ms": {
+            "p50": 7.968722,
+            "p95": 11.83254,
+            "p99": 14.25835,
+            "max": 15.521916
+          },
+          "app_cpu_seconds": 0.37,
+          "app_peak_rss_kib": 42444
+        }
+      ]
+    },
+    "after": {
+      "rate": 1812.7775042157652,
+      "rate_range": [
+        1507.303527371696,
+        1849.2648040993158
+      ],
+      "p99": 13.904244,
+      "samples": [
+        {
+          "count": 1024,
+          "concurrency": 16,
+          "gzip": false,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.669378105,
+          "delivered_seconds": 0.679358856,
+          "accepted_per_second": 1529.778151318529,
+          "delivered_per_second": 1507.303527371696,
+          "latency_ms": {
+            "p50": 9.611279,
+            "p95": 16.20645,
+            "p99": 23.803094,
+            "max": 27.261881
+          },
+          "app_cpu_seconds": 0.45999999999999996,
+          "app_peak_rss_kib": 42476
+        },
+        {
+          "count": 1024,
+          "concurrency": 16,
+          "gzip": false,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.544487444,
+          "delivered_seconds": 0.553733569,
+          "accepted_per_second": 1880.6677936911249,
+          "delivered_per_second": 1849.2648040993158,
+          "latency_ms": {
+            "p50": 8.162804,
+            "p95": 11.724382,
+            "p99": 13.22396,
+            "max": 14.225585
+          },
+          "app_cpu_seconds": 0.38,
+          "app_peak_rss_kib": 44424
+        },
+        {
+          "count": 1024,
+          "concurrency": 16,
+          "gzip": false,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.555536831,
+          "delivered_seconds": 0.564879031,
+          "accepted_per_second": 1843.2621256753364,
+          "delivered_per_second": 1812.7775042157652,
+          "latency_ms": {
+            "p50": 8.059225,
+            "p95": 12.275536,
+            "p99": 13.904244,
+            "max": 15.642638
+          },
+          "app_cpu_seconds": 0.39,
+          "app_peak_rss_kib": 42448
+        }
+      ]
+    }
+  },
+  "gzip=True,concurrency=1": {
+    "before": {
+      "rate": 1192.4707314172715,
+      "rate_range": [
+        1187.8745579317292,
+        1194.675787817194
+      ],
+      "p99": 2.904539,
+      "samples": [
+        {
+          "count": 1024,
+          "concurrency": 1,
+          "gzip": true,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.850101666,
+          "delivered_seconds": 0.858721286,
+          "accepted_per_second": 1204.5618082578842,
+          "delivered_per_second": 1192.4707314172715,
+          "latency_ms": {
+            "p50": 0.700191,
+            "p95": 1.666362,
+            "p99": 2.847742,
+            "max": 6.342014
+          },
+          "app_cpu_seconds": 0.5,
+          "app_peak_rss_kib": 60972
+        },
+        {
+          "count": 1024,
+          "concurrency": 1,
+          "gzip": true,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.85390245,
+          "delivered_seconds": 0.862043886,
+          "accepted_per_second": 1199.2002130922567,
+          "delivered_per_second": 1187.8745579317292,
+          "latency_ms": {
+            "p50": 0.695082,
+            "p95": 1.812725,
+            "p99": 2.904539,
+            "max": 5.011686
+          },
+          "app_cpu_seconds": 0.5,
+          "app_peak_rss_kib": 58912
+        },
+        {
+          "count": 1024,
+          "concurrency": 1,
+          "gzip": true,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.849210933,
+          "delivered_seconds": 0.857136313,
+          "accepted_per_second": 1205.8252669716867,
+          "delivered_per_second": 1194.675787817194,
+          "latency_ms": {
+            "p50": 0.700953,
+            "p95": 1.615457,
+            "p99": 2.93151,
+            "max": 4.401865
+          },
+          "app_cpu_seconds": 0.5,
+          "app_peak_rss_kib": 58848
+        }
+      ]
+    },
+    "after": {
+      "rate": 1168.6676865278055,
+      "rate_range": [
+        1162.7690357140264,
+        1194.8341541373352
+      ],
+      "p99": 3.16692,
+      "samples": [
+        {
+          "count": 1024,
+          "concurrency": 1,
+          "gzip": true,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.872821468,
+          "delivered_seconds": 0.880656406,
+          "accepted_per_second": 1173.2067066892996,
+          "delivered_per_second": 1162.7690357140264,
+          "latency_ms": {
+            "p50": 0.723235,
+            "p95": 1.694393,
+            "p99": 3.16692,
+            "max": 4.380201
+          },
+          "app_cpu_seconds": 0.51,
+          "app_peak_rss_kib": 58880
+        },
+        {
+          "count": 1024,
+          "concurrency": 1,
+          "gzip": true,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.844983411,
+          "delivered_seconds": 0.857022706,
+          "accepted_per_second": 1211.8581106676897,
+          "delivered_per_second": 1194.8341541373352,
+          "latency_ms": {
+            "p50": 0.69918,
+            "p95": 1.524805,
+            "p99": 3.145059,
+            "max": 5.761549
+          },
+          "app_cpu_seconds": 0.5,
+          "app_peak_rss_kib": 58816
+        },
+        {
+          "count": 1024,
+          "concurrency": 1,
+          "gzip": true,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.868303299,
+          "delivered_seconds": 0.876211443,
+          "accepted_per_second": 1179.3114239912613,
+          "delivered_per_second": 1168.6676865278055,
+          "latency_ms": {
+            "p50": 0.712294,
+            "p95": 1.674192,
+            "p99": 3.382412,
+            "max": 4.425873
+          },
+          "app_cpu_seconds": 0.5,
+          "app_peak_rss_kib": 58844
+        }
+      ]
+    }
+  },
+  "gzip=True,concurrency=16": {
+    "before": {
+      "rate": 1770.3895457100377,
+      "rate_range": [
+        1769.9810634323826,
+        1820.717940555355
+      ],
+      "p99": 14.466279,
+      "samples": [
+        {
+          "count": 1024,
+          "concurrency": 16,
+          "gzip": true,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.553131954,
+          "delivered_seconds": 0.562415505,
+          "accepted_per_second": 1851.2761604078291,
+          "delivered_per_second": 1820.717940555355,
+          "latency_ms": {
+            "p50": 8.15049,
+            "p95": 11.938432,
+            "p99": 14.008357,
+            "max": 17.055229
+          },
+          "app_cpu_seconds": 0.45999999999999996,
+          "app_peak_rss_kib": 61092
+        },
+        {
+          "count": 1024,
+          "concurrency": 16,
+          "gzip": true,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.569520809,
+          "delivered_seconds": 0.578403777,
+          "accepted_per_second": 1798.0027837753685,
+          "delivered_per_second": 1770.3895457100377,
+          "latency_ms": {
+            "p50": 8.365235,
+            "p95": 12.640812,
+            "p99": 14.466279,
+            "max": 14.850149
+          },
+          "app_cpu_seconds": 0.45999999999999996,
+          "app_peak_rss_kib": 60964
+        },
+        {
+          "count": 1024,
+          "concurrency": 16,
+          "gzip": true,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.569103115,
+          "delivered_seconds": 0.578537263,
+          "accepted_per_second": 1799.3224303472666,
+          "delivered_per_second": 1769.9810634323826,
+          "latency_ms": {
+            "p50": 8.123011,
+            "p95": 12.618108,
+            "p99": 14.763536,
+            "max": 15.897988
+          },
+          "app_cpu_seconds": 0.44,
+          "app_peak_rss_kib": 60916
+        }
+      ]
+    },
+    "after": {
+      "rate": 1742.8404916793347,
+      "rate_range": [
+        1725.0067021732568,
+        1767.7378828512199
+      ],
+      "p99": 14.437239,
+      "samples": [
+        {
+          "count": 1024,
+          "concurrency": 16,
+          "gzip": true,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.578623882,
+          "delivered_seconds": 0.587546597,
+          "accepted_per_second": 1769.7161003112553,
+          "delivered_per_second": 1742.8404916793347,
+          "latency_ms": {
+            "p50": 8.424532,
+            "p95": 12.400766,
+            "p99": 14.437239,
+            "max": 16.26815
+          },
+          "app_cpu_seconds": 0.44,
+          "app_peak_rss_kib": 60900
+        },
+        {
+          "count": 1024,
+          "concurrency": 16,
+          "gzip": true,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.568111045,
+          "delivered_seconds": 0.579271401,
+          "accepted_per_second": 1802.4645164221372,
+          "delivered_per_second": 1767.7378828512199,
+          "latency_ms": {
+            "p50": 8.290265,
+            "p95": 13.395042,
+            "p99": 15.396456,
+            "max": 18.770474
+          },
+          "app_cpu_seconds": 0.44,
+          "app_peak_rss_kib": 61096
+        },
+        {
+          "count": 1024,
+          "concurrency": 16,
+          "gzip": true,
+          "durable_ack": true,
+          "payload_characters": 2048,
+          "sink_batch": 64,
+          "mean_wire_bytes": 2227.916015625,
+          "accepted": 1024,
+          "delivered_per_sink": [
+            1024,
+            1024
+          ],
+          "accepted_seconds": 0.58416594,
+          "delivered_seconds": 0.593620882,
+          "accepted_per_second": 1752.9265742538842,
+          "delivered_per_second": 1725.0067021732568,
+          "latency_ms": {
+            "p50": 8.511624,
+            "p95": 12.843936,
+            "p99": 14.222996,
+            "max": 16.152916
+          },
+          "app_cpu_seconds": 0.45999999999999996,
+          "app_peak_rss_kib": 60992
+        }
+      ]
+    }
+  }
+}

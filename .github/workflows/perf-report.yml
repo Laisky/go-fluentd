@@ -1,0 +1,148 @@
+name: Performance report publication
+on:
+  push:
+    branches: [perf/measured-pipeline-20260923]
+    paths: [.github/workflows/perf-report.yml]
+permissions:
+  contents: write
+  actions: read
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+      - name: Download the immutable measured artifact and validate its digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/Laisky/go-fluentd/actions/artifacts/10749730827/zip > /tmp/final-performance.zip
+          echo '62e8abf2b79982ca12a6675c5862843f300a6d60103b796c41e8fd4da5c1e33b  /tmp/final-performance.zip' | sha256sum -c -
+      - name: Recompute all summaries and independently reconcile persisted peer ledgers
+        run: |
+          python3 - <<'PY'
+          import json,math,statistics,sys,zipfile
+          from pathlib import Path
+          sys.path[:0]=['tests/performance','tests/delivery']
+          from compare import parse,summarize
+          from test_delivery import verify_manifest,events
+          z=zipfile.ZipFile('/tmp/final-performance.zip')
+          before={};after={};raw=[]
+          for name in sorted(z.namelist()):
+              if name.startswith('components/') and name.endswith('.txt'):
+                  text=z.read(name).decode();raw.append('\n# '+name+'\n'+text)
+                  dest=before if '-before-' in name else after
+                  for key,values in parse(text).items():dest.setdefault(key,[]).extend(values)
+          summary=summarize(before,after,5)
+          assert len(summary)==35 and summary==json.loads(z.read('components/summary.json'))
+          runs={};verified=0
+          for name in sorted(z.namelist()):
+              if name.startswith('pipeline-') and name.endswith('/pipeline.json'):
+                  run=json.loads(z.read(name));assert len(run['samples'])==4;runs[name.split('/')[0]]=run
+              if name.startswith('pipeline-') and name.endswith('/sample.json'):
+                  prefix=name.rsplit('/',1)[0]+'/'
+                  sample=json.loads(z.read(name));requests=json.loads(z.read(prefix+'requests.json'))
+                  assert sample['accepted']==1024 and sample['delivered_per_sink']==[1024,1024]
+                  assert len(requests)==1024 and all(r['status']==200 for r in requests)
+                  submitted=[{k:v for k,v in json.loads(line).items() if k not in ('ts','sig')} for line in z.read(prefix+'producer-manifest.jsonl').decode().splitlines()]
+                  assert len(submitted)==1024
+                  for peer in ('sink-0.jsonl','sink-1.jsonl'):
+                      records=[json.loads(line) for line in z.read(prefix+peer).decode().splitlines()]
+                      assert len(records)==1025
+                      verify_manifest(events('warm',1)+submitted,records)
+                  for q in (.5,.95,.99):
+                      measured=sorted(r['latency_ms'] for r in requests)[math.ceil(len(requests)*q)-1]
+                      assert math.isclose(measured,sample['latency_ms'][f'p{int(q*100)}'],abs_tol=1e-9)
+                  verified+=1
+          assert verified==24 and len(runs)==6
+          pipeline={}
+          for compressed in (False,True):
+              for concurrency in (1,16):
+                  row={}
+                  for version in ('before','after'):
+                      values=[v for name,run in runs.items() if name.endswith(version) for v in run['samples'] if v['gzip']==compressed and v['concurrency']==concurrency]
+                      assert len(values)==3
+                      row[version]={'rate':statistics.median(v['delivered_per_second'] for v in values),'rate_range':[min(v['delivered_per_second'] for v in values),max(v['delivered_per_second'] for v in values)],'p99':statistics.median(v['latency_ms']['p99'] for v in values),'samples':values}
+                  pipeline[f'gzip={compressed},concurrency={concurrency}']=row
+          target=Path('tests/performance/results/20260923-final');target.mkdir(parents=True,exist_ok=False)
+          (target/'components.jsonl').write_text(''.join(json.dumps({'name':k,**v},separators=(',',':'))+'\n' for k,v in sorted(summary.items())))
+          (target/'raw-benchmarks.txt').write_text(''.join(raw))
+          (target/'pipeline.json').write_text(json.dumps(runs,separators=(',',':'))+'\n')
+          (target/'pipeline-summary.json').write_text(json.dumps(pipeline,indent=2)+'\n')
+          for name in ('environment.txt','components/manifest.json','components/summary.md','recovery-before-alloc-top.txt','recovery-after-alloc-top.txt','encoder-before-cpu-top.txt','encoder-after-cpu-top.txt'):
+              (target/Path(name).name).write_bytes(z.read(name))
+          intro='''# Measured performance iterations — 2026-09-23
+
+          ## Result and evidence
+
+          Six measured source iterations are complete: five targeted improvements and an adaptive-buffer correction after rejecting a reproducible regression. The gains are in decoder allocations/recovery, confirmation refresh, Fluent encoding and pending-message scraping. **There is no demonstrated end-to-end durable-throughput gain.** No writer flush, file/directory Sync, durable-acceptance response, TTL policy, or acknowledgement guarantee was weakened.
+
+          Baseline application: `d5b3e67fcf22daad1e6c667b66277bc8bbb29b7c`. Measured final source/harness head: `0e03e0b3fe32e6c0cdd19e4cb34c738ab39560fe`; CI tested merge `bf9ae9247ebfb1609cc4d0a4a2356e77f1951d5a`. Journal dependency: `v1.1.7-0.20260923121116-02361be10360` from companion `Laisky/go-journal#4`. This report and the retained dataset are documentation-only additions after those measurements.
+
+          - Final paired performance: https://github.com/Laisky/go-fluentd/actions/runs/35859450831
+          - Final source build/vet, coverage/race and Docker: https://github.com/Laisky/go-fluentd/actions/runs/35859450880
+          - Executable crash/delivery contracts: https://github.com/Laisky/go-fluentd/actions/runs/35859450942
+          - CodeQL: https://github.com/Laisky/go-fluentd/actions/runs/35859450881
+          - Journal standalone correctness: https://github.com/Laisky/go-journal/actions/runs/35858932106
+
+          All of these runs passed. No merge or deployment was performed. See [reproduction commands and workload boundaries](../tests/performance/README.md).
+
+          ## Measurement discipline
+
+          Go 1.27.1, Linux amd64, GOMAXPROCS=2; hosted AMD EPYC 7763 VM with four visible vCPUs. Every final before/after pair ran on the same runner using exactly the same current harness and work units. Five counterbalanced repetitions cover all 35 component workloads; three paired repetitions cover each of four full-process profiles. Raw values, observed ranges, all slower/unchanged cases, binary hashes and environment are retained in [the final dataset](../tests/performance/results/20260923-final/).
+
+          The filesystem was ext4 on `/dev/sda1`, mounted with `nobarrier`, `data=writeback` and `journal_async_commit`. These are comparative runner measurements, **not production SSD capacity or physical power-loss qualification**. Sync calls remain present, but a CI storage stack must not be treated as a validated production durability platform. Reads are cache-hot, and the usual payload is about 2 KiB of highly compressible text plus metadata. Instrumented race tests and profiling runs are separate from timing samples.
+
+          ## Iteration decisions
+
+          | Iteration | Committed change | Quantitative decision |
+          |---|---|---|
+          | 1 | `d61f56b` (journal): smaller decoder buffers | Local allocation profile attributed 93.95% of allocated bytes in a small recovery probe to the two 4 MiB reader buffers. This justified testing bounded lookahead, not changing writer buffers. |
+          | 2 | `9201e2b` (journal): one atomic Swap for refreshed confirmations | Six to two allocations per refresh. Existing generation locking, unique cardinality and non-consuming lookups are retained. |
+          | 3 | `8e01d4a` (application): direct Fluent Forward framing | Typed framing eliminates temporary wrappers, slice boxing and their steady-state allocations. Independent wire and failure tests pass. |
+          | 4 | `f1fae29` (journal): fixed-width ID scratch reuse | Four to three allocations per unique ID write. Small timing changes were inconsistent; this is an allocation reduction, not a claimed ID-write throughput win. |
+          | 5 | `062e8d2` (application): event-maintained pending gauge | The pending-message count changes only when a partially acknowledged message enters or leaves the existing map. No periodic scan of all pending records is needed. |
+          | 6 | `052e2a2` (journal): adaptive plain-file read-ahead | Reject the universal 64 KiB policy after a 14.7% large plain-scan regression. Keep 4 MiB read-ahead for uncompressed regular files at least 4 MiB long; keep other readers at 64 KiB. |
+
+          The rejected fixed-size campaign is [retained in full](../tests/performance/results/20260923-fixed64k/): large plain recovery was 6.921 ms baseline versus 7.937 ms candidate with non-overlapping observed ranges. In the corrected campaign it is 7.078 ms baseline versus 5.568 ms candidate. This comparison uses each campaign's own paired baseline; values from different runners are not mixed into a speedup calculation.
+
+          ## Complete final component measurements
+
+          Negative change means less time per operation. Recovery/replay rows describe a whole scan; encoder rows describe a batch. `components.jsonl` retains the explicit work-unit denominator and normalized rate. Monitor operations are scrapes, not messages. Allocated bytes per operation are not whole-process RSS.
+
+          '''
+          # Dedent the literal without altering dynamically generated tables.
+          import textwrap
+          intro=textwrap.dedent(intro)
+          table=z.read('components/summary.md').decode().split('| Workload',1)[1]
+          text=intro+'| Workload'+table
+          text+='\n## Durable full-process results\n\nEach profile has 1,024 timed accepted events plus one excluded warmup event, two independently fsynced sinks, batches of 64, and per-record durable HTTP acceptance. Both persisted sink ledgers were reread and reconciled against the producer manifest. All **24,576 timed accepted events produced 49,152 expected sink deliveries**, with no missing, extra or duplicate event. Latency values below are medians of the three per-run P99 values, not an open-loop SLO.\n\n| Profile | Before delivered msg/s | After delivered msg/s | Change | Before P99 ms | After P99 ms |\n|---|---:|---:|---:|---:|---:|\n'
+          for name,row in pipeline.items():
+              a,b=row['before'],row['after'];change=(b['rate']/a['rate']-1)*100
+              text+=f"| `{name}` | {a['rate']:,.1f} | {b['rate']:,.1f} | {change:+.1f}% | {a['p99']:.3f} | {b['p99']:.3f} |\n"
+          text+='''
+          The final medians are 1.2–2.0% lower, so no end-to-end speedup is claimed. The earlier rejected campaign also had lower pipeline medians. Raw ranges, per-profile CPU seconds, peak RSS and latency samples remain visible; the final gzip/concurrency-16 profile has a slightly lower candidate throughput range, not evidence to hide. These small differences do not establish a causal production regression, but neither do they support a claim of higher throughput.
+
+          The remaining per-record durable-write cost is visible directly: plain append plus Sync is 324.4 versus 326.5 microseconds per record; gzip is 415.8 versus 409.7 microseconds. Neither is a meaningful improvement. Final-only Sync and per-64-record Sync are separate diagnostic workloads, not interchangeable guarantees. The ES output used in this pipeline does not execute the Fluent wire encoder, so an encoder microbenchmark improvement cannot be promoted to a pipeline speedup.
+
+          ## Correctness and next measured bottleneck
+
+          New controls validate large plain/gzip records, byte-exact acknowledgement encoding, truncated ID errors, concurrent refresh/cardinality, exact Fluent frames and real all-sender pending transitions. Existing build/vet, coverage floors, five shuffled full-suite race runs, ten repeated component/regression race runs, two seeds of 21 full-process delivery contracts, Docker smoke/test images, and journal recovery tests remain enabled. Temporary source-publication workflows are removed from the final tree; normal performance CI is read-only and retains all samples rather than enforcing noisy timing thresholds.
+
+          No production Kafka/Elasticsearch cluster, cold storage device, arbitrary payload distribution, unbounded backlog, or power-loss guarantee is inferred from this suite. The protocol-peer/client cost is included in the closed-loop pipeline measurement.
+
+          The next substantial throughput target is a separately specified group-commit design: preserve success-after-Sync while bounding the wait, propagating shared Sync errors and validating crash cut points. That design is not implemented in this change. Removing Sync or comparing a weaker acknowledgement policy would not be an acceptable optimization.
+          '''
+          Path('docs/performance.md').write_text(textwrap.dedent(text))
+          print('verified',len(summary),'component workloads and',verified,'complete process samples')
+          PY
+          python3 -m unittest discover -s tests/performance -p 'test_*.py'
+      - name: Push only the report and immutable measurement evidence
+        run: |
+          git config user.name Laisky
+          git config user.email public@laisky.com
+          git add docs/performance.md tests/performance/results/20260923-final
+          git commit -m 'docs(perf): record final paired results, rejected regression and durable-throughput limits'
+          git push origin HEAD:refs/heads/perf/measured-pipeline-20260923

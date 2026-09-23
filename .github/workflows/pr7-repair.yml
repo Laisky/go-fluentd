@@ -1,0 +1,61 @@
+name: PR 7 repair verification
+on:
+  push:
+    branches: [test/component-behavior-coverage]
+    paths: [.github/workflows/pr7-repair.yml]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.x'
+      - name: Capture sources and integration conflicts
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/pr7-evidence
+          git bundle create /tmp/pr7-evidence/repository.bundle --all
+          git log --oneline -20 origin/master > /tmp/pr7-evidence/master-log.txt
+          git diff --stat origin/master HEAD | tee /tmp/pr7-evidence/diff-stat.txt
+          git diff origin/master HEAD -- '*.go' '.scripts/*' '.github/workflows/go.yml' > /tmp/pr7-evidence/tree-diff.patch
+          git config user.name 'PR 7 diagnostic'
+          git config user.email 'noreply@github.com'
+          set +e
+          git merge --no-commit --no-ff origin/master > /tmp/pr7-evidence/merge.txt 2>&1
+          merge_status=$?
+          set -e
+          cat /tmp/pr7-evidence/merge.txt
+          if [ "$merge_status" -gt 1 ]; then exit "$merge_status"; fi
+          git diff --name-only --diff-filter=U | tee /tmp/pr7-evidence/conflicts.txt
+          while IFS= read -r path; do
+            if git cat-file -e "origin/master:$path"; then
+              git restore --source=origin/master --staged --worktree -- "$path"
+            else
+              git rm -- "$path"
+            fi
+          done < /tmp/pr7-evidence/conflicts.txt
+          git diff --cached --stat origin/master | tee /tmp/pr7-evidence/candidate-stat.txt
+          git diff --cached origin/master > /tmp/pr7-evidence/candidate.patch
+          git archive "$(git write-tree)" > /tmp/pr7-evidence/candidate.tar
+      - name: Test diagnostic candidate
+        shell: bash
+        run: |
+          set -o pipefail
+          go version
+          go test -mod=readonly -count=1 -timeout=180s ./... 2>&1 | tee /tmp/pr7-evidence/candidate-test.txt
+      - name: Retain diagnostic evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pr7-diagnostic
+          path: /tmp/pr7-evidence
+          if-no-files-found: error
+          retention-days: 7

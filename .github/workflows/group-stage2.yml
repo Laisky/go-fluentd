@@ -1,0 +1,78 @@
+name: Durable group iteration
+on:
+  push:
+    branches: [perf/durable-group-commit-20260923]
+    paths: [.github/workflows/group-stage2.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GOMAXPROCS: '2'
+      GORACE: 'halt_on_error=1 exitcode=66'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.x'
+      - name: Build per-record baseline before applying candidate
+        run: |
+          mkdir -p "$RUNNER_TEMP/group-iteration"
+          go version > "$RUNNER_TEMP/group-iteration/environment.txt"
+          uname -a >> "$RUNNER_TEMP/group-iteration/environment.txt"
+          lscpu >> "$RUNNER_TEMP/group-iteration/environment.txt"
+          findmnt -T "$RUNNER_TEMP" >> "$RUNNER_TEMP/group-iteration/environment.txt"
+          sha256sum internal/controller/journal_writer_bench_test.go > "$RUNNER_TEMP/group-iteration/harness.txt"
+          go test -mod=readonly -c -o "$RUNNER_TEMP/before-service" ./internal/controller
+      - name: Apply the hash-verified locally tested candidate
+        run: |
+          python3 - <<'PY'
+          import base64,gzip,hashlib,subprocess
+          from pathlib import Path
+          patch=gzip.decompress(base64.b64decode(Path('.scripts/group-stage2.patch.b64').read_text()))
+          assert hashlib.sha256(patch).hexdigest()=='7baaa7d904f1d5d2b8a2633506bc9c3a4ce24d39b6ee68a62f21aaaa1de62335'
+          subprocess.run(['git','apply','--check'],input=patch,check=True)
+          subprocess.run(['git','apply','--index'],input=patch,check=True)
+          PY
+          sha256sum -c "$RUNNER_TEMP/group-iteration/harness.txt"
+          go test -mod=readonly -c -o "$RUNNER_TEMP/after-service" ./internal/controller
+      - name: Five paired real-journal measurements with unchanged Sync semantics
+        run: |
+          for n in 0 1 2 3 4; do
+            order='before after'; if [ $((n % 2)) -eq 1 ]; then order='after before'; fi
+            for version in $order; do
+              "$RUNNER_TEMP/$version-service" -test.run='^$' -test.bench='^BenchmarkJournalDurableService' -test.benchtime=2048x -test.count=1 > "$RUNNER_TEMP/group-iteration/$n-$version.txt"
+            done
+          done
+      - name: Full correctness and repeated group-boundary tests
+        run: |
+          go mod verify
+          go build -mod=readonly ./...
+          go vet -mod=readonly ./...
+          go test -mod=readonly -count=1 -timeout=180s ./...
+          go test -mod=readonly -race -count=5 -shuffle=on -timeout=180s ./...
+          go test -mod=readonly -race -count=20 -shuffle=on -timeout=180s -run '^TestJournal' ./internal/controller
+          go build -mod=readonly -race -o "$RUNNER_TEMP/after-race" .
+          python3 tests/delivery/run.py --binary "$RUNNER_TEMP/after-race" --artifacts "$RUNNER_TEMP/group-iteration/delivery" --seed 127
+          python3 - <<'PY'
+          import os,json
+          from pathlib import Path
+          r=json.loads((Path(os.environ['RUNNER_TEMP'])/'group-iteration/delivery/results.json').read_text())
+          assert r['passed'] and r['run']==r['expected']==27,r
+          PY
+      - name: Commit and push the measured candidate without force
+        run: |
+          test "$(git ls-remote origin refs/heads/perf/durable-group-commit-20260923 | cut -f1)" = "${{ github.sha }}"
+          git -c user.name=Laisky -c user.email=public@laisky.com commit -m 'perf(journal): share Sync across bounded ready-message groups without delaying idle traffic'
+          git push origin HEAD:refs/heads/perf/durable-group-commit-20260923
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: group-iteration
+          path: ${{ runner.temp }}/group-iteration/
+          retention-days: 14
+          if-no-files-found: error

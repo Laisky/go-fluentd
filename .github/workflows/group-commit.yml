@@ -49,6 +49,9 @@ jobs:
           echo "TMPDIR=$RUNNER_TEMP/group-files" >> "$GITHUB_ENV"
           git worktree add --detach "$RUNNER_TEMP/group-before" "$BASELINE"
           git worktree add --detach "$RUNNER_TEMP/group-service-before" "$SERVICE_BASELINE"
+          # Both implementations receive identical benchmark code. The historical
+          # config ignores the new optional JSON field and remains per-record.
+          cp internal/controller/journal_writer_bench_test.go "$RUNNER_TEMP/group-service-before/internal/controller/journal_writer_bench_test.go"
           cmp internal/controller/journal_writer_bench_test.go "$RUNNER_TEMP/group-service-before/internal/controller/journal_writer_bench_test.go"
           python3 -m unittest discover -s tests/performance -p 'test_*.py'
           go mod verify
@@ -77,6 +80,12 @@ jobs:
             --output "$RUNNER_TEMP/group-results/measurements" --repeats 6 --count 2048 --pipeline-count 8192 "${args[@]}" \
             > "$RUNNER_TEMP/group-results/run.log" 2>&1
           git diff --exit-code -- go.mod go.sum
+      - name: Independently reconcile persisted cohorts, policies and reported measurements
+        if: matrix.mode == 'pipeline'
+        run: |
+          python3 tests/performance/audit_group_evidence.py \
+            --input "$RUNNER_TEMP/group-results/measurements" \
+            --output "$RUNNER_TEMP/group-results/ledger-audit.json" --repeats 6 --count 8192
       - name: Independently verify barrier ordering, errors and rotation under race detection
         if: matrix.mode == 'service'
         run: go test -mod=readonly -race -count=20 -shuffle=on -timeout=180s -run '^TestJournal' ./internal/controller

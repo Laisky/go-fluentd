@@ -17,3 +17,21 @@ Group work is bounded. The initial candidate drains only immediately available m
 5. Commit each validated stage separately. Reject or revise candidates whose apparent gain comes from weakened durability, missing output, fixture costs, or unacceptable low-load latency.
 
 No result is claimed in this specification. The final measured report will link the exact tested revision and raw evidence. Kernel/process failure tests are not physical power-loss qualification; filesystem synchronization must be honored by production storage.
+
+## Measured rollout correction
+
+The six-pair, 8,192-event campaign on PR head `010e5c1` found concurrent gains,
+but the uncompressed single-client delivered-rate median was 11.6% lower.
+Same-binary single-client controls were mixed too. The implementation therefore
+keeps **per-record Sync by default** (`group_commit_max_messages: 0` or `1`).
+Operators explicitly opt into ready-only grouping with `64`; the configurable
+upper bound remains 1,024 and there is no timer to wait for a full group.
+This is a conservative rollout policy, not a claim that changing the default
+made single-client execution faster. Both modes retain success-after-Sync.
+
+Measurement scripts explicitly set the compared policies, rather than silently
+relying on a default. Permanent delivery CI exercises both `1` and `64` with
+both randomized seeds. An independent evidence auditor rereads the producer
+cohort, actual config, both on-disk sink ledgers and per-request results after
+timing; its negative controls reject missing/extra/duplicate messages, type or
+identity corruption, a weakened durability profile and incorrect metric claims.

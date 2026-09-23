@@ -20,13 +20,14 @@ env:
 
 jobs:
   executable:
-    name: External delivery (seed ${{ matrix.seed }})
+    name: External delivery (seed ${{ matrix.seed }}, group ${{ matrix.group }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         seed: [127, 991]
+        group: [1, 64]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -40,21 +41,24 @@ jobs:
       - name: Verify real ingress, persistence, process crashes and downstream ledgers
         env:
           DELIVERY_TEST_SEED: ${{ matrix.seed }}
+          DELIVERY_TEST_GROUP: ${{ matrix.group }}
         run: |
           python3 tests/delivery/run.py --binary "$RUNNER_TEMP/go-fluentd-delivery" \
-            --artifacts "$RUNNER_TEMP/delivery-results" --seed "$DELIVERY_TEST_SEED"
+            --artifacts "$RUNNER_TEMP/delivery-results" --seed "$DELIVERY_TEST_SEED" \
+            --group-max-messages "$DELIVERY_TEST_GROUP"
           python3 - <<'PY'
           import json,os
           from pathlib import Path
           result=json.loads((Path(os.environ['RUNNER_TEMP'])/'delivery-results/results.json').read_text())
           assert result['passed'] and result['run']==result['expected']==27,result
+          assert result['group_commit_max_messages']==int(os.environ['DELIVERY_TEST_GROUP']),result
           PY
           git diff --exit-code -- go.mod go.sum
       - name: Retain independent producer and sink evidence, including failures
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: delivery-seed-${{ matrix.seed }}
+          name: delivery-seed-${{ matrix.seed }}-group-${{ matrix.group }}
           path: ${{ runner.temp }}/delivery-results
           retention-days: 14
           if-no-files-found: error

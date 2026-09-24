@@ -5,7 +5,10 @@
 **Not yet an enabled receiver or sender.** `library/otlpwire` is the tested first
 increment for OTLP/HTTP logs, metrics and traces. It does not register routes,
 open a listening port, export data, modify the journal, or change legacy defaults.
-The application still cannot be configured with `type: otlp`.
+The application still cannot be configured with `type: otlp`. The separate
+[producer accounting component](otlp-accounting.md) now combines the real journal
+with durable accepted/quarantined destination receipts; endpoint wiring remains
+pending.
 
 This work is separate from CloudEvents/NDJSON PR #16. OTLP is not generic JSON,
 and its response/retry contract cannot use the generic HTTP event sender.
@@ -13,7 +16,7 @@ and its response/retry contract cannot use the generic HTTP event sender.
 | Increment | State | Acceptance needed |
 |---|---|---|
 | Signal-aware protobuf/JSON request handling, gzip bounds, response decisions | Implemented in `library/otlpwire` | Public-package fixtures, wire exchanges, race tests and fuzzing |
-| Durable per-destination handling of partial/permanent rejection | Next | Receipt survives restart; does not become a delivery-success counter or automatic replay |
+| Durable per-destination accepted/terminal outcomes and producer accounting | Implemented as components | Journal/reopen/process tests; configured pipeline integration still pending |
 | OTLP/HTTP receiver and exporter, controller/YAML wiring | Pending | Three endpoints, auth, overload/backpressure, journal admission and error bodies |
 | Actual binary plus independent Collector interoperability | Pending | Crash/replay, receiver/exporter wire validation, source/sink reconciliation and negative controls |
 | OTLP/gRPC | Not implemented | Separate transport, response/trailer, cancellation and interoperability tests |
@@ -87,9 +90,9 @@ many points were rejected, not which ones. Retrying the entire delta batch can
 count already-accepted points twice. OTLP explicitly prohibits retrying a request
 whose partial_success is populated. No retry is attempted by this package.
 
-**The current generic producer has no durable terminal-rejection result.** Before
-wiring an OTLP sender, add an explicit per-destination rejection path. The proposed
-policy retains the complete original envelope and peer response durably, records
+**The legacy generic producer is unchanged.** A separate `OTLPProducer` now
+implements the [destination accounting contract](otlp-accounting.md) before
+OTLP sender wiring. Its policy retains the complete original envelope and peer response durably, records
 rejected counts separately from delivered counts, and prevents journal replay
 from resending an already known terminal rejection. Never turn a `partial_success`
 into ordinary sender success or ordinary replayable failure. Test a restart after

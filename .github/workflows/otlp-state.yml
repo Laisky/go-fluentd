@@ -1,8 +1,11 @@
-name: OTLP terminal disposition contracts
+name: OTLP destination accounting contracts
 on:
   pull_request:
     paths:
       - 'internal/otlpstate/**'
+      - 'internal/controller/otlp_producer*.go'
+      - '.scripts/verify_otlp_accounting_contracts.py'
+      - 'docs/otlp-accounting.md'
       - '.scripts/verify_otlp_state_contracts.py'
       - '.github/workflows/otlp-state.yml'
       - 'go.mod'
@@ -11,6 +14,9 @@ on:
     branches: [master]
     paths:
       - 'internal/otlpstate/**'
+      - 'internal/controller/otlp_producer*.go'
+      - '.scripts/verify_otlp_accounting_contracts.py'
+      - 'docs/otlp-accounting.md'
       - '.scripts/verify_otlp_state_contracts.py'
       - '.github/workflows/otlp-state.yml'
       - 'go.mod'
@@ -39,19 +45,20 @@ jobs:
           git rev-parse HEAD^{tree} > /tmp/otlp-state-evidence/tree.txt
           cp go.mod go.sum /tmp/otlp-state-evidence/
           go mod verify | tee /tmp/otlp-state-evidence/module-verify.txt
-          test -z "$(gofmt -l internal/otlpstate)"
-          sha256sum internal/otlpstate/*.go > /tmp/otlp-state-evidence/source-hashes.txt
+          test -z "$(gofmt -l internal/otlpstate internal/controller/otlp_producer*.go)"
+          sha256sum internal/otlpstate/*.go internal/controller/otlp_producer*.go .scripts/verify_otlp_accounting_contracts.py > /tmp/otlp-state-evidence/source-hashes.txt
       - name: Public outcomes, real process crashes and storage refusal
         run: |
           set -euo pipefail
-          go vet -mod=readonly ./internal/otlpstate
-          go test -mod=readonly -count=1 -timeout=90s -coverprofile=/tmp/otlp-state-evidence/coverage.out -json ./internal/otlpstate > /tmp/otlp-state-evidence/tests.jsonl
-          go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s -json ./internal/otlpstate > /tmp/otlp-state-evidence/race.jsonl
-      - name: Reject weakened barriers and unsafe terminal replay
+          go vet -mod=readonly ./internal/otlpstate ./internal/controller
+          go test -mod=readonly -count=1 -timeout=90s -coverprofile=/tmp/otlp-state-evidence/coverage.out -json ./internal/otlpstate ./internal/controller > /tmp/otlp-state-evidence/tests.jsonl
+          go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s -json ./internal/otlpstate ./internal/controller > /tmp/otlp-state-evidence/race.jsonl
+      - name: Reject weakened barriers, false delivery and premature journal release
         run: |
           set -euo pipefail
           python3 .scripts/verify_otlp_state_contracts.py --artifacts /tmp/otlp-state-evidence/negative
-          git diff --exit-code -- go.mod go.sum internal/otlpstate
+          python3 .scripts/verify_otlp_accounting_contracts.py --artifacts /tmp/otlp-state-evidence/accounting-negative
+          git diff --exit-code -- go.mod go.sum internal/otlpstate internal/controller
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

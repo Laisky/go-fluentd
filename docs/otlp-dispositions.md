@@ -3,8 +3,10 @@
 ## Scope of this increment
 
 `internal/otlpstate` is a per-destination terminal-result store and guarded send
-operation. It is **not yet connected to the producer, receiver or exporter**.
-No OTLP endpoint is enabled by this increment. See [the OTLP plan](otlp.md).
+operation. It is now used by the separate `controller.OTLPProducer` component,
+but **no configured receiver/exporter or endpoint is enabled**. See
+[destination accounting](otlp-accounting.md) for `DoDelivery`, accepted receipts,
+the immutable destination plan and journal release. See [the OTLP plan](otlp.md).
 The future adapter must explicitly distinguish `Result.Quarantined` from
 `Outcome.Kind == Accepted`: successful quarantine is never successful delivery.
 
@@ -132,11 +134,8 @@ Compilation failures, panics, timeouts and skipped tests do not count as evidenc
 
 ## Next integration gate
 
-Wire a distinct terminal/quarantined result into the producer's per-destination
-accounting. Preserve the request until every required destination is durably
-resolved; do not feed quarantine into delivered counters or ordinary automatic
-replay. Test one accepted destination, one retryable destination and one rejected
-destination together across restart, including a failed disposition write.
-Then implement the OTLP/HTTP adapters, YAML configuration and independent
-Collector acceptance. This increment does not change any legacy application path,
-ACK semantics, journal format, dependencies or the original README diagram.
+The producer-accounting component is implemented and tested separately; see
+[its contract](otlp-accounting.md). The legacy producer remains unchanged.
+Next implement the OTLP/HTTP adapters and their dedicated journal lifecycle,
+YAML configuration, bounded scheduling and independent Collector acceptance.
+Do not advertise endpoints until those integration gates pass.

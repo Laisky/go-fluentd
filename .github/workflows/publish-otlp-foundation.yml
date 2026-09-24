@@ -1,0 +1,81 @@
+name: Publish validated OTLP foundation
+on:
+  push:
+    branches: [ci/otlp-foundation-publish-20260924]
+    paths: [.github/workflows/publish-otlp-foundation.yml]
+permissions:
+  contents: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: write
+    env:
+      GOMAXPROCS: '4'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Reconstruct checksum-verified source without publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/otlp-publication
+          python3 - <<'PY'
+          import pathlib, zlib, base64, hashlib
+          encoded = ''.join(pathlib.Path(f'.audit/otlp-{i}.b64').read_text().strip() for i in range(3))
+          patch = zlib.decompress(base64.b64decode(encoded, validate=True))
+          assert len(patch) == 50452
+          assert hashlib.sha256(patch).hexdigest() == '216608381f1005e49167b45e1bcd3e7f8df96b924aeeeee96aed75bc7dd803b8'
+          pathlib.Path('/tmp/otlp-publication/source.patch').write_bytes(patch)
+          PY
+          git checkout --detach f053ffb43cc92c81d7d28f586b1825d15b324d23
+          git apply --index /tmp/otlp-publication/source.patch
+          go mod tidy
+          git add go.sum
+          test "$(git write-tree)" = 1686b9798bae3700088b0107e4d142219bcd9dab
+          git diff --cached --check
+          go version | tee /tmp/otlp-publication/go.txt
+          go list -m all > /tmp/otlp-publication/modules.txt
+      - name: Native dependency and whole-application acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          go mod verify | tee /tmp/otlp-publication/verify.txt
+          go build -mod=readonly ./...
+          go vet -mod=readonly ./...
+          go test -mod=readonly -count=1 -timeout=180s -json ./... > /tmp/otlp-publication/full.jsonl
+          go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s -json ./... > /tmp/otlp-publication/race.jsonl
+          go test -mod=readonly -run '^$' -fuzz '^FuzzOTLPWire$' -fuzztime=5s -parallel=2 ./library/otlpwire > /tmp/otlp-publication/fuzz.txt
+          git diff --exit-code -- go.mod go.sum
+          test "$(git write-tree)" = 1686b9798bae3700088b0107e4d142219bcd9dab
+      - name: Publish only the verified feature branch in two commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Laisky.Cai'
+          git config user.email 'github@laisky.com'
+          git restore --staged -- docs/otlp.md
+          git commit -m 'feat(otlp): add lossless three-signal HTTP wire contracts and tests'
+          git rev-parse HEAD > /tmp/otlp-publication/first-commit.txt
+          git add docs/otlp.md
+          git commit -m 'docs(otlp): define durable rejection and integration acceptance gates'
+          git rev-parse HEAD > /tmp/otlp-publication/head.txt
+          git rev-parse HEAD^{tree} > /tmp/otlp-publication/tree.txt
+          test "$(cat /tmp/otlp-publication/tree.txt)" = 1686b9798bae3700088b0107e4d142219bcd9dab
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push "https://github.com/$GITHUB_REPOSITORY.git" HEAD:refs/heads/feat/otlp-http-foundation-20260924
+          git bundle create /tmp/otlp-publication/source.bundle HEAD --all
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: otlp-foundation-publication
+          path: /tmp/otlp-publication
+          retention-days: 7

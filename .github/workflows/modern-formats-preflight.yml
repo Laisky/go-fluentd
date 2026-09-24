@@ -1,4 +1,4 @@
-name: Modern format dependency preflight
+name: Restore complete native dependency
 on:
   push:
     branches: [chore/modern-formats-preflight-20260924]
@@ -6,47 +6,31 @@ on:
 permissions:
   contents: read
 jobs:
-  preflight:
+  export:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: b0903bd5d113754d8f220210a66f6eb69991d47c
-          persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: '1.27.1'
-      - name: Resolve native codecs and verify existing application
+          cache: false
+      - name: Export the original complete module archive
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/modern-formats
-          go version > /tmp/modern-formats/toolchain.txt
-          go list -m all > /tmp/modern-formats/modules-before.txt
-          cat > modern_dependency_preflight.go <<'EOF'
-          package main
-          import (
-            _ "go.opentelemetry.io/collector/pdata/plog"
-            _ "go.opentelemetry.io/collector/pdata/plog/plogotlp"
-            _ "google.golang.org/genproto/googleapis/rpc/status"
-            _ "google.golang.org/protobuf/proto"
-          )
-          EOF
-          go get google.golang.org/genproto@v0.0.0-20260526163538-3dc84a4a5aaa go.opentelemetry.io/collector/pdata@v1.66.0
-          go mod tidy
-          go mod download
-          go mod verify | tee /tmp/modern-formats/verify.txt
-          go list -m all > /tmp/modern-formats/modules-after.txt
-          cp go.mod go.sum /tmp/modern-formats/
-          tar -czf /tmp/modern-formats/modules.tar.gz -C "$(go env GOMODCACHE)" --exclude='*.zip' --exclude='golang.org/toolchain*' .
-          go build -mod=readonly ./...
-          go vet -mod=readonly ./...
-          go test -mod=readonly -count=1 -timeout=180s -json ./... > /tmp/modern-formats/full.jsonl
-      - name: Retain native dependency files and results
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+          mkdir -p /tmp/complete-module
+          cd /tmp/complete-module
+          go mod download -json gonum.org/v1/gonum@v0.17.0 > module.json
+          python3 - <<'PY'
+          import json, shutil
+          meta = json.load(open('module.json'))
+          assert not meta.get('Error'), meta
+          for key, name in [('Zip','module.zip'),('GoMod','module.mod'),('Info','module.info')]:
+              shutil.copyfile(meta[key], name)
+          PY
+          sha256sum module.* > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: modern-format-dependencies
-          path: /tmp/modern-formats
+          name: complete-gonum-native-module
+          path: /tmp/complete-module
           retention-days: 3

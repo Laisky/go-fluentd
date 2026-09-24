@@ -1,0 +1,88 @@
+name: Validate OTLP journal lifecycle increment
+on:
+  push:
+    branches: [ci/otlp-lifecycle-workspace-20260924]
+    paths: [.github/workflows/otlp-lifecycle-stage.yml, .audit/lifecycle-patch.xz.b64]
+permissions:
+  contents: read
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GOMAXPROCS: '4'
+      OTLP_LIFECYCLE_EVIDENCE: /tmp/otlp-lifecycle-stage/process
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Reconstruct only the hash-verified five-file source increment
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/otlp-lifecycle-stage
+          cp .audit/lifecycle-patch.xz.b64 /tmp/lifecycle-patch.xz.b64
+          python3 - <<'PY'
+          import base64, hashlib, lzma, pathlib, subprocess
+          base = '226485ca0fc076f06899a1de38c5b704b776fb57'
+          expected = '2990a76bb74d9b5a835ec45f87ec2e76a6258f20'
+          data = lzma.decompress(base64.b64decode(pathlib.Path('/tmp/lifecycle-patch.xz.b64').read_bytes(), validate=True))
+          assert len(data) == 52794
+          assert hashlib.sha256(data).hexdigest() == '51c503c4ed789f9f1b278dfc04bd638a9ab74220ad3d68fbfbfd9936ab77ce9f'
+          pathlib.Path('/tmp/lifecycle.patch').write_bytes(data)
+          subprocess.run(['git', 'checkout', '--detach', base], check=True)
+          subprocess.run(['git', 'apply', '--index', '/tmp/lifecycle.patch'], check=True)
+          tree = subprocess.check_output(['git', 'write-tree'], text=True).strip()
+          assert tree == 'd2d721d77b22bb1e8607661de9c11987d95dbddd'
+          paths = subprocess.check_output(['git', 'diff', '--cached', '--name-only'], text=True).splitlines()
+          assert sorted(paths) == sorted(['internal/controller/otlp_journal.go', 'internal/controller/otlp_journal_test.go', 'internal/controller/otlp_journal_barrier_test.go', 'internal/controller/otlp_journal_process_test.go', '.scripts/verify_otlp_journal_contracts.py'])
+          raw = ('tree '+tree+'\nparent '+base+'\nauthor Laisky.Cai <github@laisky.com> 1790293636 +0000\ncommitter Laisky.Cai <github@laisky.com> 1790293636 +0000\n\nfeat(controller): own OTLP WAL admission and bounded crash-safe replay\n').encode()
+          actual = subprocess.check_output(['git', 'hash-object', '-t', 'commit', '-w', '--stdin'], input=raw).decode().strip()
+          assert actual == expected, (actual, expected)
+          subprocess.run(['git', 'checkout', '--detach', actual], check=True)
+          PY
+      - name: Native integrity, build and full tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          go version | tee /tmp/otlp-lifecycle-stage/go.txt
+          git rev-parse HEAD | tee /tmp/otlp-lifecycle-stage/head.txt
+          git rev-parse HEAD^{tree} > /tmp/otlp-lifecycle-stage/tree.txt
+          cp go.mod go.sum /tmp/otlp-lifecycle-stage/
+          go mod download
+          go mod verify | tee /tmp/otlp-lifecycle-stage/verify.txt
+          test -z "$(gofmt -l internal/controller/otlp_journal*.go)"
+          go build -mod=readonly ./...
+          go vet -mod=readonly ./...
+          go test -mod=readonly -count=1 -timeout=180s -json ./... > /tmp/otlp-lifecycle-stage/full.jsonl
+      - name: Lifecycle process, barriers, race and negative controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -mod=readonly -count=1 -timeout=180s -run '^TestOTLPJournal' -coverprofile=/tmp/otlp-lifecycle-stage/coverage.out -json ./internal/controller > /tmp/otlp-lifecycle-stage/focused.jsonl
+          go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s -run '^TestOTLPJournal' -json ./internal/controller > /tmp/otlp-lifecycle-stage/race.jsonl
+          python3 .scripts/verify_otlp_journal_contracts.py --artifacts /tmp/otlp-lifecycle-stage/negative
+          git diff --exit-code -- go.mod go.sum
+          git diff --check
+          sha256sum internal/controller/otlp_journal*.go .scripts/verify_otlp_journal_contracts.py > /tmp/otlp-lifecycle-stage/source.sha256
+      - name: Publish new staging branch only after validation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = 2990a76bb74d9b5a835ec45f87ec2e76a6258f20
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push "https://github.com/$GITHUB_REPOSITORY.git" HEAD:refs/heads/ci/otlp-journal-validated-20260924
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: otlp-lifecycle-stage
+          path: /tmp/otlp-lifecycle-stage
+          retention-days: 7

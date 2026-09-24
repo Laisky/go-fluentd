@@ -46,6 +46,7 @@ loopback service. It is not a bundled downstream server. Start it only after
 providing a compatible destination:
 
 ```sh
+mkdir -p build
 go build -mod=readonly -o build/go-fluentd .
 ./build/go-fluentd --config docs/settings/http-events.yml --env prod --addr 127.0.0.1:8080
 ```

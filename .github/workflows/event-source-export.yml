@@ -1,0 +1,22 @@
+name: Event source export
+on:
+  push:
+    branches: [ci/publish-stream-formats-20260924]
+    paths: [.github/workflows/event-source-export.yml]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 2fc21bf7b3866fec07cd60abf7fb66f2fcd0d71f
+          fetch-depth: 0
+          persist-credentials: false
+      - run: git bundle create /tmp/event-source.bundle HEAD --all
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: event-source
+          path: /tmp/event-source.bundle
+          retention-days: 7

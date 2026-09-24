@@ -76,6 +76,9 @@ type Result struct {
 	Outcome     Outcome
 	Quarantined bool
 	Replayed    bool
+	// Durable marks a synchronized destination outcome. Accepted outcomes are
+	// durable only through DoDelivery; Do preserves its terminal-only policy.
+	Durable bool
 }
 
 // Limits bounds individual records, not aggregate memory or total disk usage.
@@ -238,6 +241,23 @@ func (s *Store) poison(err error) error {
 // calls cannot accidentally retry a known terminal result in the same process.
 // Input and callback buffers must not be mutated concurrently with their handoff.
 func (s *Store) Do(ctx context.Context, k Key, e Envelope, send func(context.Context, Envelope) (Outcome, error)) (Result, error) {
+	return s.do(ctx, k, e, send, false)
+}
+
+// DoDelivery records both full acceptance and terminal rejection before returning
+// a durable result. Replaying a persisted acceptance skips the remote callback,
+// just like a persisted rejection. Retryable/transport failures remain pending.
+// Acceptance uses record version 2; older terminal-only binaries fail closed on
+// that version. This does not close the response-before-persistence crash window.
+func (s *Store) DoDelivery(ctx context.Context, k Key, e Envelope, send func(context.Context, Envelope) (Outcome, error)) (Result, error) {
+	return s.do(ctx, k, e, send, true)
+}
+
+// Validate checks identity and envelope limits without side effects. It does not
+// establish that the store is open, healthy or that any outcome is durable.
+func (s *Store) Validate(k Key, e Envelope) error { return s.validate(k, e) }
+
+func (s *Store) do(ctx context.Context, k Key, e Envelope, send func(context.Context, Envelope) (Outcome, error), retainAccepted bool) (Result, error) {
 	if ctx == nil || send == nil {
 		return Result{}, errors.New("nil context or send callback")
 	}
@@ -273,7 +293,7 @@ func (s *Store) Do(ctx context.Context, k Key, e Envelope, send func(context.Con
 		return Result{}, err
 	}
 	if old != nil {
-		return Result{copyOutcome(old.Outcome), true, true}, nil
+		return Result{Outcome: copyOutcome(old.Outcome), Quarantined: old.Outcome.Kind.terminal(), Replayed: true, Durable: true}, nil
 	}
 	o, sendErr := send(ctx, copyEnvelope(e))
 	// A classified terminal response may accompany a decoding/response error.
@@ -286,7 +306,7 @@ func (s *Store) Do(ctx context.Context, k Key, e Envelope, send func(context.Con
 		if err := s.persist(name, entry{1, k, e, o, time.Now().UTC().Format(time.RFC3339Nano)}); err != nil {
 			return Result{}, s.poison(err)
 		}
-		return Result{o, true, false}, nil
+		return Result{Outcome: o, Quarantined: true, Durable: true}, nil
 	}
 	if sendErr != nil {
 		return Result{}, sendErr
@@ -294,7 +314,14 @@ func (s *Store) Do(ctx context.Context, k Key, e Envelope, send func(context.Con
 	if err := s.validateOutcome(o, e.Items); err != nil {
 		return Result{}, s.poison(err)
 	}
-	return Result{copyOutcome(o), false, false}, nil
+	if retainAccepted && o.Kind == Accepted {
+		o = copyOutcome(o)
+		if err := s.persist(name, entry{2, k, e, o, time.Now().UTC().Format(time.RFC3339Nano)}); err != nil {
+			return Result{}, s.poison(err)
+		}
+		return Result{Outcome: o, Durable: true}, nil
+	}
+	return Result{Outcome: copyOutcome(o)}, nil
 }
 
 func decodeStrict(b []byte, dst interface{}) error {
@@ -357,7 +384,8 @@ func (s *Store) lookup(name string, k Key, e Envelope) (*entry, error) {
 	if err = decodeStrict(disk.Entry, &got); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrCorrupt, err)
 	}
-	if got.Version != 1 || s.validate(got.Key, got.Envelope) != nil || !got.Outcome.Kind.terminal() || s.validateOutcome(got.Outcome, got.Envelope.Items) != nil {
+	validVersion := (got.Version == 1 && got.Outcome.Kind.terminal()) || (got.Version == 2 && got.Outcome.Kind == Accepted)
+	if !validVersion || s.validate(got.Key, got.Envelope) != nil || s.validateOutcome(got.Outcome, got.Envelope.Items) != nil {
 		return nil, ErrCorrupt
 	}
 	if _, err = time.Parse(time.RFC3339Nano, got.RecordedAt); err != nil {

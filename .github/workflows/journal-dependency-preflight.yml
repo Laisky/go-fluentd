@@ -1,4 +1,4 @@
-name: Journal dependency preflight
+name: Publish verified journal dependency update
 on:
   push:
     branches: [chore/journal-dependency-preflight-20260924]
@@ -6,62 +6,77 @@ on:
 permissions:
   contents: read
 jobs:
-  preflight:
+  publish:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: b22cd5479fb1cc67b7d551d8129e24d583967c55
+          ref: 23260ee7c88c15090414ea376a0c6dc06679d5ba
           persist-credentials: false
           fetch-depth: 0
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: '1.27.1'
-      - name: Resolve exact merged dependency with the Go tool
+      - name: Reconstruct exactly the locally tested three-file tree
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/journal-upgrade
-          go version | tee /tmp/journal-upgrade/toolchain.txt
-          git rev-parse HEAD | tee /tmp/journal-upgrade/base.txt
-          go list -m all > /tmp/journal-upgrade/modules-before.txt
-          go mod download -json github.com/Laisky/go-journal > /tmp/journal-upgrade/journal-before.json
+          mkdir -p /tmp/journal-upgrade-publish
+          python3 - <<'PY'
+          import hashlib, pathlib
+          source = pathlib.Path('internal/controller/journal_dependency_test.go').read_text()
+          # Remove the single transcription-only extra brace in the transfer branch.
+          needle = '\n\t\t\t\t}\n\t\t\t\t}\n\t\t\t})'
+          assert source.count(needle) == 1
+          source = source.replace(needle, '\n\t\t\t\t}\n\t\t\t})')
+          assert hashlib.sha256(source.encode()).hexdigest() == '70058855b3ecbfca05c4c806caefc1474286f111093030a1b74f65461a964351'
+          pathlib.Path('/tmp/journal-upgrade-publish/journal_dependency_test.go').write_text(source)
+          PY
+          git switch --detach b22cd5479fb1cc67b7d551d8129e24d583967c55
           go get github.com/Laisky/go-journal@612f5354f53854d7d7c57a65d3ca876cc511a653
           go mod tidy
-          go list -m all > /tmp/journal-upgrade/modules-after.txt
-          go mod download -json github.com/Laisky/go-journal > /tmp/journal-upgrade/journal-after.json
-          cp go.mod go.sum /tmp/journal-upgrade/
-          git diff -- go.mod go.sum > /tmp/journal-upgrade/dependency.patch
-          python3 - <<'PY'
-          import json, pathlib, shutil
-          root = pathlib.Path('/tmp/journal-upgrade')
-          for label in ('before', 'after'):
-              record = json.loads((root / f'journal-{label}.json').read_text())
-              for key, ext in [('Zip', 'zip'), ('GoMod', 'mod'), ('Info', 'info')]:
-                  shutil.copyfile(record[key], root / f'journal-{label}.{ext}')
-          PY
+          printf '%s\n' '23dbc2636a01e4b2684c6b9d5c5d3e756fcd55d83b41f1fbba1d05b82eb38280  go.mod' '4a424b8aab920e4fed56abab70ee60d536eb2050ca9c5081ddb1588b2cf85064  go.sum' | sha256sum -c -
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add go.mod go.sum
-          git -c user.name='Journal dependency validation' -c user.email='noreply@github.com' commit -m 'build(deps): update go-journal to merged recovery and append-safety fixes'
-          git bundle create /tmp/journal-upgrade/source.bundle HEAD --all
-          go mod verify | tee /tmp/journal-upgrade/module-verify.txt
-      - name: Build, vet and complete application tests
+          git commit -m 'build(deps): update go-journal to merged recovery and append-safety fixes'
+          cp /tmp/journal-upgrade-publish/journal_dependency_test.go internal/controller/journal_dependency_test.go
+          test -z "$(gofmt -l internal/controller/journal_dependency_test.go)"
+          git add internal/controller/journal_dependency_test.go
+          test "$(git write-tree)" = a2495e37032e41612ee613499a61ac3832607f4e
+      - name: Verify native dependencies and consumer contracts before publication
         shell: bash
         run: |
           set -euo pipefail
+          go version | tee /tmp/journal-upgrade-publish/toolchain.txt
+          go mod verify
           go build -mod=readonly ./...
           go vet -mod=readonly ./...
-          go test -mod=readonly -count=1 -timeout=180s -json ./... | tee /tmp/journal-upgrade/full.jsonl
-      - name: Repeated race acceptance
+          go test -mod=readonly -count=1 -timeout=180s -json ./... > /tmp/journal-upgrade-publish/full.jsonl
+          go test -mod=readonly -race -count=5 -shuffle=on -timeout=180s -json ./... > /tmp/journal-upgrade-publish/race.jsonl
+          git diff --exit-code -- go.mod go.sum
+          git commit -m 'test(journal): retain consumer receipt and recovery regression contracts'
+          test "$(git rev-parse HEAD^{tree})" = a2495e37032e41612ee613499a61ac3832607f4e
+          git rev-parse HEAD HEAD^{tree} > /tmp/journal-upgrade-publish/source.txt
+          git bundle create /tmp/journal-upgrade-publish/source.bundle HEAD
+      - name: Publish new branch only, without force or default-branch writes
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          go test -mod=readonly -race -count=5 -shuffle=on -timeout=180s -json ./... | tee /tmp/journal-upgrade/race.jsonl
-          git diff --exit-code -- go.mod go.sum
-      - name: Retain generated dependency files, source and test evidence
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          ref=refs/heads/build/update-go-journal-20260924
+          test -z "$(git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $auth" ls-remote origin "$ref")"
+          git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $auth" push origin HEAD:"$ref"
+          unset auth
+      - name: Retain native validation and source evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: journal-dependency-preflight
-          path: /tmp/journal-upgrade
+          name: journal-dependency-publication
+          path: /tmp/journal-upgrade-publish
           retention-days: 7

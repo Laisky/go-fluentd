@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 	"gofluentd/internal/recvs"
+	"gofluentd/internal/senders"
 	"gofluentd/library"
 )
 
@@ -181,5 +182,56 @@ func TestRegressionEventEnvelopeSurvivesJournalAndProducer(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestComponentEventSenderYAML(t *testing.T) {
+	if !componentSubprocess(t) {
+		return
+	}
+	viper.Reset()
+	viper.SetConfigType("yaml")
+	if err := viper.ReadConfig(strings.NewReader(`settings:
+  producer:
+    sender_inchan_size: 4
+    plugins:
+      events:
+        type: http_events
+        active_env: [test]
+        format: cloudevents
+        mode: binary
+        addr: https://example.test/events
+        tags: ["source.{env}"]
+        max_attempts: 1
+        max_body_byte: 1
+      disabled:
+        type: http_events
+        active_env: [prod]
+        addr: bad
+`)); err != nil {
+		t.Fatal(err)
+	}
+	c := NewControllor()
+	ss := c.initSenders("test")
+	if len(ss) != 1 || ss[0].GetName() != "events" || !ss[0].IsTagSupported("source.test") || ss[0].DiscardWhenBlocked() {
+		t.Fatal("sender configuration")
+	}
+	sender, ok := ss[0].(*senders.HTTPEventsSender)
+	if !ok {
+		t.Fatal("wrong sender")
+	}
+	// The configured size limit must fail before any request to the remote URL.
+	m := &library.FluentMsg{Message: map[string]interface{}{"specversion": "1.0", "id": "a", "source": "/s", "type": "t", "data": "payload"}}
+	if err := sender.Send(context.Background(), []*library.FluentMsg{m}); err == nil {
+		t.Fatal("configured output bound ignored")
+	}
+	viper.Set("settings.producer.plugins.events.is_discard_when_blocked", true)
+	if _, err := c.initHTTPEventsSender("test", "events"); err == nil {
+		t.Fatal("lossy config accepted")
+	}
+	viper.Set("settings.producer.plugins.events.is_discard_when_blocked", false)
+	viper.Set("dry", true)
+	if _, err := c.initHTTPEventsSender("test", "events"); err == nil {
+		t.Fatal("dry config accepted")
 	}
 }

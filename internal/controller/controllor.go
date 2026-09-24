@@ -416,6 +416,12 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 
 			t := gutils.Settings.GetString("settings.producer.plugins." + name + ".type")
 			switch t {
+			case "http_events":
+				sender, err := c.initHTTPEventsSender(env, name)
+				if err != nil {
+					log.Logger.Panic("invalid HTTP events sender", zap.String("name", name), zap.Error(err))
+				}
+				ss = append(ss, sender)
 			case "fluentd":
 				ss = append(ss, senders.NewFluentSender(&senders.FluentSenderCfg{
 					Name:                 name,

@@ -29,15 +29,12 @@ jobs:
           python3 - <<'PY'
           import pathlib, zlib, base64, hashlib
           parts = [pathlib.Path(f'.audit/otlp-{i}.b64').read_text().strip() for i in range(3)]
-          # The first transfer omitted one character. Both surrounding blob hashes
-          # and the complete uncompressed patch hash remain strict guards.
           def blob(s):
               b=s.encode(); return hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
           assert blob(parts[0]) == 'd52d233e23c9178bf236c107d96b7335b20155e5'
           parts[0] = parts[0][:583] + 'j' + parts[0][583:]
           assert blob(parts[0]) == '867dae82c239a3170b67d7f5e28ae6cfa03891a3'
-          encoded = ''.join(parts)
-          patch = zlib.decompress(base64.b64decode(encoded, validate=True))
+          patch = zlib.decompress(base64.b64decode(''.join(parts), validate=True))
           assert len(patch) == 50452
           assert hashlib.sha256(patch).hexdigest() == '216608381f1005e49167b45e1bcd3e7f8df96b924aeeeee96aed75bc7dd803b8'
           pathlib.Path('/tmp/otlp-publication/source.patch').write_bytes(patch)
@@ -62,7 +59,7 @@ jobs:
           go test -mod=readonly -run '^$' -fuzz '^FuzzOTLPWire$' -fuzztime=5s -parallel=2 ./library/otlpwire > /tmp/otlp-publication/fuzz.txt
           git diff --exit-code -- go.mod go.sum
           test "$(git write-tree)" = 1686b9798bae3700088b0107e4d142219bcd9dab
-      - name: Publish only the verified feature branch in two commits
+      - name: Publish source and documentation without workflow permission
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -70,14 +67,15 @@ jobs:
           set -euo pipefail
           git config user.name 'Laisky.Cai'
           git config user.email 'github@laisky.com'
-          git restore --staged -- docs/otlp.md
+          cp .github/workflows/otlp-wire.yml /tmp/otlp-publication/otlp-wire.yml
+          git restore --staged -- docs/otlp.md .github/workflows/otlp-wire.yml
           git commit -m 'feat(otlp): add lossless three-signal HTTP wire contracts and tests'
           git rev-parse HEAD > /tmp/otlp-publication/first-commit.txt
           git add docs/otlp.md
           git commit -m 'docs(otlp): define durable rejection and integration acceptance gates'
           git rev-parse HEAD > /tmp/otlp-publication/head.txt
           git rev-parse HEAD^{tree} > /tmp/otlp-publication/tree.txt
-          test "$(cat /tmp/otlp-publication/tree.txt)" = 1686b9798bae3700088b0107e4d142219bcd9dab
+          test "$(cat /tmp/otlp-publication/tree.txt)" = bc7af00d0f66a77aa0816e34a9b277575cf6e283
           auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push "https://github.com/$GITHUB_REPOSITORY.git" HEAD:refs/heads/feat/otlp-http-foundation-20260924
           git bundle create /tmp/otlp-publication/source.bundle HEAD --all

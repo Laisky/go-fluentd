@@ -33,13 +33,13 @@ jobs:
             _ "google.golang.org/protobuf/proto"
           )
           EOF
-          go get go.opentelemetry.io/collector/pdata@v1.66.0
+          go get google.golang.org/genproto@v0.0.0-20260526163538-3dc84a4a5aaa go.opentelemetry.io/collector/pdata@v1.66.0
           go mod tidy
           go mod download
           go mod verify | tee /tmp/modern-formats/verify.txt
           go list -m all > /tmp/modern-formats/modules-after.txt
           cp go.mod go.sum /tmp/modern-formats/
-          tar -czf /tmp/modern-formats/modules.tar.gz -C "$(go env GOMODCACHE)" --exclude=cache --exclude='golang.org/toolchain*' .
+          tar -czf /tmp/modern-formats/modules.tar.gz -C "$(go env GOMODCACHE)" --exclude='*.zip' --exclude='golang.org/toolchain*' .
           go build -mod=readonly ./...
           go vet -mod=readonly ./...
           go test -mod=readonly -count=1 -timeout=180s -json ./... > /tmp/modern-formats/full.jsonl

@@ -10,7 +10,9 @@ The application still cannot be configured with `type: otlp`. The separate
 with durable accepted/quarantined destination receipts. The
 [HTTP transport components](otlp-http-transports.md) now provide the receiver
 handler and exporter, with live HTTP and real-journal reopening tests. Production
-listener, dedicated journal lifecycle and YAML wiring remain pending.
+listener and YAML wiring remain pending. The [dedicated journal owner](otlp-journal-lifecycle.md)
+now persists namespace/IDs, admits only after Sync, preserves bounded replay
+cursors, schedules retries and coordinates shutdown.
 
 This work is separate from CloudEvents/NDJSON PR #16. OTLP is not generic JSON,
 and its response/retry contract cannot use the generic HTTP event sender.
@@ -20,7 +22,8 @@ and its response/retry contract cannot use the generic HTTP event sender.
 | Signal-aware protobuf/JSON request handling, gzip bounds, response decisions | Implemented in `library/otlpwire` | Public-package fixtures, wire exchanges, race tests and fuzzing |
 | Durable per-destination accepted/terminal outcomes and producer accounting | Implemented as components | Journal/reopen/process tests; configured pipeline integration still pending |
 | OTLP/HTTP receiver and exporter components | Implemented in `internal/otlphttp` | Live HTTP, admission barriers, response policies, real journal reopening and negative controls |
-| Dedicated journal lifecycle, listener and controller/YAML wiring | Pending | Persist namespace/IDs, replay scheduling, shutdown, configured endpoint acceptance |
+| Dedicated journal lifecycle | Implemented as a component | Admission/copy barriers, namespace/IDs, bounded cursor, HTTP integration and SIGKILL tests |
+| Listener and controller/YAML wiring | Pending | Secured server lifecycle, storage/admission configuration and actual endpoint acceptance |
 | Actual binary plus independent Collector interoperability | Pending | Crash/replay, receiver/exporter wire validation, source/sink reconciliation and negative controls |
 | OTLP/gRPC | Not implemented | Separate transport, response/trailer, cancellation and interoperability tests |
 

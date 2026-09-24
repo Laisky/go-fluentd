@@ -1,0 +1,52 @@
+name: Modern format dependency preflight
+on:
+  push:
+    branches: [chore/modern-formats-preflight-20260924]
+    paths: [.github/workflows/modern-formats-preflight.yml]
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: b0903bd5d113754d8f220210a66f6eb69991d47c
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Resolve native codecs and verify existing application
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/modern-formats
+          go version > /tmp/modern-formats/toolchain.txt
+          go list -m all > /tmp/modern-formats/modules-before.txt
+          cat > modern_dependency_preflight.go <<'EOF'
+          package main
+          import (
+            _ "go.opentelemetry.io/collector/pdata/plog"
+            _ "go.opentelemetry.io/collector/pdata/plog/plogotlp"
+            _ "google.golang.org/genproto/googleapis/rpc/status"
+            _ "google.golang.org/protobuf/proto"
+          )
+          EOF
+          go get go.opentelemetry.io/collector/pdata@v1.66.0
+          go mod tidy
+          go mod download
+          go mod verify | tee /tmp/modern-formats/verify.txt
+          go list -m all > /tmp/modern-formats/modules-after.txt
+          cp go.mod go.sum /tmp/modern-formats/
+          tar -czf /tmp/modern-formats/modules.tar.gz -C "$(go env GOMODCACHE)" --exclude=cache --exclude='golang.org/toolchain*' .
+          go build -mod=readonly ./...
+          go vet -mod=readonly ./...
+          go test -mod=readonly -count=1 -timeout=180s -json ./... > /tmp/modern-formats/full.jsonl
+      - name: Retain native dependency files and results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: modern-format-dependencies
+          path: /tmp/modern-formats
+          retention-days: 3

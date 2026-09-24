@@ -1,0 +1,63 @@
+name: OTLP native dependency preflight
+on:
+  push:
+    branches: [ci/otlp-native-20260924]
+    paths: [.github/workflows/otlp-native.yml]
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 5125a082068186edd786e268b3c937f06501c3f3
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Resolve official pdata and split genproto with Go tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/otlp-native/modules library/otlp
+          go version > /tmp/otlp-native/go.txt
+          go list -m all > /tmp/otlp-native/before.txt
+          printf '%s\n' 'package otlp' 'import (' '_ "go.opentelemetry.io/collector/pdata/plog/plogotlp"' '_ "go.opentelemetry.io/collector/pdata/pmetric/pmetricotlp"' '_ "go.opentelemetry.io/collector/pdata/ptrace/ptraceotlp"' '_ "google.golang.org/genproto/googleapis/rpc/status"' '_ "google.golang.org/protobuf/proto"' ')' > library/otlp/dependencies.go
+          go get go.opentelemetry.io/collector/pdata@v1.67.0 google.golang.org/genproto@v0.0.0-20260526163538-3dc84a4a5aaa
+          go mod tidy
+          go mod download -json all > /tmp/otlp-native/downloads.json
+          go list -m all > /tmp/otlp-native/after.txt
+          go mod verify | tee /tmp/otlp-native/verify.txt
+          cp go.mod go.sum /tmp/otlp-native/
+          python3 - <<'PY'
+          import json,pathlib,shutil
+          root=pathlib.Path('/tmp/otlp-native'); old=set(root.joinpath('before.txt').read_text().splitlines())
+          text=root.joinpath('downloads.json').read_text(); dec=json.JSONDecoder(); modules=[]
+          while text.strip():
+              m,n=dec.raw_decode(text.lstrip()); text=text.lstrip()[n:]
+              if f"{m['Path']} {m['Version']}" in old: continue
+              assert not m.get('Error'),m
+              record={k:m[k] for k in ('Path','Version','Sum','GoModSum') if k in m}
+              for k in ('Zip','GoMod','Info'):
+                  if k in m:
+                      name=f"{len(modules)}-{k}";shutil.copyfile(m[k],root/'modules'/name);record[k]=name
+              modules.append(record)
+          root.joinpath('modules.json').write_text(json.dumps(modules,indent=2))
+          PY
+      - name: Baseline application against updated native graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          go build -mod=readonly ./...
+          go vet -mod=readonly ./...
+          go test -mod=readonly -count=1 -timeout=180s -json ./... > /tmp/otlp-native/tests.jsonl
+          git bundle create /tmp/otlp-native/source.bundle --all HEAD
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: otlp-native
+          path: /tmp/otlp-native
+          retention-days: 7

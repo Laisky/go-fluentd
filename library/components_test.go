@@ -94,7 +94,7 @@ func TestComponentTimerBackoffAndReset(t *testing.T) {
 	}
 }
 func TestComponentJournalProvenanceIsNotSerialized(t *testing.T) {
-	m := &FluentMsg{Tag: "route", ID: 7, JournalTag: "source-private", Message: map[string]interface{}{"message": "hello"}}
+	m := &FluentMsg{Tag: "route", ID: 7, JournalTag: "source-private", SourceFormat: "ndjson", DeliveryID: "private-delivery", Message: map[string]interface{}{"message": "hello"}}
 	data, err := m.MarshalMsg(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +103,7 @@ func TestComponentJournalProvenanceIsNotSerialized(t *testing.T) {
 	if _, err = decoded.UnmarshalMsg(data); err != nil {
 		t.Fatal(err)
 	}
-	if decoded.JournalTag != "" || decoded.Tag != "route" || decoded.ID != 7 {
+	if decoded.SourceFormat != "" || decoded.DeliveryID != "" || decoded.JournalTag != "" || decoded.Tag != "route" || decoded.ID != 7 {
 		t.Fatalf("wire provenance leak or payload change: %+v", decoded)
 	}
 }

@@ -152,6 +152,7 @@ func (r *HTTPEventsRecv) handle(c *gin.Context) {
 		}
 		msg := r.newMsg()
 		msg.ID, msg.Tag, msg.Message = r.counter.Count(), r.cfg.Tag, record
+		msg.SourceFormat = r.cfg.Format
 		if msg.ID < 0 {
 			r.msgPool.Put(msg)
 			c.AbortWithStatus(http.StatusServiceUnavailable)

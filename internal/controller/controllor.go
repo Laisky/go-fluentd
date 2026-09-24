@@ -110,6 +110,12 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 					TimeKey:       gutils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".time_key"),
 					NewTimeKey:    gutils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".new_time_key"),
 				}))
+			case "http_events":
+				recv, err := c.initHTTPEventsRecv(env, name)
+				if err != nil {
+					log.Logger.Panic("invalid HTTP events receiver", zap.String("name", name), zap.Error(err))
+				}
+				receivers = append(receivers, recv)
 			case "http":
 				receivers = append(receivers, recvs.NewHTTPRecv(&recvs.HTTPRecvCfg{ // wechat mini program
 					Name:               name,

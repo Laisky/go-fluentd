@@ -29,7 +29,11 @@ jobs:
           m=json.load(open('/tmp/event-step.json'))
           assert re.fullmatch('[a-f0-9]{40}',m['parent']) and re.fullmatch('[a-f0-9]{40}',m['tree'])
           assert re.fullmatch('ci/event-stage-[0-9]+-20260924',m['branch'])
-          patch=zlib.decompress(base64.b64decode(m['patch'],validate=True))
+          encoded=m.get('patch','')
+          if 'parts' in m:
+              assert all(re.fullmatch(r'\.audit/event-[a-z]+-[0-9]+\.b64',p) for p in m['parts'])
+              encoded=''.join(pathlib.Path(p).read_text().strip() for p in m['parts'])
+          patch=zlib.decompress(base64.b64decode(encoded,validate=True))
           assert hashlib.sha256(patch).hexdigest()==m['sha256']
           pathlib.Path('/tmp/event-step.patch').write_bytes(patch)
           subprocess.run(['git','checkout','--detach',m['parent']],check=True)

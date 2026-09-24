@@ -7,8 +7,10 @@ increment for OTLP/HTTP logs, metrics and traces. It does not register routes,
 open a listening port, export data, modify the journal, or change legacy defaults.
 The application still cannot be configured with `type: otlp`. The separate
 [producer accounting component](otlp-accounting.md) now combines the real journal
-with durable accepted/quarantined destination receipts; endpoint wiring remains
-pending.
+with durable accepted/quarantined destination receipts. The
+[HTTP transport components](otlp-http-transports.md) now provide the receiver
+handler and exporter, with live HTTP and real-journal reopening tests. Production
+listener, dedicated journal lifecycle and YAML wiring remain pending.
 
 This work is separate from CloudEvents/NDJSON PR #16. OTLP is not generic JSON,
 and its response/retry contract cannot use the generic HTTP event sender.
@@ -17,7 +19,8 @@ and its response/retry contract cannot use the generic HTTP event sender.
 |---|---|---|
 | Signal-aware protobuf/JSON request handling, gzip bounds, response decisions | Implemented in `library/otlpwire` | Public-package fixtures, wire exchanges, race tests and fuzzing |
 | Durable per-destination accepted/terminal outcomes and producer accounting | Implemented as components | Journal/reopen/process tests; configured pipeline integration still pending |
-| OTLP/HTTP receiver and exporter, controller/YAML wiring | Pending | Three endpoints, auth, overload/backpressure, journal admission and error bodies |
+| OTLP/HTTP receiver and exporter components | Implemented in `internal/otlphttp` | Live HTTP, admission barriers, response policies, real journal reopening and negative controls |
+| Dedicated journal lifecycle, listener and controller/YAML wiring | Pending | Persist namespace/IDs, replay scheduling, shutdown, configured endpoint acceptance |
 | Actual binary plus independent Collector interoperability | Pending | Crash/replay, receiver/exporter wire validation, source/sink reconciliation and negative controls |
 | OTLP/gRPC | Not implemented | Separate transport, response/trailer, cancellation and interoperability tests |
 
@@ -38,7 +41,7 @@ signal-aware recv -> immutable export envelope -> journal -> OTLP sender
 ```
 
 The standard signal paths are `/v1/logs`, `/v1/metrics`, and `/v1/traces`.
-Transport, receiver and exporter configuration are still to be implemented;
+Receiver/exporter components exist; their production configuration is still pending;
 this diagram is a target data flow, not a deployment example.
 
 ## Why preserve an export envelope

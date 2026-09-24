@@ -1,0 +1,64 @@
+name: OTLP HTTP transport contracts
+on:
+  pull_request:
+    paths:
+      - 'internal/otlphttp/**'
+      - 'internal/otlpstate/**'
+      - 'internal/controller/otlp_producer*'
+      - 'library/otlpwire/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'docs/otlp*.md'
+      - '.scripts/verify_otlp_http_contracts.py'
+      - '.github/workflows/otlp-http.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'internal/otlphttp/**'
+      - 'internal/otlpstate/**'
+      - 'internal/controller/otlp_producer*'
+      - 'library/otlpwire/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.scripts/verify_otlp_http_contracts.py'
+      - '.github/workflows/otlp-http.yml'
+permissions:
+  contents: read
+jobs:
+  transport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GOMAXPROCS: '4'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Native dependencies and source identity
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/otlp-http-evidence
+          go version | tee /tmp/otlp-http-evidence/toolchain.txt
+          git rev-parse HEAD > /tmp/otlp-http-evidence/source.txt
+          git rev-parse HEAD^{tree} > /tmp/otlp-http-evidence/tree.txt
+          cp go.mod go.sum /tmp/otlp-http-evidence/
+          sha256sum internal/otlphttp/*.go .scripts/verify_otlp_http_contracts.py > /tmp/otlp-http-evidence/source-hashes.txt
+          go mod verify | tee /tmp/otlp-http-evidence/verify.txt
+          test -z "$(gofmt -l internal/otlphttp)"
+      - name: Live HTTP and durable journal integration, including randomized race runs
+        run: |
+          set -euo pipefail
+          go test -mod=readonly -count=1 -timeout=180s -coverprofile=/tmp/otlp-http-evidence/coverage.out -json ./internal/otlphttp > /tmp/otlp-http-evidence/tests.jsonl
+          go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s -json ./internal/otlphttp > /tmp/otlp-http-evidence/race.jsonl
+          git diff --exit-code -- go.mod go.sum
+      - name: Reject false admission, partial retries, oversized evidence and redirects
+        run: python3 .scripts/verify_otlp_http_contracts.py --artifacts /tmp/otlp-http-evidence/negative
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: otlp-http-${{ github.sha }}
+          path: /tmp/otlp-http-evidence
+          retention-days: 14

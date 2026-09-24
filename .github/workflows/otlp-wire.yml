@@ -36,7 +36,7 @@ jobs:
           go version | tee /tmp/otlp-evidence/toolchain.txt
           git rev-parse HEAD | tee /tmp/otlp-evidence/source.txt
           git rev-parse HEAD^{tree} > /tmp/otlp-evidence/tree.txt
-          go list -m all > /tmp/otlp-evidence/modules.txt
+          cp go.mod go.sum /tmp/otlp-evidence/
           go mod verify | tee /tmp/otlp-evidence/verify.txt
           test -z "$(gofmt -l library/otlpwire)"
       - name: OTLP public contracts, journal replay, repeat race and bounded fuzzing

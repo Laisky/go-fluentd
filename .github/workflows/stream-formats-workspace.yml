@@ -1,39 +1,37 @@
-name: Stream formats workspace
+name: Publish verified event-format increment
 on:
   push:
     branches: [ci/publish-stream-formats-20260924]
     paths: [.github/workflows/stream-formats-workspace.yml]
 permissions:
-  contents: read
+  contents: write
 jobs:
-  export:
+  publish:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: f053ffb43cc92c81d7d28f586b1825d15b324d23
           fetch-depth: 0
-          persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: '1.27.1'
-          cache: false
-      - name: Export source and unchanged verified dependencies
+      - name: Import exact tested codec commit
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/stream-workspace
-          git fetch origin chore/modern-formats-preflight-20260924
-          git bundle create /tmp/stream-workspace/source.bundle --all HEAD
-          git rev-parse HEAD > /tmp/stream-workspace/base.txt
-          go version > /tmp/stream-workspace/toolchain.txt
-          go mod download
-          go mod verify > /tmp/stream-workspace/verify.txt
-          tar -czf /tmp/stream-workspace/modules.tar.gz -C "$(go env GOMODCACHE)" .
-          sha256sum /tmp/stream-workspace/* > /tmp/stream-workspace/SHA256SUMS
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: stream-formats-workspace
-          path: /tmp/stream-workspace
-          retention-days: 7
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, zlib
+          raw = zlib.decompress(base64.b64decode(pathlib.Path('.audit/codecs-complete.b64').read_text(), validate=True))
+          assert hashlib.sha256(raw).hexdigest() == '34b3a055a685c1a700d27fcbce9d5d0e9d09f5853a7af8c2e6a802c8f1e6b233'
+          pathlib.Path('/tmp/event-codecs.bundle').write_bytes(raw)
+          PY
+          git bundle verify /tmp/event-codecs.bundle
+          git fetch /tmp/event-codecs.bundle HEAD
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = 2fc21bf7b3866fec07cd60abf7fb66f2fcd0d71f
+          test "$(git rev-parse HEAD^{tree})" = 987e332bd749788cf1462ab5e6f129bb5acc10d0
+          test -z "$(git status --porcelain)"
+          go mod verify
+          go test -mod=readonly -race -count=3 ./library/streamformat
+          git push origin HEAD:refs/heads/feat/http-event-formats-20260924

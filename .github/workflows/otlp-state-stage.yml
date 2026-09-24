@@ -1,0 +1,89 @@
+name: Stage verified OTLP terminal state
+on:
+  push:
+    branches: [ci/otlp-foundation-publish-20260924]
+    paths: [.audit/otlp-state.json]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: write
+    env:
+      GOMAXPROCS: '4'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Reconstruct only the hash-verified source files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/otlp-state-stage
+          python3 - <<'PY'
+          import base64,hashlib,json,pathlib,subprocess,zlib
+          manifest=json.loads(pathlib.Path('.audit/otlp-state.json').read_text())
+          assert manifest['base']=='d26f713fa08243dc058b6864dea5ce7b4efc4d2e'
+          assert manifest['branch']=='ci/otlp-state-validated-20260924'
+          assert manifest['parts']==3
+          data=''.join(pathlib.Path(f'.audit/otlp-state-{i}.b64').read_text().strip() for i in range(3))
+          raw=zlib.decompress(base64.b64decode(data,validate=True))
+          assert hashlib.sha256(raw).hexdigest()==manifest['sha256']
+          files=json.loads(raw)
+          expected={'internal/otlpstate/'+x for x in ['store.go','store_test.go','barrier_test.go','process_linux_test.go','lock_unix.go','lock_other.go']}
+          expected.add('.scripts/verify_otlp_state_contracts.py')
+          assert set(files)==set(manifest['files'])==expected
+          pathlib.Path('/tmp/otlp-state-stage/manifest.json').write_text(json.dumps(manifest,indent=2))
+          subprocess.run(['git','checkout','--detach',manifest['base']],check=True)
+          for name,content in files.items():
+              assert hashlib.sha256(content.encode()).hexdigest()==manifest['files'][name],name
+              path=pathlib.Path(name)
+              assert not path.exists(),name
+              path.parent.mkdir(parents=True,exist_ok=True)
+              path.write_text(content)
+          subprocess.run(['git','add','--',*sorted(files)],check=True)
+          actual=set(subprocess.check_output(['git','diff','--cached','--name-only'],text=True).splitlines())
+          assert actual==expected
+          PY
+      - name: Native full application and terminal-state checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          go version | tee /tmp/otlp-state-stage/toolchain.txt
+          cp go.mod go.sum /tmp/otlp-state-stage/
+          go mod verify | tee /tmp/otlp-state-stage/module-verify.txt
+          test -z "$(gofmt -l internal/otlpstate)"
+          go build -mod=readonly ./...
+          go vet -mod=readonly ./...
+          go test -mod=readonly -count=1 -timeout=180s -json ./... > /tmp/otlp-state-stage/full.jsonl
+          go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s -json ./internal/otlpstate > /tmp/otlp-state-stage/race.jsonl
+          python3 .scripts/verify_otlp_state_contracts.py --artifacts /tmp/otlp-state-stage/negative
+          git diff --exit-code -- go.mod go.sum
+          git diff --cached --check
+      - name: Stage a new source branch without force or default-branch writes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Laisky.Cai'
+          git config user.email 'github@laisky.com'
+          git commit -m 'feat(otlp): persist terminal destination outcomes and guard replay with fault tests'
+          git rev-parse HEAD > /tmp/otlp-state-stage/head.txt
+          git rev-parse HEAD^{tree} > /tmp/otlp-state-stage/tree.txt
+          sha256sum internal/otlpstate/*.go .scripts/verify_otlp_state_contracts.py > /tmp/otlp-state-stage/source-hashes.txt
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push "https://github.com/$GITHUB_REPOSITORY.git" HEAD:refs/heads/ci/otlp-state-validated-20260924
+          git bundle create /tmp/otlp-state-stage/source.bundle HEAD
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: otlp-terminal-state-stage
+          path: /tmp/otlp-state-stage
+          retention-days: 7

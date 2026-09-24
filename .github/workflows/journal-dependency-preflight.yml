@@ -1,0 +1,67 @@
+name: Journal dependency preflight
+on:
+  push:
+    branches: [chore/journal-dependency-preflight-20260924]
+    paths: [.github/workflows/journal-dependency-preflight.yml]
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: b22cd5479fb1cc67b7d551d8129e24d583967c55
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Resolve exact merged dependency with the Go tool
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/journal-upgrade
+          go version | tee /tmp/journal-upgrade/toolchain.txt
+          git rev-parse HEAD | tee /tmp/journal-upgrade/base.txt
+          go list -m all > /tmp/journal-upgrade/modules-before.txt
+          go mod download -json github.com/Laisky/go-journal > /tmp/journal-upgrade/journal-before.json
+          go get github.com/Laisky/go-journal@612f5354f53854d7d7c57a65d3ca876cc511a653
+          go mod tidy
+          go list -m all > /tmp/journal-upgrade/modules-after.txt
+          go mod download -json github.com/Laisky/go-journal > /tmp/journal-upgrade/journal-after.json
+          cp go.mod go.sum /tmp/journal-upgrade/
+          git diff -- go.mod go.sum > /tmp/journal-upgrade/dependency.patch
+          python3 - <<'PY'
+          import json, pathlib, shutil
+          root = pathlib.Path('/tmp/journal-upgrade')
+          for label in ('before', 'after'):
+              record = json.loads((root / f'journal-{label}.json').read_text())
+              for key, ext in [('Zip', 'zip'), ('GoMod', 'mod'), ('Info', 'info')]:
+                  shutil.copyfile(record[key], root / f'journal-{label}.{ext}')
+          PY
+          git add go.mod go.sum
+          git -c user.name='Journal dependency validation' -c user.email='noreply@github.com' commit -m 'build(deps): update go-journal to merged recovery and append-safety fixes'
+          git bundle create /tmp/journal-upgrade/source.bundle HEAD --all
+          go mod verify | tee /tmp/journal-upgrade/module-verify.txt
+      - name: Build, vet and complete application tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          go build -mod=readonly ./...
+          go vet -mod=readonly ./...
+          go test -mod=readonly -count=1 -timeout=180s -json ./... | tee /tmp/journal-upgrade/full.jsonl
+      - name: Repeated race acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -mod=readonly -race -count=5 -shuffle=on -timeout=180s -json ./... | tee /tmp/journal-upgrade/race.jsonl
+          git diff --exit-code -- go.mod go.sum
+      - name: Retain generated dependency files, source and test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: journal-dependency-preflight
+          path: /tmp/journal-upgrade
+          retention-days: 7

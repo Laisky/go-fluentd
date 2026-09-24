@@ -1,0 +1,70 @@
+{
+  "resourceSpans": [
+    {
+      "schemaUrl": "https://example.test/schema",
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "OTLP 世界"
+            }
+          },
+          {
+            "key": "nested",
+            "value": {
+              "kvlistValue": {
+                "values": [
+                  {
+                    "key": "deep",
+                    "value": {
+                      "intValue": "9223372036854775807"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "name": "independent-fixture",
+            "version": "1"
+          },
+          "spans": [
+            {
+              "traceId": "0123456789ABCDEF0123456789ABCDEF",
+              "spanId": "0123456789abcdef",
+              "parentSpanId": "0000000000000001",
+              "name": "checkout",
+              "kind": 2,
+              "startTimeUnixNano": "1720000000000000001",
+              "endTimeUnixNano": "1720000000000000002",
+              "status": {
+                "code": 2,
+                "message": "fail"
+              },
+              "events": [
+                {
+                  "name": "exception",
+                  "timeUnixNano": "1720000000000000001"
+                }
+              ],
+              "links": [
+                {
+                  "traceId": "0123456789abcdef0123456789abcdef",
+                  "spanId": "0000000000000002"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "futureExtension": {
+    "keep": "unknown field bytes"
+  }
+}

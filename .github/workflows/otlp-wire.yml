@@ -1,0 +1,56 @@
+name: OTLP wire contracts
+on:
+  pull_request:
+    paths:
+      - 'library/otlpwire/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'docs/otlp.md'
+      - '.github/workflows/otlp-wire.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'library/otlpwire/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/otlp-wire.yml'
+permissions:
+  contents: read
+jobs:
+  protocol:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GOMAXPROCS: '4'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.x'
+      - name: Native dependencies and exact source
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/otlp-evidence
+          go version | tee /tmp/otlp-evidence/toolchain.txt
+          git rev-parse HEAD | tee /tmp/otlp-evidence/source.txt
+          git rev-parse HEAD^{tree} > /tmp/otlp-evidence/tree.txt
+          go list -m all > /tmp/otlp-evidence/modules.txt
+          go mod verify | tee /tmp/otlp-evidence/verify.txt
+          test -z "$(gofmt -l library/otlpwire)"
+      - name: OTLP public contracts, journal replay, repeat race and bounded fuzzing
+        run: |
+          set -euo pipefail
+          go test -mod=readonly -count=1 -timeout=180s -coverprofile=/tmp/otlp-evidence/coverage.out -json ./library/otlpwire > /tmp/otlp-evidence/tests.jsonl
+          go test -mod=readonly -race -count=10 -shuffle=on -timeout=180s -json ./library/otlpwire > /tmp/otlp-evidence/race.jsonl
+          go test -mod=readonly -run '^$' -fuzz '^FuzzOTLPWire$' -fuzztime=5s -parallel=2 ./library/otlpwire > /tmp/otlp-evidence/fuzz.txt
+          git diff --exit-code -- go.mod go.sum
+      - name: Diagnostic parsing measurements, not durable throughput
+        run: go test -mod=readonly -run '^$' -bench '^BenchmarkOTLPRequest$' -benchtime=100ms -benchmem -count=3 ./library/otlpwire > /tmp/otlp-evidence/bench.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: otlp-wire-${{ github.sha }}
+          path: /tmp/otlp-evidence
+          retention-days: 14

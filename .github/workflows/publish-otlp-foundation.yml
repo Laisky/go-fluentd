@@ -28,7 +28,15 @@ jobs:
           mkdir -p /tmp/otlp-publication
           python3 - <<'PY'
           import pathlib, zlib, base64, hashlib
-          encoded = ''.join(pathlib.Path(f'.audit/otlp-{i}.b64').read_text().strip() for i in range(3))
+          parts = [pathlib.Path(f'.audit/otlp-{i}.b64').read_text().strip() for i in range(3)]
+          # The first transfer omitted one character. Both surrounding blob hashes
+          # and the complete uncompressed patch hash remain strict guards.
+          def blob(s):
+              b=s.encode(); return hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+          assert blob(parts[0]) == 'd52d233e23c9178bf236c107d96b7335b20155e5'
+          parts[0] = parts[0][:583] + 'j' + parts[0][583:]
+          assert blob(parts[0]) == '867dae82c239a3170b67d7f5e28ae6cfa03891a3'
+          encoded = ''.join(parts)
           patch = zlib.decompress(base64.b64decode(encoded, validate=True))
           assert len(patch) == 50452
           assert hashlib.sha256(patch).hexdigest() == '216608381f1005e49167b45e1bcd3e7f8df96b924aeeeee96aed75bc7dd803b8'

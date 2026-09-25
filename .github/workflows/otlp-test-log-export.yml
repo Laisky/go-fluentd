@@ -1,0 +1,40 @@
+name: Inspect failed component test log
+on:
+  push:
+    branches: [ci/otlp-service-publish-20260925]
+    paths: [.github/workflows/otlp-test-log-export.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  logs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Retrieve the exact failed job log
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/failed-job-evidence
+          gh api repos/Laisky/go-fluentd/actions/jobs/107899285053/logs > /tmp/failed-job-evidence/job.log
+          python3 - <<'PY'
+          import pathlib
+          p=pathlib.Path('/tmp/failed-job-evidence/job.log')
+          lines=p.read_text(errors='replace').splitlines()
+          selected=set()
+          for i,line in enumerate(lines):
+              if any(x in line for x in ('FAIL', 'WARNING: DATA RACE', 'panic:', 'Error:', 'shuffle ')):
+                  selected.update(range(max(0,i-6),min(len(lines),i+25)))
+          text='\n'.join(f'{i+1}: {lines[i]}' for i in sorted(selected))
+          (p.parent/'failures.txt').write_text(text)
+          print(text)
+          PY
+          sha256sum /tmp/failed-job-evidence/* > /tmp/failed-job-evidence/SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: component-failed-job-log
+          path: /tmp/failed-job-evidence
+          retention-days: 7

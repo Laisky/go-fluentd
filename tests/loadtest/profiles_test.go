@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -12,16 +11,6 @@ func TestEventOracleFastPathAndCanonicalFallback(t *testing.T) {
 		key := p + ":" + hash([]byte(f.Canonical))
 		tr := &trial{lookup: map[string]int{key: 0}}
 		variants := [][]byte{f.Body, append([]byte(" \n"), f.Body...)}
-		var formatted strings.Builder
-		var object any
-		if err := json.Unmarshal(f.Body, &object); err != nil {
-			t.Fatal(err)
-		}
-		enc := json.NewEncoder(&formatted)
-		enc.SetIndent("", " ")
-		if err := enc.Encode(object); err != nil {
-			t.Fatal(err)
-		} // int64 must not be rounded by this fallback control
 		// Construct whitespace-only variant without decoding numbers.
 		variants = append(variants, []byte(strings.ReplaceAll(string(f.Body), ",", ",\n")))
 		for _, body := range variants {

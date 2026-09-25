@@ -32,6 +32,7 @@ jobs:
           cp go.mod go.sum /tmp/load-evidence/
           go mod verify > /tmp/load-evidence/module-verify.txt
           go test -mod=readonly -race -count=3 -json ./tests/loadtest > /tmp/load-evidence/oracle.jsonl
+          (cd tests/loadtest && python3 -m unittest -v test_sustained) > /tmp/load-evidence/steady-gate-tests.log 2>&1
           go build -mod=readonly -o /tmp/load-driver ./tests/loadtest
           go build -mod=readonly -o /tmp/load-candidate .
           git worktree add --detach /tmp/load-baseline-src 828d34ab1460820cf732810d01b56985d46a4ab9

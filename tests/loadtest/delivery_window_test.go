@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -61,5 +63,36 @@ func TestDeliveryWindowDoesNotReleaseOnAdmissionOrOneDestination(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("load did not complete")
+	}
+}
+
+// Exercise the independent peer itself, not merely a manually signaled gate.
+func TestDeliveryWindowCompletionTracksEachDestination(t *testing.T) {
+	f := makeFixture("logs", 0, 32)
+	tr := &trial{opts: options{DeliveryWindow: true, Destinations: 2}, epoch: time.Now(),
+		lookup:  map[string]int{"logs:" + hash(f.Body): 0},
+		records: []record{{Sink: make([]int64, 2), done: make(chan struct{})}}}
+	for i, destination := range []int{0, 0, 1, 1} {
+		req := httptest.NewRequest(http.MethodPost, fmt.Sprintf("http://sink/%d/v1/logs", destination), bytes.NewReader(f.Body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		response := httptest.NewRecorder()
+		tr.sink(response, req)
+		if response.Code != http.StatusOK || len(tr.failures) != 0 {
+			t.Fatalf("valid sink request rejected: %d, %v", response.Code, tr.failures)
+		}
+		select {
+		case <-tr.records[0].done:
+			if i < 2 {
+				t.Fatal("window released before both destinations")
+			}
+		default:
+			if i >= 2 {
+				t.Fatal("completed destinations did not release window")
+			}
+		}
+	}
+	if tr.completed.Load() != 2 || tr.records[0].Duplicates != 2 {
+		t.Fatal("duplicate sink delivery changed required completion accounting")
 	}
 }

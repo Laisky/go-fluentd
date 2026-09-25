@@ -226,3 +226,10 @@ Startup inventory remains O(retained files) and uses O(uncertain identities)
 memory; there is no new hard aggregate quota. Receipts still have no compaction
 or TTL. Preserve generation/WAL/receipts together. No exactly-once, physical-power-
 loss, production-backend durability or sustainable-capacity guarantee is claimed.
+
+## Follow-up: sustained profile-directed event tuning
+
+[The sustained profiling increment](sustained-profiling.md) uses PR18 head
+`26e334332b6920c10d4a38411d715fe9058a4239` as its new baseline, bounded end-to-end
+concurrency, CPU/heap profiles and separate unprofiled pairs. Its results must not
+be pooled with the older master comparison or interpreted as a fixed-rate SLO.

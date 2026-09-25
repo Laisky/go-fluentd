@@ -1,0 +1,116 @@
+name: Verify exact OTLP interoperability candidate
+on:
+  push:
+    branches: [ci/otlp-gc-interop-20260925]
+    paths: [.github/workflows/otlp-interop-stage.yml]
+permissions:
+  contents: write
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GOTOOLCHAIN: local
+      GOMAXPROCS: '2'
+      GORACE: 'halt_on_error=1 exitcode=66'
+    defaults:
+      run:
+        working-directory: source
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 48a01bb686823eb49118fd1c2227dcebca819497
+          path: transfer
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 13b0bb767e72b8691ae5761e1399ad39975a0610
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: source/go.sum
+      - name: Verify patch bytes and exact candidate tree before execution
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/interop-stage
+          test "$(git rev-parse HEAD^{tree})" = 46f890828a56e6ec0797104954a0afe751d751f3
+          python3 - <<'PY'
+          import base64, hashlib, lzma, pathlib
+          src=pathlib.Path('../transfer/.ci-transfer')
+          text=''.join((src/f'otlp-interop.part{i}').read_text().strip() for i in range(1,5))
+          raw=base64.b64decode(text,validate=True)
+          assert hashlib.sha256(raw).hexdigest()=='0fe2dbbefbfe5493f315dd1efdd8a3e3a6bb105ecd38fccecc31e8dc1da80ce4'
+          pathlib.Path('/tmp/interop-stage/increment.patch').write_bytes(lzma.decompress(raw))
+          PY
+          git apply --index /tmp/interop-stage/increment.patch
+          test "$(git write-tree)" = b0bb986529e291e3902f19c903f6cff9726fd2e7
+          git write-tree > /tmp/interop-stage/tree.txt
+          git archive --format=zip "$(git write-tree)" > /tmp/interop-stage/source.zip
+          cp go.mod go.sum /tmp/interop-stage/
+          git diff --cached --name-only > /tmp/interop-stage/changed-files.txt
+          sha256sum go.mod go.sum library/fluentd_gc_test.go tests/otlp_collector/run.py > /tmp/interop-stage/source-hashes.txt
+      - name: Native integrity and behavior gates
+        run: |
+          set -euo pipefail
+          go version > /tmp/interop-stage/toolchain.txt
+          go mod verify > /tmp/interop-stage/verify.txt
+          go build -mod=readonly ./...
+          go vet -mod=readonly ./...
+          go test -mod=readonly -count=1 -timeout=180s -json ./... > /tmp/interop-stage/full.jsonl
+          GOGC=10 go test -mod=readonly -race -count=20 -timeout=90s -json -run '^TestRegressionFluentDecodeStringLifetime$' ./library > /tmp/interop-stage/decoder.jsonl
+          GOGC=10 go test -mod=readonly -race -count=500 -timeout=90s -json -run '^TestRegressionFluentConcurrentTagRouting$' ./internal/senders > /tmp/interop-stage/routing.jsonl
+          test -z "$(gofmt -l library/fluentd_gc_test.go)"
+          python3 .scripts/check_readme.py --static
+          python3 - <<'PY'
+          import json,pathlib
+          root=pathlib.Path('/tmp/interop-stage')
+          for name, count in [('full',749),('decoder',20),('routing',500)]:
+              rows=[json.loads(x) for x in (root/(name+'.jsonl')).read_text().splitlines()]
+              assert not any(x['Action'] in ('fail','skip') for x in rows),name
+              assert sum(x['Action']=='pass' and 'Test' in x for x in rows)==count,name
+          PY
+      - name: Independent official Collector acceptance
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/collector-dist
+          curl --fail --location --retry 3 https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.161.0/otelcol_0.161.0_linux_amd64.tar.gz -o /tmp/collector-dist/collector.tar.gz
+          echo '6c2af0731a53691e3771d82a4b71e2941a46de27af191e40c697b6ed8643e50e  /tmp/collector-dist/collector.tar.gz' | sha256sum --check
+          tar -xzf /tmp/collector-dist/collector.tar.gz -C /tmp/collector-dist otelcol
+          go build -mod=readonly -race -o /tmp/go-fluentd-collector .
+          go version -m /tmp/go-fluentd-collector > /tmp/interop-stage/binary-build.txt
+          python3 tests/otlp_collector/run.py --binary /tmp/go-fluentd-collector --collector /tmp/collector-dist/otelcol --artifacts /tmp/interop-stage/campaign | tee /tmp/interop-stage/campaign.log
+          python3 tests/otlp_collector/run.py --audit-only --artifacts /tmp/interop-stage/campaign > /tmp/interop-stage/saved-audit.json
+          git diff --exit-code
+          test "$(git write-tree)" = b0bb986529e291e3902f19c903f6cff9726fd2e7
+      - name: Store verified Git objects only; do not update any ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,hashlib,json,pathlib,subprocess
+          files=['.github/workflows/otlp-collector.yml','README.md','docs/otlp-collector-acceptance.md','go.mod','go.sum','library/fluentd_gc_test.go','tests/otlp_collector/run.py']
+          assert subprocess.check_output(['git','diff','--cached','--name-only'],text=True).splitlines()==files
+          def post(endpoint, data):
+              return json.loads(subprocess.check_output(['gh','api','--method','POST','repos/Laisky/go-fluentd/git/'+endpoint,'--input','-'],input=json.dumps(data),text=True))
+          entries=[]
+          for name in files:
+              data=pathlib.Path(name).read_bytes()
+              expected=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+              result=post('blobs',{'encoding':'base64','content':base64.b64encode(data).decode()})
+              assert result['sha']==expected
+              entries.append({'path':name,'mode':'100644','type':'blob','sha':expected})
+          result=post('trees',{'base_tree':'46f890828a56e6ec0797104954a0afe751d751f3','tree':entries})
+          assert result['sha']=='b0bb986529e291e3902f19c903f6cff9726fd2e7'
+          pathlib.Path('/tmp/interop-stage/objects.json').write_text(json.dumps({'tree':result['sha'],'entries':entries},indent=2))
+          print(json.dumps({'tree':result['sha'],'entries':entries},indent=2))
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: otlp-interop-exact-candidate
+          path: /tmp/interop-stage
+          if-no-files-found: error
+          retention-days: 14

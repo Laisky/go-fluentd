@@ -54,6 +54,24 @@ func (d *bufferTokens) More() bool {
 	return k != 0 && k != '}' && k != ']'
 }
 func (d *bufferTokens) Token() (json.Token, error) {
+	if d.decoder.PeekKind() == '"' {
+		// ReadValue validates the complete JSON string, including its UTF-8.
+		// An unescaped string needs no unquote workspace. Copy it directly
+		// into owned storage before the decoder can reuse its raw buffer.
+		// This also avoids the tokenizer's extra buffer for non-ASCII text.
+		raw, err := d.decoder.ReadValue()
+		if err != nil {
+			return nil, err
+		}
+		if bytes.IndexByte(raw, '\\') < 0 {
+			return string(raw[1 : len(raw)-1]), nil
+		}
+		decoded, err := jsontext.AppendUnquote(nil, raw)
+		if err != nil {
+			return nil, err
+		}
+		return string(decoded), nil
+	}
 	t, err := d.decoder.ReadToken()
 	if err != nil {
 		return nil, err
@@ -65,8 +83,6 @@ func (d *bufferTokens) Token() (json.Token, error) {
 		return false, nil
 	case 't':
 		return true, nil
-	case '"':
-		return t.String(), nil
 	case '0':
 		return json.Number(t.String()), nil
 	case '{', '}', '[', ']':

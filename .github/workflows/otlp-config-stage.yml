@@ -42,9 +42,10 @@ jobs:
           git checkout --detach bee0dfc39b68a2dd72679ab8b1081f3f43f74414
           git apply --index /tmp/otlp-config.patch
           sed -i '/"gofluentd\\/internal\\/otlpstate"/d' internal/controller/otlp_service.go
-          gofmt -w internal/controller/otlp_service.go
           git add internal/controller/otlp_service.go
-          test "$(git write-tree)" = '6204f87991ca2e0b017466a014e4a1adaa5ced4d'
+          actual_tree=$(git write-tree)
+          echo "$actual_tree" | tee /tmp/otlp-config-evidence/reconstructed-tree.txt
+          test "$actual_tree" = '6204f87991ca2e0b017466a014e4a1adaa5ced4d'
           git diff --cached --check
           git status --short | tee /tmp/otlp-config-evidence/status.txt
           git diff --cached --stat | tee /tmp/otlp-config-evidence/stat.txt

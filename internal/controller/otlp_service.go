@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -84,7 +85,31 @@ func ParseOTLPServiceConfig(raw interface{}) (*OTLPServiceConfig, error) {
 				return time.ParseDuration(text)
 			}
 			if (from.Kind() == reflect.Float32 || from.Kind() == reflect.Float64) && to.Kind() >= reflect.Int && to.Kind() <= reflect.Uint64 {
-				return nil, errors.New("integer configuration must not be a floating-point value")
+				// Viper's JSON decoder uses floats even for integer literals.
+				// Refuse fractions, non-finite values and the region where
+				// adjacent integers can have rounded to the same float.
+				number := reflect.ValueOf(value).Float()
+				safeBits := 53
+				if from.Kind() == reflect.Float32 {
+					safeBits = 24
+				}
+				if math.IsNaN(number) || math.IsInf(number, 0) || math.Trunc(number) != number || math.Abs(number) >= math.Ldexp(1, safeBits) {
+					return nil, errors.New("integer configuration requires an exact safe integer")
+				}
+				converted := reflect.New(to).Elem()
+				if to.Kind() <= reflect.Int64 {
+					bound := math.Ldexp(1, to.Bits()-1)
+					if number < -bound || number >= bound {
+						return nil, errors.New("integer configuration overflows target type")
+					}
+					converted.SetInt(int64(number))
+				} else {
+					if number < 0 || number >= math.Ldexp(1, to.Bits()) {
+						return nil, errors.New("integer configuration overflows target type")
+					}
+					converted.SetUint(uint64(number))
+				}
+				return converted.Interface(), nil
 			}
 			return value, nil
 		},

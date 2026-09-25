@@ -200,3 +200,12 @@ flaky hardware-percentage gate on every PR. Publication and hosted CI must be
 checked separately from this local acceptance. The source patches, binary hashes,
 raw profile samples, resource observations, all paired requests, qualification
 failures and complete test logs are retained in the accompanying evidence.
+
+The unprofiled trials were also checked against the unchanged profiling-workload
+qualifier: **four of six qualify**. Pair 1's optimized sample has 78.3% (rather
+than 80%) of windows above 50% CPU, although its throughput CV is 0.165. Pair 2's
+baseline has throughput CV 0.339 and only 69.2% of windows above 50%. Both remain
+in the reported medians. All six satisfy delivery correctness and the bounded
+window, but the result must not be described as three universally stable pairs.
+The first complete pair qualifies on both sides; larger, independently isolated
+campaigns are needed for a robust variance/confidence assessment.

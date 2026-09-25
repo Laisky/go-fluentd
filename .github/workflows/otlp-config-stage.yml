@@ -1,0 +1,78 @@
+name: Validate OTLP service configuration increment
+on:
+  push:
+    branches: [ci/otlp-config-workspace-20260924]
+    paths:
+      - '.github/workflows/otlp-config-stage.yml'
+      - '.audit/otlp-config.patch.xz.b64'
+permissions:
+  contents: read
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    permissions:
+      contents: write
+    env:
+      GOMAXPROCS: '4'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+          cache: true
+      - name: Reconstruct exact listener and YAML candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/otlp-config-evidence
+          base64 -d .audit/otlp-config.patch.xz.b64 | xz -d > /tmp/otlp-config.patch
+          echo '29e67251fa40e28f24605b57b85c7e38a851fb200e259f4d5b5313e31dd9754e  /tmp/otlp-config.patch' | sha256sum -c -
+          git checkout --detach bee0dfc39b68a2dd72679ab8b1081f3f43f74414
+          git apply --index /tmp/otlp-config.patch
+          test "$(git write-tree)" = '4c5a67fb0007eeec00c6d8abba181870bf9b4bbe'
+          git diff --cached --check
+          git status --short | tee /tmp/otlp-config-evidence/status.txt
+          git diff --cached --stat | tee /tmp/otlp-config-evidence/stat.txt
+          git rev-parse HEAD > /tmp/otlp-config-evidence/base.txt
+          git write-tree > /tmp/otlp-config-evidence/tree.txt
+      - name: Native module, build and full application validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          go version | tee /tmp/otlp-config-evidence/go.txt
+          go mod verify | tee /tmp/otlp-config-evidence/modules.txt
+          test -z "$(gofmt -l internal/controller/otlp_service.go internal/controller/otlp_service_test.go internal/controller/controllor.go library/config/config.go)"
+          go build -mod=readonly ./...
+          go vet -mod=readonly ./...
+          go test -mod=readonly -count=1 -timeout=240s -json ./... > /tmp/otlp-config-evidence/full.jsonl
+          git diff --exit-code -- go.mod go.sum
+      - name: Dedicated listener, TLS and configuration race contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          go test -mod=readonly -race -count=5 -shuffle=on -timeout=240s -json ./internal/controller -run '^(TestOTLPService|TestResolveOTLPEndpointsAndDocumentedConfiguration)' > /tmp/otlp-config-evidence/race.jsonl
+          go test -mod=readonly -count=1 -coverprofile=/tmp/otlp-config-evidence/coverage.out ./internal/controller -run '^(TestOTLPService|TestResolveOTLPEndpointsAndDocumentedConfiguration)'
+      - name: Publish validated source to isolated staging branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Laisky.Cai'
+          git config user.email 'github@laisky.com'
+          git commit -m 'feat(otlp): wire secured HTTP service and configuration'
+          git rev-parse HEAD | tee /tmp/otlp-config-evidence/head.txt
+          git rev-parse HEAD^{tree} | tee /tmp/otlp-config-evidence/committed-tree.txt
+          test "$(cat /tmp/otlp-config-evidence/committed-tree.txt)" = '4c5a67fb0007eeec00c6d8abba181870bf9b4bbe'
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push "https://github.com/$GITHUB_REPOSITORY.git" "HEAD:refs/heads/ci/otlp-config-validated-20260924"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: otlp-config-stage
+          path: /tmp/otlp-config-evidence
+          retention-days: 7

@@ -41,7 +41,14 @@ jobs:
           echo '29e67251fa40e28f24605b57b85c7e38a851fb200e259f4d5b5313e31dd9754e  /tmp/otlp-config.patch' | sha256sum -c -
           git checkout --detach bee0dfc39b68a2dd72679ab8b1081f3f43f74414
           git apply --index /tmp/otlp-config.patch
-          sed -i '/"gofluentd\\/internal\\/otlpstate"/d' internal/controller/otlp_service.go
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('internal/controller/otlp_service.go')
+          s = p.read_text()
+          needle = '\t"gofluentd/internal/otlpstate"\n'
+          assert s.count(needle) == 1
+          p.write_text(s.replace(needle, ''))
+          PY
           git add internal/controller/otlp_service.go
           actual_tree=$(git write-tree)
           echo "$actual_tree" | tee /tmp/otlp-config-evidence/reconstructed-tree.txt

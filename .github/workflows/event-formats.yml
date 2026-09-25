@@ -1,0 +1,53 @@
+name: HTTP event format contracts
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: event-formats-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  delivery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 64]
+        seed: [127, 991]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.x'
+      - name: Verify native module and build ordinary race-instrumented executable
+        run: |
+          go mod verify
+          go build -mod=readonly -race -o /tmp/go-fluentd-events .
+      - name: Real HTTP, journal, retries, process crashes and independent wire peers
+        env:
+          GORACE: halt_on_error=1 exitcode=66
+          EVENT_GROUP: ${{ matrix.group }}
+          EVENT_SEED: ${{ matrix.seed }}
+        run: |
+          python3 tests/event_formats/run.py --binary /tmp/go-fluentd-events --artifacts /tmp/event-evidence --group "$EVENT_GROUP" --seed "$EVENT_SEED"
+          python3 tests/event_formats/audit.py --artifacts /tmp/event-evidence
+          git diff --exit-code -- go.mod go.sum
+      - name: Retain receipts, raw wire, ledgers, configs and diagnostics even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: event-formats-${{ matrix.group }}-${{ matrix.seed }}
+          path: |
+            /tmp/event-evidence/results.json
+            /tmp/event-evidence/audited.json
+            /tmp/event-evidence/*/*.json
+            /tmp/event-evidence/*/*.jsonl
+            /tmp/event-evidence/*/process-*.log
+          retention-days: 14

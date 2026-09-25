@@ -3,6 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"gofluentd/internal/controller"
@@ -24,8 +27,9 @@ var rootCmd = &cobra.Command{
 			log.Logger.Panic("parse command args", zap.Error(err))
 		}
 	},
-	Run: func(cmd *cobra.Command, args []string) {
-		ctx := context.Background()
+	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
 		setupGC(ctx)
 		setupSettings()
 		setupLogger(ctx)
@@ -33,7 +37,7 @@ var rootCmd = &cobra.Command{
 
 		// run
 		controllor := controller.NewControllor()
-		controllor.Run(ctx)
+		return controllor.Run(ctx)
 	},
 }
 

@@ -1,0 +1,55 @@
+# OTLP-only data pipeline plus the existing management listener (--addr).
+# Provision storage_dir as a private persistent directory before starting.
+# Set GO_FLUENTD_OTLP_TOKEN to a strong token; token values are not stored here.
+settings:
+  otlp:
+    enabled: true
+    listen_addr: 127.0.0.1:4318
+    storage_dir: ./var/otlp
+    bearer_token_env: GO_FLUENTD_OTLP_TOKEN
+    # Non-loopback listening requires a TLS key pair. Optional mTLS:
+    # tls_cert_file: /run/otlp/server.crt
+    # tls_key_file: /run/otlp/server.key
+    # client_ca_file: /run/otlp/client-ca.crt
+    max_connections: 128
+    max_concurrent: 16
+    max_header_bytes: 32768
+    read_header_timeout: 5s
+    body_read_timeout: 10s
+    request_timeout: 30s
+    idle_timeout: 30s
+    shutdown_timeout: 10s
+    max_wire_bytes: 4194304
+    max_decoded_bytes: 4194304
+    max_items: 10000
+    max_response_bytes: 1048576
+    max_wal_bytes: 268435456
+    journal_gzip: false
+    replay_batch: 64
+    replay_interval: 1s
+    destinations:
+      - id: local-collector
+        # Exact per-signal URLs. All three are required in this first integration.
+        # Replace the loopback development peer for production; prefer HTTPS.
+        logs_endpoint: http://127.0.0.1:14318/v1/logs
+        metrics_endpoint: http://127.0.0.1:14318/v1/metrics
+        traces_endpoint: http://127.0.0.1:14318/v1/traces
+        # bearer_token_env: GO_FLUENTD_COLLECTOR_TOKEN
+        # ca_file: /run/otlp/collector-ca.crt
+        gzip: true
+        timeout: 30s
+        max_attempts: 3
+        initial_backoff: 100ms
+        max_backoff: 5s
+  # Keep the separate legacy journal root, even with no legacy receivers.
+  journal:
+    buf_dir_path: ./var/legacy-journal
+    buf_file_bytes: 1048576
+    is_compress: false
+    committed_id_sec: 120
+    group_commit_max_messages: 1
+    journal_out_chan_len: 32
+    commit_id_chan_len: 32
+    child_data_chan_len: 32
+    child_id_chan_len: 32
+    gc_inteval_sec: 3600

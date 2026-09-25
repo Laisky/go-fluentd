@@ -1,0 +1,78 @@
+name: OTLP configured service contracts
+on:
+  pull_request:
+    paths:
+      - 'cmd/**'
+      - 'main.go'
+      - 'internal/controller/**'
+      - 'internal/otlphttp/**'
+      - 'internal/otlpstate/**'
+      - 'library/otlpwire/**'
+      - 'tests/otlp_service/**'
+      - 'docs/settings/otlp.yml'
+      - 'docs/otlp*.md'
+      - '.scripts/verify_otlp_service_contracts.py'
+      - '.github/workflows/otlp-service.yml'
+      - 'go.mod'
+      - 'go.sum'
+  push:
+    branches: [master]
+    paths:
+      - 'cmd/**'
+      - 'main.go'
+      - 'internal/controller/**'
+      - 'internal/otlphttp/**'
+      - 'internal/otlpstate/**'
+      - 'library/otlpwire/**'
+      - 'tests/otlp_service/**'
+      - 'docs/settings/otlp.yml'
+      - '.scripts/verify_otlp_service_contracts.py'
+      - '.github/workflows/otlp-service.yml'
+      - 'go.mod'
+      - 'go.sum'
+permissions:
+  contents: read
+jobs:
+  configured:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOMAXPROCS: '4'
+      GORACE: 'halt_on_error=1 exitcode=66'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Native source and dependency integrity
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/otlp-service-evidence
+          go version > /tmp/otlp-service-evidence/toolchain.txt
+          git rev-parse HEAD > /tmp/otlp-service-evidence/source.txt
+          git rev-parse HEAD^{tree} > /tmp/otlp-service-evidence/tree.txt
+          cp go.mod go.sum /tmp/otlp-service-evidence/
+          go mod verify | tee /tmp/otlp-service-evidence/verify.txt
+          sha256sum internal/controller/otlp_service*.go internal/controller/controllor.go cmd/root.go main.go tests/otlp_service/run.py docs/settings/otlp.yml > /tmp/otlp-service-evidence/source-hashes.txt
+          test -z "$(gofmt -l internal/controller/otlp_service*.go cmd/root.go main.go)"
+      - name: Listener, TLS, authentication, bounds and shutdown contracts
+        run: |
+          set -euo pipefail
+          go test -mod=readonly -count=1 -timeout=180s -json -coverprofile=/tmp/otlp-service-evidence/coverage.out -run '^TestOTLPService' ./internal/controller > /tmp/otlp-service-evidence/tests.jsonl
+          go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s -json -run '^TestOTLPService' ./internal/controller > /tmp/otlp-service-evidence/race.jsonl
+      - name: Configured executable and independent HTTP peers
+        run: |
+          set -euo pipefail
+          go build -mod=readonly -race -o /tmp/go-fluentd-otlp .
+          python3 tests/otlp_service/run.py --binary /tmp/go-fluentd-otlp --artifacts /tmp/otlp-service-evidence/cli
+          git diff --exit-code -- go.mod go.sum
+      - name: Reject unsafe listener policies without accepting build errors
+        run: python3 .scripts/verify_otlp_service_contracts.py --artifacts /tmp/otlp-service-evidence/negative
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: otlp-configured-service-${{ github.sha }}
+          path: /tmp/otlp-service-evidence
+          retention-days: 14

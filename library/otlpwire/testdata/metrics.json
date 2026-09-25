@@ -1,0 +1,143 @@
+{
+  "resourceMetrics": [
+    {
+      "schemaUrl": "https://example.test/schema",
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "OTLP 世界"
+            }
+          },
+          {
+            "key": "nested",
+            "value": {
+              "kvlistValue": {
+                "values": [
+                  {
+                    "key": "deep",
+                    "value": {
+                      "intValue": "9223372036854775807"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "scopeMetrics": [
+        {
+          "scope": {
+            "name": "independent-fixture",
+            "version": "1"
+          },
+          "metrics": [
+            {
+              "name": "gauge",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "timeUnixNano": "1720000000000000001",
+                    "asInt": "9223372036854775807"
+                  },
+                  {
+                    "timeUnixNano": "1720000000000000001",
+                    "asDouble": "NaN"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "sum",
+              "unit": "1",
+              "sum": {
+                "aggregationTemporality": 1,
+                "isMonotonic": true,
+                "dataPoints": [
+                  {
+                    "startTimeUnixNano": "1720000000000000000",
+                    "timeUnixNano": "1720000000000000001",
+                    "asInt": "-9223372036854775808"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "histogram",
+              "histogram": {
+                "aggregationTemporality": 2,
+                "dataPoints": [
+                  {
+                    "count": "3",
+                    "sum": 4.5,
+                    "bucketCounts": [
+                      "1",
+                      "2"
+                    ],
+                    "explicitBounds": [
+                      1
+                    ],
+                    "min": 0.5,
+                    "max": 2,
+                    "exemplars": [
+                      {
+                        "asDouble": 0.5,
+                        "timeUnixNano": "1720000000000000001",
+                        "traceId": "0123456789abcdef0123456789abcdef",
+                        "spanId": "0123456789abcdef"
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "exponential",
+              "exponentialHistogram": {
+                "aggregationTemporality": 1,
+                "dataPoints": [
+                  {
+                    "count": "4",
+                    "sum": 7,
+                    "scale": 2,
+                    "zeroCount": "1",
+                    "zeroThreshold": 0.001,
+                    "positive": {
+                      "offset": -2,
+                      "bucketCounts": [
+                        "1",
+                        "2"
+                      ]
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "name": "summary",
+              "summary": {
+                "dataPoints": [
+                  {
+                    "count": "2",
+                    "sum": 4,
+                    "quantileValues": [
+                      {
+                        "quantile": 0.5,
+                        "value": 2
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "futureExtension": {
+    "keep": "unknown field bytes"
+  }
+}

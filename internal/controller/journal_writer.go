@@ -89,6 +89,11 @@ func (j *Journal) persistGroup(ctx context.Context, tag string, writer journalDa
 		msg.JournalTag = tag
 		data.ID = msg.ID
 		data.Data["message"], data.Data["tag"] = msg.Message, msg.Tag
+		// This wrapper is reused: do not let an event marker leak into legacy logs.
+		delete(data.Data, "source_format")
+		if msg.SourceFormat != "" {
+			data.Data["source_format"] = msg.SourceFormat
+		}
 		counter.Count()
 		var err error
 		for attempt := 0; attempt < 2; attempt++ {

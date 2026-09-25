@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"regexp"
 	"runtime"
 	"sync"
@@ -110,6 +111,12 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 					TimeKey:       gutils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".time_key"),
 					NewTimeKey:    gutils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".new_time_key"),
 				}))
+			case "http_events":
+				recv, err := c.initHTTPEventsRecv(env, name)
+				if err != nil {
+					log.Logger.Panic("invalid HTTP events receiver", zap.String("name", name), zap.Error(err))
+				}
+				receivers = append(receivers, recv)
 			case "http":
 				receivers = append(receivers, recvs.NewHTTPRecv(&recvs.HTTPRecvCfg{ // wechat mini program
 					Name:               name,
@@ -410,6 +417,12 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 
 			t := gutils.Settings.GetString("settings.producer.plugins." + name + ".type")
 			switch t {
+			case "http_events":
+				sender, err := c.initHTTPEventsSender(env, name)
+				if err != nil {
+					log.Logger.Panic("invalid HTTP events sender", zap.String("name", name), zap.Error(err))
+				}
+				ss = append(ss, sender)
 			case "fluentd":
 				ss = append(ss, senders.NewFluentSender(&senders.FluentSenderCfg{
 					Name:                 name,
@@ -513,7 +526,34 @@ func (c *Controllor) runHeartBeat(ctx context.Context) {
 }
 
 // Run starting all pipeline
-func (c *Controllor) Run(ctx context.Context) {
+func (c *Controllor) Run(parent context.Context) (runErr error) {
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+	cfg, err := ParseOTLPServiceConfig(gutils.Settings.Get("settings.otlp"))
+	if err != nil {
+		return err
+	}
+	if cfg != nil {
+		if gutils.Settings.GetBool("dry") {
+			return errors.New("OTLP durable admission cannot run in dry mode")
+		}
+		if err := CheckOTLPStorageSeparation(cfg.StorageDirectory, gutils.Settings.GetString("settings.journal.buf_dir_path")); err != nil {
+			return err
+		}
+		service, err := StartOTLPService(ctx, *cfg)
+		if err != nil {
+			return err
+		}
+		defer func() { runErr = errors.Join(runErr, service.Stop()) }()
+		// A fatal listener or storage error stops the application, not just OTLP.
+		go func() { <-service.Done(); cancel() }()
+		monitor.AddMetric("otlp", func() map[string]interface{} {
+			n := service.Counters()
+			return map[string]interface{}{"acceptedEnvelopes": n.Accepted, "quarantinedEnvelopes": n.Quarantined, "retryableEnvelopes": n.Retryable, "blockedEnvelopes": n.Blocked, "receiptReplayHits": n.ReplayHits}
+		})
+		log.Logger.Info("OTLP HTTP listener started", zap.String("addr", service.Addr().String()))
+	}
+
 	log.Logger.Info("running...")
 	env := gutils.Settings.GetString("env")
 
@@ -571,4 +611,5 @@ func (c *Controllor) Run(ctx context.Context) {
 
 	go producer.Run(ctx)
 	RunServer(ctx, gutils.Settings.GetString("addr"))
+	return nil
 }

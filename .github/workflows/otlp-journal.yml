@@ -1,0 +1,65 @@
+name: OTLP journal lifecycle contracts
+on:
+  pull_request:
+    paths:
+      - 'internal/controller/otlp*'
+      - 'internal/otlphttp/**'
+      - 'internal/otlpstate/**'
+      - 'library/otlpwire/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'docs/otlp*.md'
+      - '.scripts/verify_otlp_journal_contracts.py'
+      - '.github/workflows/otlp-journal.yml'
+  push:
+    branches: [master]
+    paths:
+      - 'internal/controller/otlp*'
+      - 'internal/otlphttp/**'
+      - 'internal/otlpstate/**'
+      - 'library/otlpwire/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.scripts/verify_otlp_journal_contracts.py'
+      - '.github/workflows/otlp-journal.yml'
+permissions:
+  contents: read
+jobs:
+  lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GOMAXPROCS: '4'
+      OTLP_LIFECYCLE_EVIDENCE: /tmp/otlp-lifecycle-evidence/process
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Native module and source provenance
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/otlp-lifecycle-evidence
+          go version > /tmp/otlp-lifecycle-evidence/toolchain.txt
+          git rev-parse HEAD > /tmp/otlp-lifecycle-evidence/source.txt
+          git rev-parse HEAD^{tree} > /tmp/otlp-lifecycle-evidence/tree.txt
+          cp go.mod go.sum /tmp/otlp-lifecycle-evidence/
+          sha256sum internal/controller/otlp_journal*.go .scripts/verify_otlp_journal_contracts.py > /tmp/otlp-lifecycle-evidence/source-hashes.txt
+          go mod verify | tee /tmp/otlp-lifecycle-evidence/verify.txt
+          test -z "$(gofmt -l internal/controller/otlp_journal*.go)"
+      - name: Durable admission, bounded replay, real HTTP and process crashes
+        run: |
+          set -euo pipefail
+          go test -mod=readonly -count=1 -timeout=180s -json -coverprofile=/tmp/otlp-lifecycle-evidence/coverage.out -run '^TestOTLPJournal' ./internal/controller > /tmp/otlp-lifecycle-evidence/tests.jsonl
+          go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s -json -run '^TestOTLPJournal' ./internal/controller > /tmp/otlp-lifecycle-evidence/race.jsonl
+          git diff --exit-code -- go.mod go.sum
+      - name: Reject unsafe admission and recovery variants
+        run: python3 .scripts/verify_otlp_journal_contracts.py --artifacts /tmp/otlp-lifecycle-evidence/negative
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: otlp-journal-${{ github.sha }}
+          path: /tmp/otlp-lifecycle-evidence
+          retention-days: 14

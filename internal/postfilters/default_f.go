@@ -53,6 +53,12 @@ func (f *DefaultFilter) valid() error {
 }
 
 func (f *DefaultFilter) Filter(msg *library.FluentMsg) *library.FluentMsg {
+	// Event envelopes are not legacy log maps. Implicit normalization would
+	// silently rename/remove valid NDJSON fields or truncate CloudEvents context.
+	// Explicitly configured filters still run after this default filter.
+	if msg.SourceFormat != "" {
+		return msg
+	}
 	// Normalize from a stable snapshot: inserting renamed keys while ranging
 	// can revisit them or resurrect the old key. Existing canonical keys win.
 	original := msg.Message

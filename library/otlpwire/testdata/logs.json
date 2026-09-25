@@ -1,0 +1,57 @@
+{
+  "resourceLogs": [
+    {
+      "schemaUrl": "https://example.test/schema",
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "OTLP 世界"
+            }
+          },
+          {
+            "key": "nested",
+            "value": {
+              "kvlistValue": {
+                "values": [
+                  {
+                    "key": "deep",
+                    "value": {
+                      "intValue": "9223372036854775807"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "independent-fixture",
+            "version": "1"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "18446744073709551615",
+              "observedTimeUnixNano": "1720000000000000001",
+              "severityNumber": 17,
+              "severityText": "ERROR",
+              "body": {
+                "bytesValue": "AP9oZWxsbw=="
+              },
+              "traceId": "0123456789ABCDEF0123456789ABCDEF",
+              "spanId": "0123456789abcdef",
+              "flags": 1
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "futureExtension": {
+    "keep": "unknown field bytes"
+  }
+}

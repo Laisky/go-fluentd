@@ -1,0 +1,57 @@
+name: Combined event and OTLP contracts
+on:
+  pull_request:
+  push:
+    branches: [master]
+permissions:
+  contents: read
+jobs:
+  coexistence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GOTOOLCHAIN: local
+      GOMAXPROCS: '2'
+      GORACE: 'halt_on_error=1 exitcode=66'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Preserve exact source and native dependency identity
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/combined-evidence
+          git rev-parse HEAD HEAD^{tree} > /tmp/combined-evidence/source.txt
+          git archive --format=tar.gz HEAD > /tmp/combined-evidence/source.tar.gz
+          go version > /tmp/combined-evidence/toolchain.txt
+          cp go.mod go.sum /tmp/combined-evidence/
+          go mod verify | tee /tmp/combined-evidence/module-verify.txt
+      - name: Real JSON settings and guarded numeric conversions
+        run: |
+          set -euo pipefail
+          go test -mod=readonly -race -count=10 -shuffle=on -timeout=90s -json \
+            -run 'Test(RegressionOTLPJSONConfigurationMatchesYAML|OTLPConfigurationRejectsUnsafeNumericConversions)$' \
+            ./internal/controller > /tmp/combined-evidence/json-config.jsonl
+      - name: Concurrent event and OTLP delivery across a shared process crash
+        run: |
+          set -euo pipefail
+          go build -mod=readonly -race -o /tmp/go-fluentd-combined .
+          go version -m /tmp/go-fluentd-combined > /tmp/combined-evidence/binary-build.txt
+          python3 tests/combined_formats/run.py --binary /tmp/go-fluentd-combined \
+            --artifacts /tmp/combined-evidence/campaign | tee /tmp/combined-evidence/campaign.log
+          python3 tests/combined_formats/run.py --audit-only \
+            --artifacts /tmp/combined-evidence/campaign | tee /tmp/combined-evidence/saved-audit.json
+          git diff --exit-code -- go.mod go.sum
+          find /tmp/combined-evidence -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/combined-SHA256SUMS
+          cp /tmp/combined-SHA256SUMS /tmp/combined-evidence/SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: combined-formats-${{ github.sha }}
+          path: /tmp/combined-evidence
+          if-no-files-found: error
+          retention-days: 14
+          include-hidden-files: true

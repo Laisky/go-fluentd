@@ -9,9 +9,10 @@ A Go log-processing service that receives events, journals them to disk, combine
 multiline records, parses and transforms fields, and routes results to one or
 more destinations. It builds as a single executable.
 
-**Durable acceptance is opt-in, and delivery guarantees depend on the complete
-pipeline.** A local journal is not an unconditional no-loss or exactly-once
-promise. Read [Delivery and durability](#delivery-and-durability) before deployment.
+**Legacy HTTP durable acceptance is opt-in; HTTP event receivers always wait for
+it. Delivery guarantees depend on the complete pipeline.** A local journal is not
+an unconditional no-loss or exactly-once promise. Read
+[Delivery and durability](#delivery-and-durability) before deployment.
 
 [Quickstart](#quickstart) · [Configuration](#configuration) ·
 [Architecture](#architecture) · [Operations and security](#operations-and-security) ·
@@ -21,16 +22,19 @@ promise. Read [Delivery and durability](#delivery-and-durability) before deploym
 
 | Boundary | Configurable implementations |
 | --- | --- |
-| Inputs | Fluent Forward over TCP (`fluentd`), validated JSON HTTP (`http`), Syslog (`rsyslog`), Kafka (`kafka`) |
+| Inputs | Fluent Forward over TCP (`fluentd`), validated JSON HTTP (`http`), CloudEvents/NDJSON HTTP (`http_events`), Syslog (`rsyslog`), Kafka (`kafka`) |
 | Processing | Admission filters, per-tag multiline concatenation, regular-expression/embedded-JSON parsing, field selection and tag rewriting |
-| Outputs | Fluent TCP (`fluentd`), Elasticsearch bulk (`es`), Kafka (`kafka`), console (`stdout`) |
+| Outputs | Fluent TCP (`fluentd`), Elasticsearch bulk (`es`), Kafka (`kafka`), CloudEvents/NDJSON HTTP (`http_events`), console (`stdout`) |
 | Persistence | Plain or gzip journal segments, replay, acknowledgement tracking, optional bounded group commit |
 | OTLP (opt-in) | Dedicated authenticated OTLP/HTTP logs, metrics and traces service; JSON/protobuf, gzip and durable local acceptance. Separate from the legacy tag/filter pipeline. |
 | Inspection | `/health`, JSON `/monitor`, and `/pprof/` on the management HTTP listener |
 
 This is not the upstream Fluentd distribution and does not load its Ruby plugins
 or configuration syntax. The repository contains a generic HTTP sender component,
-but the current configuration loader does **not** expose it as an output type.
+but the configuration loader does **not** expose that legacy component as an output
+type. The separate `http_events` plugins provide protocol-aware CloudEvents and
+NDJSON inputs/outputs; see [HTTP event formats](docs/stream-formats.md) for the
+support matrix, configuration, acknowledgement contract and operational limits.
 Do not infer backend-version compatibility from a protocol name: validate your
 actual Fluent, Kafka and Elasticsearch deployment, including bulk metadata and
 acknowledgement behavior, before rollout.

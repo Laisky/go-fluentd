@@ -13,6 +13,7 @@ import (
 	"gofluentd/internal/monitor"
 	"gofluentd/library"
 	"gofluentd/library/log"
+	"gofluentd/library/streamformat"
 
 	"github.com/Laisky/go-journal"
 	utils "github.com/Laisky/go-utils"
@@ -293,8 +294,17 @@ func (j *Journal) processLegacyMsg(ctx context.Context, out chan *library.Fluent
 				if data.ID > innerMax {
 					innerMax = data.ID
 				}
+				format := ""
+				if raw, exists := data.Data["source_format"]; exists {
+					var ok bool
+					format, ok = raw.(string)
+					if !ok || !streamformat.ValidFormat(format) {
+						replayErr = fmt.Errorf("invalid persisted source format for message %d", data.ID)
+						return
+					}
+				}
 				msg := j.MsgPool.Get().(*library.FluentMsg)
-				*msg = library.FluentMsg{ID: data.ID, Tag: storedTag, JournalTag: tag, Message: message}
+				*msg = library.FluentMsg{ID: data.ID, Tag: storedTag, JournalTag: tag, Message: message, SourceFormat: format}
 				select {
 				case out <- msg:
 				case <-ctx.Done():

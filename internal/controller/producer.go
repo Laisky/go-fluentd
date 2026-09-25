@@ -257,7 +257,11 @@ func (p *Producer) Run(ctx context.Context) {
 					continue
 				}
 
-				msg.Message["msgid"] = p.DistributeKey + "-" + strconv.FormatInt(msg.ID, 10) // set id
+				msg.DeliveryID = p.DistributeKey + "-" + strconv.FormatInt(msg.ID, 10)
+				if msg.SourceFormat == "" {
+					// Preserve the existing log contract; event envelopes stay untouched.
+					msg.Message["msgid"] = msg.DeliveryID
+				}
 				if itf, ok = p.tag2SenderCaches.Load(msg.Tag); !ok {
 					p.Lock()
 					if itf, ok = p.tag2SenderCaches.Load(msg.Tag); !ok { // double check

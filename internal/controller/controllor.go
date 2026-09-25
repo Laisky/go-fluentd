@@ -111,6 +111,12 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 					TimeKey:       gutils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".time_key"),
 					NewTimeKey:    gutils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".new_time_key"),
 				}))
+			case "http_events":
+				recv, err := c.initHTTPEventsRecv(env, name)
+				if err != nil {
+					log.Logger.Panic("invalid HTTP events receiver", zap.String("name", name), zap.Error(err))
+				}
+				receivers = append(receivers, recv)
 			case "http":
 				receivers = append(receivers, recvs.NewHTTPRecv(&recvs.HTTPRecvCfg{ // wechat mini program
 					Name:               name,
@@ -411,6 +417,12 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 
 			t := gutils.Settings.GetString("settings.producer.plugins." + name + ".type")
 			switch t {
+			case "http_events":
+				sender, err := c.initHTTPEventsSender(env, name)
+				if err != nil {
+					log.Logger.Panic("invalid HTTP events sender", zap.String("name", name), zap.Error(err))
+				}
+				ss = append(ss, sender)
 			case "fluentd":
 				ss = append(ss, senders.NewFluentSender(&senders.FluentSenderCfg{
 					Name:                 name,

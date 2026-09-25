@@ -1,0 +1,40 @@
+# Operator template: provide a compatible whole-request-ACK HTTP destination.
+# The example token is public and must be replaced before deployment.
+settings:
+  journal:
+    buf_dir_path: var/go-fluentd/events
+    is_compress: false
+    group_commit_max_messages: 1
+    gc_inteval_sec: 3600
+  acceptor:
+    recvs:
+      plugins:
+        events:
+          type: http_events
+          active_env: [prod]
+          format: cloudevents
+          path: /events
+          tag: events.{env}
+          bearer_token: replace-this-demo-token
+          max_body_byte: 4194304
+          max_records: 1024
+          ack_timeout_sec: 30
+  producer:
+    sender_inchan_size: 1024
+    plugins:
+      event_destination:
+        type: http_events
+        active_env: [prod]
+        format: cloudevents
+        mode: structured
+        addr: http://127.0.0.1:9000/events
+        tags: ["events.{env}"]
+        bearer_token: replace-this-demo-token
+        msg_batch_size: 1
+        request_timeout_sec: 10
+        max_attempts: 3
+        retry_backoff_msec: 200
+        max_retry_delay_sec: 30
+        max_body_byte: 4194304
+        max_response_byte: 65536
+        is_discard_when_blocked: false

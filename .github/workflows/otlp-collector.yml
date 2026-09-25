@@ -26,6 +26,10 @@ jobs:
           mkdir -p /tmp/otlp-collector-evidence
           go version > /tmp/otlp-collector-evidence/toolchain.txt
           git rev-parse HEAD HEAD^{tree} > /tmp/otlp-collector-evidence/source.txt
+          # Archive committed files only, never the working directory, credentials,
+          # module cache, or generated telemetry. This supports offline re-audits.
+          git archive --format=tar.gz --output=/tmp/otlp-collector-evidence/source.tar.gz HEAD
+          (cd /tmp/otlp-collector-evidence && sha256sum source.tar.gz > source-archive.sha256)
           cp go.mod go.sum /tmp/otlp-collector-evidence/
           sha256sum go.mod go.sum library/fluentd_gc_test.go tests/otlp_collector/run.py tests/otlp_service/run.py > /tmp/otlp-collector-evidence/source-hashes.txt
           go mod verify | tee /tmp/otlp-collector-evidence/verify.txt

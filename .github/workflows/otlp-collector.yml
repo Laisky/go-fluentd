@@ -1,0 +1,70 @@
+name: OTLP Collector interoperability
+on:
+  pull_request:
+  push:
+    branches: [master]
+permissions:
+  contents: read
+jobs:
+  collector:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GOTOOLCHAIN: local
+      GOMAXPROCS: '2'
+      GORACE: 'halt_on_error=1 exitcode=66'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Preserve exact source and dependency identity
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/otlp-collector-evidence
+          go version > /tmp/otlp-collector-evidence/toolchain.txt
+          git rev-parse HEAD HEAD^{tree} > /tmp/otlp-collector-evidence/source.txt
+          cp go.mod go.sum /tmp/otlp-collector-evidence/
+          sha256sum go.mod go.sum library/fluentd_gc_test.go tests/otlp_collector/run.py tests/otlp_service/run.py > /tmp/otlp-collector-evidence/source-hashes.txt
+          go mod verify | tee /tmp/otlp-collector-evidence/verify.txt
+          test -z "$(gofmt -l library/fluentd_gc_test.go)"
+      - name: Exercise decoder lifetime and original routing under GC pressure
+        run: |
+          set -euo pipefail
+          GOGC=10 go test -mod=readonly -race -count=20 -timeout=90s -json -run '^TestRegressionFluentDecodeStringLifetime$' ./library > /tmp/otlp-collector-evidence/decoder.jsonl
+          GOGC=10 go test -mod=readonly -race -count=500 -timeout=90s -json -run '^TestRegressionFluentConcurrentTagRouting$' ./internal/senders > /tmp/otlp-collector-evidence/routing.jsonl
+          python3 - <<'PY'
+          import json, pathlib
+          root=pathlib.Path('/tmp/otlp-collector-evidence')
+          for name, test, count in [('decoder','TestRegressionFluentDecodeStringLifetime',20),('routing','TestRegressionFluentConcurrentTagRouting',500)]:
+              rows=[json.loads(line) for line in (root/(name+'.jsonl')).read_text().splitlines()]
+              assert not any(r['Action'] in ('fail','skip') for r in rows), name
+              assert sum(r['Action']=='pass' and r.get('Test')==test for r in rows)==count, name
+          PY
+      - name: Obtain checksum-pinned official Collector 0.161.0
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/otelcol-dist
+          url=https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.161.0/otelcol_0.161.0_linux_amd64.tar.gz
+          curl --fail --location --retry 3 "$url" -o /tmp/otelcol-dist/collector.tar.gz
+          echo '6c2af0731a53691e3771d82a4b71e2941a46de27af191e40c697b6ed8643e50e  /tmp/otelcol-dist/collector.tar.gz' | sha256sum --check
+          tar -xzf /tmp/otelcol-dist/collector.tar.gz -C /tmp/otelcol-dist otelcol
+          /tmp/otelcol-dist/otelcol --version > /tmp/otlp-collector-evidence/collector-version.txt
+          sha256sum /tmp/otelcol-dist/collector.tar.gz /tmp/otelcol-dist/otelcol > /tmp/otlp-collector-evidence/collector-hashes.txt
+      - name: Real Collector source and sink, WAL refusal, retry and process crashes
+        run: |
+          set -euo pipefail
+          go build -mod=readonly -race -o /tmp/go-fluentd-collector .
+          go version -m /tmp/go-fluentd-collector > /tmp/otlp-collector-evidence/binary-build.txt
+          python3 tests/otlp_collector/run.py --binary /tmp/go-fluentd-collector --collector /tmp/otelcol-dist/otelcol --artifacts /tmp/otlp-collector-evidence/campaign | tee /tmp/otlp-collector-evidence/campaign.log
+          python3 tests/otlp_collector/run.py --audit-only --artifacts /tmp/otlp-collector-evidence/campaign | tee /tmp/otlp-collector-evidence/saved-audit.json
+          git diff --exit-code -- go.mod go.sum
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: otlp-collector-${{ github.sha }}
+          path: /tmp/otlp-collector-evidence
+          if-no-files-found: error
+          retention-days: 14

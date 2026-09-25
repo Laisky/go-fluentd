@@ -25,6 +25,7 @@ promise. Read [Delivery and durability](#delivery-and-durability) before deploym
 | Processing | Admission filters, per-tag multiline concatenation, regular-expression/embedded-JSON parsing, field selection and tag rewriting |
 | Outputs | Fluent TCP (`fluentd`), Elasticsearch bulk (`es`), Kafka (`kafka`), console (`stdout`) |
 | Persistence | Plain or gzip journal segments, replay, acknowledgement tracking, optional bounded group commit |
+| OTLP (opt-in) | Dedicated authenticated OTLP/HTTP logs, metrics and traces service; JSON/protobuf, gzip and durable local acceptance. Separate from the legacy tag/filter pipeline. |
 | Inspection | `/health`, JSON `/monitor`, and `/pprof/` on the management HTTP listener |
 
 This is not the upstream Fluentd distribution and does not load its Ruby plugins
@@ -33,6 +34,13 @@ but the current configuration loader does **not** expose it as an output type.
 Do not infer backend-version compatibility from a protocol name: validate your
 actual Fluent, Kafka and Elasticsearch deployment, including bulk metadata and
 acknowledgement behavior, before rollout.
+
+**OTLP/HTTP is an opt-in, bounded implementation, not a full Collector replacement.**
+See the [tested settings](docs/settings/otlp.yml), [service guide](docs/otlp-service.md)
+and [Collector 0.161.0 interoperability scope](docs/otlp-collector-acceptance.md).
+HTTP 200 means local journal synchronization, not completed downstream delivery.
+Per-destination receipts have no compaction or aggregate disk quota; plan storage
+headroom. OTLP/gRPC, profiles, aggregation and sampling are not supported.
 
 These instructions describe the checked-out source, not an older release image.
 [go.mod](go.mod) is the toolchain/dependency source of truth. The current minimum
@@ -249,11 +257,13 @@ compiled Go components, not dynamically loaded third-party Fluentd plugins.
 
 ## Operations and security
 
-Keep the HTTP listener, `/monitor`, and `/pprof/` on loopback or a protected
-management network. The server does not supply a public-facing authentication
-or TLS boundary; use authenticated TLS termination and network controls. Do not
+Keep the legacy management/JSON-input listener, `/monitor`, and `/pprof/` on
+loopback or a protected management network. That listener does not supply a
+public-facing authentication or TLS boundary; use authenticated TLS termination and network controls. Do not
 publish profiling endpoints through a public ingress. `--addr` does not change
-the addresses configured for Fluent/Syslog receivers.
+the addresses configured for Fluent/Syslog receivers. The separate opt-in OTLP
+listener requires bearer authentication and TLS for non-loopback addresses; it
+does not expose the management routes.
 
 The HTTP input's legacy `MD5(timestamp + salt)` check does **not** authenticate
 the message body or prevent replay. It is not a replacement for TLS, caller
@@ -336,6 +346,7 @@ console payload, health/monitor responses, and invalid-request behavior.
 | Topic | Start here |
 | --- | --- |
 | Tested demo and troubleshooting | [Quickstart](docs/quickstart.md) |
+| OTLP service and real Collector acceptance | [Service](docs/otlp-service.md) / [settings](docs/settings/otlp.yml) / [acceptance](docs/otlp-collector-acceptance.md) |
 | Full configuration reference | [English](docs/settings/settings.yml) / [Chinese](docs/settings/settings_cn.yml) |
 | Reliability and recovery | [Design notes](docs/reliability.md) / [executable contract](tests/delivery/CONTRACT.md) |
 | Behavior tests | [Component testing](docs/component-testing.md) / [delivery tests](tests/delivery/README.md) |

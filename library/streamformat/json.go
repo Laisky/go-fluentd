@@ -158,6 +158,13 @@ func value(d jsonTokens, depth int) (interface{}, error) {
 // encoding/json replaces lone UTF-16 surrogates with U+FFFD. For a forwarding
 // pipeline that would silently alter caller content, so validate escape pairs.
 func validEscapes(b []byte) error {
+	// UTF-16 surrogate escapes require a backslash. Most log/event strings
+	// contain none; the optimized byte search avoids a branch for every byte.
+	// JSON syntax and UTF-8 validation still run, including on this fast path.
+	if bytes.IndexByte(b, '\\') < 0 {
+		return nil
+	}
+
 	quoted := false
 	for i := 0; i < len(b); i++ {
 		if b[i] == '"' {

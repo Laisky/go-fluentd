@@ -186,8 +186,22 @@ func TestRegressionFluentPartialWriteReconnects(t *testing.T) {
 func TestRegressionFluentConcurrentTagRouting(t *testing.T) {
 	s, ok, fail := regressionFluent()
 	errs := make(chan error, 1024)
+	// Literal MessagePack fixtures make the wire oracle independent of the
+	// generated decoder. Each batch contains one record with one string field.
+	// Keep validating the decoded values as well: correct bytes with changed
+	// decoded strings identify a decoder/lifetime defect, not sender routing.
+	expectedFrames := make(map[string]string, 8)
+	for i := 0; i < 8; i++ {
+		tag := fmt.Sprintf("tag-%d", i)
+		expectedFrames[string(regressionForwardFrame(tag, tag))] = tag
+	}
 	s.dialContext = func(context.Context, string, string) (net.Conn, error) {
 		return &regressionConn{write: func(p []byte) (int, error) {
+			raw := bytes.Clone(p)
+			wireTag, validWire := expectedFrames[string(raw)]
+			if !validWire {
+				errs <- fmt.Errorf("invalid independently checked Forward frame: %x", raw)
+			}
 			var packet library.FluentBatchMsg
 			if err := packet.DecodeMsg(msgp.NewReader(bytes.NewReader(p))); err != nil {
 				errs <- err
@@ -201,8 +215,8 @@ func TestRegressionFluentConcurrentTagRouting(t *testing.T) {
 			for _, r := range records {
 				entry := r.([]interface{})
 				msg := entry[1].(map[string]interface{})
-				if packet[0] != msg["sourceTag"] {
-					errs <- fmt.Errorf("message routed to tag %v, want %v", packet[0], msg["sourceTag"])
+				if packet[0] != msg["sourceTag"] || (validWire && (packet[0] != wireTag || msg["sourceTag"] != wireTag)) {
+					errs <- fmt.Errorf("message routed to tag %v, want %v; independentlyValid=%v raw=%x", packet[0], msg["sourceTag"], validWire, raw)
 				}
 			}
 			return len(p), nil
@@ -231,5 +245,30 @@ func TestRegressionFluentConcurrentTagRouting(t *testing.T) {
 	cancel()
 	for len(errs) > 0 {
 		t.Error(<-errs)
+	}
+}
+
+// regressionForwardFrame writes only the short-string fixture's Forward shape:
+// [tag, [[0, {"sourceTag": sourceTag}]]]. It deliberately does not use msgp.
+func regressionForwardFrame(tag, sourceTag string) []byte {
+	b := append([]byte{0x92, 0xa0 | byte(len(tag))}, tag...)
+	b = append(b, 0x91, 0x92, 0x00, 0x81, 0xa9)
+	b = append(b, "sourceTag"...)
+	b = append(b, 0xa0|byte(len(sourceTag)))
+	return append(b, sourceTag...)
+}
+
+func TestRegressionFluentWireOracleRejectsWrongRoute(t *testing.T) {
+	good := regressionForwardFrame("tag-3", "tag-3")
+	// Pin the independent fixture against literal bytes, not the encoder under test.
+	want := []byte("\x92\xa5tag-3\x91\x92\x00\x81\xa9sourceTag\xa5tag-3")
+	if !bytes.Equal(good, want) {
+		t.Fatalf("incorrect reference frame: %x", good)
+	}
+	if bytes.Equal(good, regressionForwardFrame("tag-4", "tag-3")) {
+		t.Fatal("wire oracle accepted a record under the wrong tag")
+	}
+	if bytes.Equal(good, append(bytes.Clone(good), 0xc0)) {
+		t.Fatal("wire oracle accepted trailing data")
 	}
 }

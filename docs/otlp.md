@@ -2,34 +2,27 @@
 
 ## Current state
 
-**Not yet an enabled receiver or sender.** `library/otlpwire` is the tested first
-increment for OTLP/HTTP logs, metrics and traces. It does not register routes,
-open a listening port, export data, modify the journal, or change legacy defaults.
-The application still cannot be configured with `type: otlp`. The separate
-[producer accounting component](otlp-accounting.md) now combines the real journal
-with durable accepted/quarantined destination receipts. The
-[HTTP transport components](otlp-http-transports.md) now provide the receiver
-handler and exporter, with live HTTP and real-journal reopening tests. Production
-listener and YAML wiring remain pending. The [dedicated journal owner](otlp-journal-lifecycle.md)
-now persists namespace/IDs, admits only after Sync, preserves bounded replay
-cursors, schedules retries and coordinates shutdown.
+The opt-in `settings.otlp` pipeline now has a dedicated HTTP listener, YAML
+configuration, durable journal admission/replay and per-destination HTTP export.
+See the [configured service contract](otlp-service.md) and
+[tested template](settings/otlp.yml). Three signal paths, protobuf/OTLP JSON and
+gzip are covered by configured-executable tests, including crash/restart.
 
-This work is separate from CloudEvents/NDJSON PR #16. OTLP is not generic JSON,
-and its response/retry contract cannot use the generic HTTP event sender.
+**PR #17 remains Draft pending independently running Collector interoperability
+and final release acceptance.** No OTLP/gRPC, profiles, aggregation, sampling,
+temporality conversion or exactly-once support is claimed.
 
-| Increment | State | Acceptance needed |
-|---|---|---|
-| Signal-aware protobuf/JSON request handling, gzip bounds, response decisions | Implemented in `library/otlpwire` | Public-package fixtures, wire exchanges, race tests and fuzzing |
-| Durable per-destination accepted/terminal outcomes and producer accounting | Implemented as components | Journal/reopen/process tests; configured pipeline integration still pending |
-| OTLP/HTTP receiver and exporter components | Implemented in `internal/otlphttp` | Live HTTP, admission barriers, response policies, real journal reopening and negative controls |
-| Dedicated journal lifecycle | Implemented as a component | Admission/copy barriers, namespace/IDs, bounded cursor, HTTP integration and SIGKILL tests |
-| Listener and controller/YAML wiring | Pending | Secured server lifecycle, storage/admission configuration and actual endpoint acceptance |
-| Actual binary plus independent Collector interoperability | Pending | Crash/replay, receiver/exporter wire validation, source/sink reconciliation and negative controls |
-| OTLP/gRPC | Not implemented | Separate transport, response/trailer, cancellation and interoperability tests |
+| Increment | State |
+|---|---|
+| Signal-aware wire parsing and response classification | Implemented and tested |
+| Durable destination receipts/accounting | Implemented and tested |
+| HTTP receiver/exporter and dedicated WAL lifecycle | Implemented and tested |
+| Secured listener and controller/YAML integration | Implemented; configured binary acceptance added |
+| Independent OpenTelemetry Collector interoperability | Next release gate |
 
-Do not mark the overall feature ready or advertise endpoint support until all
-HTTP integration gates pass. No profiles, aggregation, sampling, temporality
-conversion, Prometheus remote write or Collector-replacement claim is made.
+The sections below explain protocol decisions and original implementation
+constraints; the linked service/transport/accounting contracts describe the
+implemented runtime rather than an advertisement of Collector certification.
 
 ## Intended use
 

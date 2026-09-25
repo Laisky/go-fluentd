@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"regexp"
 	"runtime"
 	"sync"
@@ -513,7 +514,34 @@ func (c *Controllor) runHeartBeat(ctx context.Context) {
 }
 
 // Run starting all pipeline
-func (c *Controllor) Run(ctx context.Context) {
+func (c *Controllor) Run(parent context.Context) (runErr error) {
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+	cfg, err := ParseOTLPServiceConfig(gutils.Settings.Get("settings.otlp"))
+	if err != nil {
+		return err
+	}
+	if cfg != nil {
+		if gutils.Settings.GetBool("dry") {
+			return errors.New("OTLP durable admission cannot run in dry mode")
+		}
+		if err := CheckOTLPStorageSeparation(cfg.StorageDirectory, gutils.Settings.GetString("settings.journal.buf_dir_path")); err != nil {
+			return err
+		}
+		service, err := StartOTLPService(ctx, *cfg)
+		if err != nil {
+			return err
+		}
+		defer func() { runErr = errors.Join(runErr, service.Stop()) }()
+		// A fatal listener or storage error stops the application, not just OTLP.
+		go func() { <-service.Done(); cancel() }()
+		monitor.AddMetric("otlp", func() map[string]interface{} {
+			n := service.Counters()
+			return map[string]interface{}{"acceptedEnvelopes": n.Accepted, "quarantinedEnvelopes": n.Quarantined, "retryableEnvelopes": n.Retryable, "blockedEnvelopes": n.Blocked, "receiptReplayHits": n.ReplayHits}
+		})
+		log.Logger.Info("OTLP HTTP listener started", zap.String("addr", service.Addr().String()))
+	}
+
 	log.Logger.Info("running...")
 	env := gutils.Settings.GetString("env")
 
@@ -571,4 +599,5 @@ func (c *Controllor) Run(ctx context.Context) {
 
 	go producer.Run(ctx)
 	RunServer(ctx, gutils.Settings.GetString("addr"))
+	return nil
 }

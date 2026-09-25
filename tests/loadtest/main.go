@@ -34,6 +34,10 @@ import (
 const token = "local-loadtest-only"
 
 type options struct {
+	DeliveryWindow                                                     bool
+	BoundedFixtures                                                    bool
+	ProfileSeconds                                                     int
+	ProfileDelay                                                       time.Duration
 	Binary, Out, Protocol, Replay, Profile                             string
 	Requests, Warmup, Concurrency, Payload, Destinations, Group, Batch int
 	Rate                                                               float64
@@ -42,6 +46,7 @@ type options struct {
 	Timeout                                                            time.Duration
 }
 type record struct {
+	done                  chan struct{}
 	ID                    int    `json:"id"`
 	Protocol              string `json:"protocol"`
 	SHA                   string `json:"sha256"`
@@ -65,6 +70,7 @@ type resources struct {
 	ReadBytes, WriteBytes int64
 }
 type trial struct {
+	prepared                     map[string]fixtureTemplate
 	opts                         options
 	root, mgmt, ingest, sinkBase string
 	start, epoch                 time.Time
@@ -256,12 +262,12 @@ func (t *trial) sink(w http.ResponseWriter, r *http.Request) {
 		scan := bufio.NewScanner(bytes.NewReader(raw))
 		scan.Buffer(make([]byte, 4096), 8<<20)
 		for scan.Scan() {
-			s, err := canonical(scan.Bytes())
+			s, err := t.eventKey("ndjson", scan.Bytes())
 			if err != nil {
 				t.fail(err.Error())
 				continue
 			}
-			keys = append(keys, "ndjson:"+s)
+			keys = append(keys, s)
 		}
 		if err := scan.Err(); err != nil {
 			t.fail(err.Error())
@@ -270,11 +276,11 @@ func (t *trial) sink(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Content-Type") != "application/cloudevents+json" {
 			t.fail("CloudEvents content type")
 		}
-		s, err := canonical(raw)
+		s, err := t.eventKey("cloudevents", raw)
 		if err != nil {
 			t.fail(err.Error())
 		}
-		keys = []string{"cloudevents:" + s}
+		keys = []string{s}
 	case "v1/logs", "v1/metrics", "v1/traces":
 		if r.Header.Get("Content-Type") != "application/json" {
 			t.fail("OTLP content type")
@@ -300,6 +306,15 @@ func (t *trial) sink(w http.ResponseWriter, r *http.Request) {
 		} else {
 			rec.Sink[dest] = now
 			t.completed.Add(1)
+			complete := true
+			for _, at := range rec.Sink {
+				if at == 0 {
+					complete = false
+				}
+			}
+			if complete && rec.done != nil {
+				close(rec.done)
+			}
 		}
 	}
 	t.mu.Unlock()
@@ -392,6 +407,22 @@ func getMem(client *http.Client, url string) map[string]uint64 {
 }
 func (t *trial) send(client *http.Client, id int, scheduled int64) {
 	f := t.fixtures[id]
+	if t.opts.BoundedFixtures {
+		f = t.prepared[f.Protocol].render(id)
+		if t.opts.WireGzip && strings.HasPrefix(f.Path, "/v1/") {
+			var b bytes.Buffer
+			z := gzip.NewWriter(&b)
+			_, err := z.Write(f.Body)
+			if err == nil {
+				err = z.Close()
+			}
+			if err != nil {
+				t.fail(err.Error())
+				return
+			}
+			f.Wire = b.Bytes()
+		}
+	}
 	body := f.Body
 	if f.Wire != nil {
 		body = f.Wire
@@ -436,7 +467,15 @@ func (t *trial) send(client *http.Client, id int, scheduled int64) {
 	r.Ack = end
 	r.Status = status
 	r.Error = errmsg
+	done := r.done
 	t.mu.Unlock()
+	if t.opts.DeliveryWindow && errmsg == "" && (status == 200 || status == 204) {
+		select {
+		case <-done:
+		case <-time.After(t.opts.Timeout):
+			t.fail("destination window deadline")
+		}
+	}
 }
 func (t *trial) load(client *http.Client, first, last int, rate float64) {
 	if rate == 0 {
@@ -530,12 +569,21 @@ func run(o options) (err error) {
 		}
 	}
 	t := &trial{opts: o, root: root, epoch: time.Now(), lookup: map[string]int{}}
+	t.prepared = make(map[string]fixtureTemplate)
+	for _, protocol := range []string{"ndjson", "cloudevents", "logs", "metrics", "traces"} {
+		t.prepared[protocol] = prepareFixture(protocol, o.Payload)
+	}
 	for id := 0; id < o.Requests+o.Warmup; id++ {
 		p := o.Protocol
 		if p == "mixed" {
 			p = []string{"ndjson", "cloudevents", "logs", "metrics", "traces"}[id%5]
 		}
-		f := makeFixture(p, id, o.Payload)
+		var f fixture
+		if o.BoundedFixtures {
+			f = t.prepared[p].render(id)
+		} else {
+			f = makeFixture(p, id, o.Payload)
+		}
 		if o.WireGzip && strings.HasPrefix(f.Path, "/v1/") {
 			var b bytes.Buffer
 			z := gzip.NewWriter(&b)
@@ -549,15 +597,24 @@ func run(o options) (err error) {
 		}
 
 		key := p + ":" + hash(f.Body)
-		if f.Canonical != "" {
-			key = p + ":" + f.Canonical
+		if p == "ndjson" || p == "cloudevents" {
+			key = p + ":" + hash(bytes.TrimSpace(f.Body))
+			f.Canonical = "" // do not retain a second full payload in long runs
 		}
 		if _, exists := t.lookup[key]; exists {
 			return errors.New("fixture collision")
 		}
 		t.lookup[key] = id
+		sha := hash(f.Body)
+		if o.BoundedFixtures {
+			f.Body, f.Wire = nil, nil
+		}
 		t.fixtures = append(t.fixtures, f)
-		t.records = append(t.records, record{ID: id, Protocol: p, SHA: hash(f.Body), Sink: make([]int64, o.Destinations)})
+		rec := record{ID: id, Protocol: p, SHA: sha, Sink: make([]int64, o.Destinations)}
+		if o.DeliveryWindow {
+			rec.done = make(chan struct{})
+		}
+		t.records = append(t.records, rec)
 	}
 	if e = save(filepath.Join(root, "options.json"), o); e != nil {
 		return e
@@ -695,11 +752,8 @@ func run(o options) (err error) {
 		profiling.Add(1)
 		go func() {
 			defer profiling.Done()
-			r, e := client.Get(t.mgmt + "/pprof/profile?seconds=5")
-			if e == nil {
-				defer r.Body.Close()
-				b, _ := io.ReadAll(r.Body)
-				_ = os.WriteFile(filepath.Join(root, "cpu.pprof"), b, 0600)
+			if e := t.captureProfiles(); e != nil {
+				t.fail("profile capture: " + e.Error())
 			}
 		}()
 	}
@@ -757,6 +811,7 @@ func run(o options) (err error) {
 	result["epoch_unix_ns"] = t.epoch.UnixNano()
 	result["clock"] = "process-monotonic nanoseconds from epoch; wall epoch is metadata only"
 	result["gomaxprocs"] = os.Getenv("GOMAXPROCS")
+	result["visible_cpus"] = runtime.NumCPU()
 	result["profiling_enabled"] = o.Profile != ""
 	for _, f := range []string{"cpu.max", "memory.max", "cpu.stat"} {
 		b, _ := os.ReadFile("/sys/fs/cgroup/" + f)
@@ -825,6 +880,10 @@ func main() {
 	flag.StringVar(&o.Out, "out", "", "new artifact directory")
 	flag.StringVar(&o.Protocol, "protocol", "logs", "ndjson|cloudevents|logs|metrics|traces|mixed")
 	flag.StringVar(&o.Replay, "replay-interval", "10ms", "same explicit OTLP cadence for both binaries")
+	flag.BoolVar(&o.DeliveryWindow, "delivery-window", false, "hold generator slots until every required destination validates the request")
+	flag.BoolVar(&o.BoundedFixtures, "bounded-fixtures", false, "recreate wire bodies at dispatch; retain only identities before load")
+	flag.IntVar(&o.ProfileSeconds, "profile-seconds", 5, "CPU sampling window in seconds (diagnostic runs only)")
+	flag.DurationVar(&o.ProfileDelay, "profile-delay", 0, "delay sampling until sustained warmup has elapsed")
 	flag.StringVar(&o.Profile, "profile", "", "nonempty enables a separate diagnostic CPU-profile run")
 	flag.IntVar(&o.Requests, "requests", 2048, "measured request count")
 	flag.IntVar(&o.Warmup, "warmup", 64, "untimed real requests retained in the receipt directory")
@@ -848,7 +907,7 @@ func main() {
 		return
 	}
 	valid := map[string]bool{"ndjson": true, "cloudevents": true, "logs": true, "metrics": true, "traces": true, "mixed": true}
-	if o.Binary == "" || o.Out == "" || !valid[o.Protocol] || o.Requests < 1 || o.Warmup < 1 || o.Concurrency < 1 || o.Concurrency > 1024 || o.Payload < 0 || o.Payload > 1<<20 || o.Destinations < 1 || o.Destinations > 16 || o.Rate < 0 || math.IsInf(o.Rate, 0) || math.IsNaN(o.Rate) || o.Delay < 0 || o.Timeout <= 0 {
+	if o.Binary == "" || o.Out == "" || !valid[o.Protocol] || o.Requests < 1 || o.Warmup < 1 || o.Concurrency < 1 || o.Concurrency > 1024 || o.Payload < 0 || o.Payload > 1<<20 || o.Destinations < 1 || o.Destinations > 16 || o.Rate < 0 || math.IsInf(o.Rate, 0) || math.IsNaN(o.Rate) || o.Delay < 0 || o.Timeout <= 0 || o.ProfileSeconds < 1 || o.ProfileSeconds > 300 || o.ProfileDelay < 0 {
 		fmt.Fprintln(os.Stderr, "invalid options")
 		os.Exit(2)
 	}

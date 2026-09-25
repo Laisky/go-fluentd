@@ -18,9 +18,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/failed-job-evidence
-          gh api repos/Laisky/go-fluentd/actions/jobs/107899285053/logs > /tmp/failed-job-evidence/job.log
+          gh api --allow-escape-sequences repos/Laisky/go-fluentd/actions/jobs/107899285053/logs > /tmp/failed-job-evidence/job.log
           python3 - <<'PY'
-          import pathlib
+          import pathlib,json
           p=pathlib.Path('/tmp/failed-job-evidence/job.log')
           lines=p.read_text(errors='replace').splitlines()
           selected=set()
@@ -29,7 +29,7 @@ jobs:
                   selected.update(range(max(0,i-6),min(len(lines),i+25)))
           text='\n'.join(f'{i+1}: {lines[i]}' for i in sorted(selected))
           (p.parent/'failures.txt').write_text(text)
-          print(text)
+          print(json.dumps(text))
           PY
           sha256sum /tmp/failed-job-evidence/* > /tmp/failed-job-evidence/SHA256SUMS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

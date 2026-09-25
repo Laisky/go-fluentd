@@ -1,0 +1,7 @@
+[
+ {"name":"logs-4096-c64","args":["--protocol","logs","--requests","4096","--concurrency","64","--payload","512"]},
+ {"name":"mixed-2048-c64","args":["--protocol","mixed","--requests","2048","--concurrency","64","--payload","512"]},
+ {"name":"gzip-1024-c64-8k","args":["--protocol","logs","--requests","1024","--concurrency","64","--payload","8192","--wire-gzip","--wal-gzip"]},
+ {"name":"ndjson-2048-c64","args":["--protocol","ndjson","--requests","2048","--concurrency","64","--payload","512"]},
+ {"name":"default-cadence-384","args":["--protocol","logs","--requests","384","--warmup","16","--concurrency","32","--replay-interval","1s"]}
+]

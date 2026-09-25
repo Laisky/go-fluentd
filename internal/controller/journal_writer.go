@@ -69,7 +69,7 @@ func (j *Journal) runDataWriter(ctx context.Context, tag string, writer journalD
 		err := j.persistGroup(ctx, tag, writer, data, batch, counter)
 		for i, msg := range batch {
 			batch[i] = nil // never retain or inspect a relinquished message
-			j.finishJournalWrite(msg, err)
+			j.finishJournalWrite(ctx, msg, err)
 		}
 		if closed {
 			return
@@ -117,14 +117,35 @@ func (j *Journal) persistGroup(ctx context.Context, tag string, writer journalDa
 
 // The worker relinquishes msg after this call. A receipt belongs to the HTTP
 // request, while the message may be recycled as soon as it is published.
-func (j *Journal) finishJournalWrite(msg *library.FluentMsg, err error) {
+func (j *Journal) finishJournalWrite(ctx context.Context, msg *library.FluentMsg, err error) {
 	if err != nil {
 		log.Logger.Error("persist message", zap.Error(err), zap.String("tag", msg.Tag))
 		msg.CompleteAcceptance(err)
 		j.MsgPool.Put(msg)
 		return
 	}
+	// CompleteAcceptance clears DurableAck, so capture ownership beforehand.
+	reliable := msg.DurableAck != nil
 	msg.CompleteAcceptance(nil)
+	// Preserve the completed barrier's original nonblocking publication even
+	// when cancellation raced with Sync. Only a full queue needs cancellation.
+	select {
+	case j.outChan <- msg:
+		return
+	default:
+	}
+	if reliable {
+		// The record is already durable. Apply bounded, cancelable pressure to
+		// this tag's writer rather than abandoning a healthy live delivery for
+		// the next periodic WAL replay when the downstream queue is briefly full.
+		// Cancellation releases only the live copy; the WAL still owns retry.
+		select {
+		case j.outChan <- msg:
+		case <-ctx.Done():
+			j.MsgPool.Put(msg)
+		}
+		return
+	}
 	select {
 	case j.outChan <- msg:
 	default:

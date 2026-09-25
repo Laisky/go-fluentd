@@ -312,8 +312,20 @@ func (p *Producer) Run(ctx context.Context) {
 					acceptSenderCaches = itf.([]*senderCache)
 				}
 
+				// Capture before publishing: the last destination may recycle msg.
+				event := msg.SourceFormat != ""
 				// put msg into every sender's chan
 				for _, sc = range acceptSenderCaches {
+					if event && !sc.sender.DiscardWhenBlocked() {
+						select {
+						case sc.inchan <- msg:
+						case <-ctx.Done():
+							// Other destinations may still own this instance. The WAL
+							// remains responsible; do not recycle or acknowledge it.
+							return
+						}
+						continue
+					}
 					select {
 					case sc.inchan <- msg:
 					default:

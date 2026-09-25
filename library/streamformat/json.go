@@ -5,6 +5,7 @@ package streamformat
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"io"
 	"math"
@@ -24,8 +25,11 @@ func JSON(body []byte) (interface{}, error) {
 	if err := validEscapes(body); err != nil {
 		return nil, err
 	}
-	d := json.NewDecoder(bytes.NewReader(body))
-	d.UseNumber()
+	// Use the standard-library tokenizer directly over the immutable body.
+	// encoding/json's compatibility wrapper deliberately hides bytes.Buffer,
+	// causing another geometrically grown input buffer on large records.
+	// Duplicate keys are still rejected by value; token strings own storage.
+	d := &bufferTokens{jsontext.NewDecoder(bytes.NewBuffer(body), jsontext.AllowDuplicateNames(true))}
 	v, err := value(d, 0)
 	if err != nil {
 		return nil, err
@@ -36,7 +40,43 @@ func JSON(body []byte) (interface{}, error) {
 	return v, nil
 }
 
-func value(d *json.Decoder, depth int) (interface{}, error) {
+// Both the production tokenizer and the reader-based test reference use the
+// same domain conversion, including integer precision, depth and duplicate keys.
+type jsonTokens interface {
+	Token() (json.Token, error)
+	More() bool
+}
+
+type bufferTokens struct{ decoder *jsontext.Decoder }
+
+func (d *bufferTokens) More() bool {
+	k := d.decoder.PeekKind()
+	return k != 0 && k != '}' && k != ']'
+}
+func (d *bufferTokens) Token() (json.Token, error) {
+	t, err := d.decoder.ReadToken()
+	if err != nil {
+		return nil, err
+	}
+	switch k := t.Kind(); k {
+	case 'n':
+		return nil, nil
+	case 'f':
+		return false, nil
+	case 't':
+		return true, nil
+	case '"':
+		return t.String(), nil
+	case '0':
+		return json.Number(t.String()), nil
+	case '{', '}', '[', ']':
+		return json.Delim(k), nil
+	default:
+		return nil, fmt.Errorf("invalid JSON token %q", k)
+	}
+}
+
+func value(d jsonTokens, depth int) (interface{}, error) {
 	if depth > 64 {
 		return nil, fmt.Errorf("JSON nesting exceeds 64")
 	}

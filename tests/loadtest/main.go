@@ -347,20 +347,8 @@ func procStats(pid int, hz float64) (resources, error) {
 	if e != nil {
 		return s, e
 	}
-	for _, line := range strings.Split(string(b), "\n") {
-		f := strings.Fields(line)
-		if len(f) < 2 {
-			continue
-		}
-		n, _ := strconv.ParseInt(f[1], 10, 64)
-		switch f[0] {
-		case "VmRSS:":
-			s.RSS = n * 1024
-		case "VmHWM:":
-			s.HWM = n * 1024
-		case "Threads:":
-			s.Threads = int(n)
-		}
+	if e = parseProcStatus(b, &s); e != nil {
+		return s, e
 	}
 	b, e = os.ReadFile(fmt.Sprintf("/proc/%d/io", pid))
 	if e != nil {

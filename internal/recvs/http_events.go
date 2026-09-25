@@ -5,7 +5,6 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -121,7 +120,7 @@ func (r *HTTPEventsRecv) handle(c *gin.Context) {
 	}
 	bodyReader := http.MaxBytesReader(c.Writer, c.Request.Body, r.cfg.MaxBodySize)
 	defer bodyReader.Close()
-	body, err := io.ReadAll(bodyReader)
+	body, err := readEventBody(bodyReader, c.Request.ContentLength)
 	if err != nil {
 		var limit *http.MaxBytesError
 		if errors.As(err, &limit) {

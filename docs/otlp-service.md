@@ -6,10 +6,12 @@ receiver, dedicated journal owner, destination accounting and HTTP exporter.
 It never feeds telemetry through the legacy log filters or implicit `msgid`
 injection. The existing management listener remains separate.
 
-The configured executable has local-process acceptance tests. Interoperability
-with an independently running OpenTelemetry Collector is still a release gate;
-PR #17 remains Draft. This is not OTLP/gRPC, profiles, aggregation, sampling,
-temporality conversion or a replacement for the Collector.
+The configured executable has local-process acceptance tests and a
+[checksum-pinned standalone Collector campaign](otlp-collector-acceptance.md).
+The [branch consolidation](branch-consolidation.md) also checks event and OTLP
+pipelines in one process. These bounded tests do not certify production capacity.
+This is not OTLP/gRPC, profiles, aggregation, sampling, temporality conversion
+or a replacement for the Collector.
 
 ## Start from the tested configuration
 
@@ -36,7 +38,7 @@ local WriteData + Sync completed, **not** downstream delivery. Request failure
 or connection loss after writing does not promise rollback.
 
 Absent configuration or `enabled: false` does not start OTLP. Enabled configuration
-rejects unknown fields, string-to-boolean coercion and floating-point integer
+rejects unknown fields, string-to-boolean coercion and fractional or unsafe numeric
 limits. Duration values require unit-bearing strings, such as `30s`. `--dry`
 is incompatible with OTLP durable admission. Startup/configuration errors return
 nonzero process status. Existing CLI errors now also propagate nonzero status.
@@ -148,3 +150,14 @@ and [receipt recovery](otlp-dispositions.md).
 Primary references: [OTLP specification](https://opentelemetry.io/docs/specs/otlp/),
 [Go HTTP server](https://pkg.go.dev/net/http#Server), and
 [OpenTelemetry configuration security](https://opentelemetry.io/docs/security/config-best-practices/).
+
+## JSON configuration compatibility
+
+JSON configuration files can use integer-valued numeric limits, including nested
+destination attempt counts. The configuration library represents JSON numbers as
+float64; exact integers below 2^53 in absolute value are converted with target-type
+range checks. Fractions, non-finite values, numeric strings and values at or beyond
+that precision boundary are rejected rather than rounded. Durations still require
+unit-bearing strings. This also accepts mathematically integral YAML float scalars;
+it does not enable general string/bool/number coercion. Use YAML integer scalars
+for limits larger than the exact JSON-number conversion boundary.

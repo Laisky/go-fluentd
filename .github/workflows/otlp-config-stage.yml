@@ -4,7 +4,7 @@ on:
     branches: [ci/otlp-config-workspace-20260924]
     paths:
       - '.github/workflows/otlp-config-stage.yml'
-      - '.audit/otlp-config.patch.xz.b64'
+      - '.audit/otlp-config.part-*'
 permissions:
   contents: read
 jobs:
@@ -29,7 +29,15 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/otlp-config-evidence
-          base64 -d .audit/otlp-config.patch.xz.b64 | xz -d > /tmp/otlp-config.patch
+          echo '7a0a53b32cb362d6c012dd4c7c8294ea4d36a7e35332fd5d072d3aff5470a22a  .audit/otlp-config.part-00' | sha256sum -c -
+          echo '632b2627a3e831a005b1db5c7453ab45f0f71f3476a9f63dd1f5dc11e0b329b7  .audit/otlp-config.part-01' | sha256sum -c -
+          echo '22deb57082fa5b655fe87a07b8e9a8ad5682d0c56632a6ac8a420e966c969715  .audit/otlp-config.part-02' | sha256sum -c -
+          echo '2bae47155ddb5dffc7093836eebd0ccddfd0ac7945d93b225ff3c9499b43d7f8  .audit/otlp-config.part-03' | sha256sum -c -
+          echo 'c5284e48f56b1da8b59b04db1c709c8ef58b2aab6d1b89235b3a2b1633640422  .audit/otlp-config.part-04' | sha256sum -c -
+          echo 'be67b1c934faaaedf3bc356ddb01ebd7d4d9df6fb622cc39c5545aed4f3fdcd7  .audit/otlp-config.part-05' | sha256sum -c -
+          cat .audit/otlp-config.part-* > /tmp/otlp-config.patch.xz.b64
+          echo '7c9ea5592142fa165ca3d2a92f1fae83eb9d9e59a20bb1610df26201af105877  /tmp/otlp-config.patch.xz.b64' | sha256sum -c -
+          base64 -d /tmp/otlp-config.patch.xz.b64 | xz -d > /tmp/otlp-config.patch
           echo '29e67251fa40e28f24605b57b85c7e38a851fb200e259f4d5b5313e31dd9754e  /tmp/otlp-config.patch' | sha256sum -c -
           git checkout --detach bee0dfc39b68a2dd72679ab8b1081f3f43f74414
           git apply --index /tmp/otlp-config.patch

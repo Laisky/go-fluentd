@@ -1,0 +1,40 @@
+name: OTLP config workspace
+on:
+  push:
+    branches: [ci/otlp-config-workspace-20260924]
+    paths: [.github/workflows/otlp-config-workspace.yml]
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: bee0dfc39b68a2dd72679ab8b1081f3f43f74414
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+          cache: false
+      - name: Export exact source and verified modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/otlp-config-workspace
+          git bundle create /tmp/otlp-config-workspace/source.bundle --all HEAD
+          git rev-parse HEAD > /tmp/otlp-config-workspace/head.txt
+          git rev-parse HEAD^{tree} > /tmp/otlp-config-workspace/tree.txt
+          go version > /tmp/otlp-config-workspace/go.txt
+          cp go.mod go.sum /tmp/otlp-config-workspace/
+          go mod download
+          go mod verify > /tmp/otlp-config-workspace/verify.txt
+          tar -czf /tmp/otlp-config-workspace/modules.tar.gz -C "$(go env GOMODCACHE)" .
+          (cd /tmp/otlp-config-workspace && sha256sum source.bundle modules.tar.gz go.mod go.sum > SHA256SUMS)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: otlp-config-workspace
+          path: /tmp/otlp-config-workspace
+          retention-days: 7

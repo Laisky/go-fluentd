@@ -41,7 +41,10 @@ jobs:
           echo '29e67251fa40e28f24605b57b85c7e38a851fb200e259f4d5b5313e31dd9754e  /tmp/otlp-config.patch' | sha256sum -c -
           git checkout --detach bee0dfc39b68a2dd72679ab8b1081f3f43f74414
           git apply --index /tmp/otlp-config.patch
-          test "$(git write-tree)" = '4c5a67fb0007eeec00c6d8abba181870bf9b4bbe'
+          sed -i '/"gofluentd\\/internal\\/otlpstate"/d' internal/controller/otlp_service.go
+          gofmt -w internal/controller/otlp_service.go
+          git add internal/controller/otlp_service.go
+          test "$(git write-tree)" = '6204f87991ca2e0b017466a014e4a1adaa5ced4d'
           git diff --cached --check
           git status --short | tee /tmp/otlp-config-evidence/status.txt
           git diff --cached --stat | tee /tmp/otlp-config-evidence/stat.txt
@@ -75,7 +78,7 @@ jobs:
           git commit -m 'feat(otlp): wire secured HTTP service and configuration'
           git rev-parse HEAD | tee /tmp/otlp-config-evidence/head.txt
           git rev-parse HEAD^{tree} | tee /tmp/otlp-config-evidence/committed-tree.txt
-          test "$(cat /tmp/otlp-config-evidence/committed-tree.txt)" = '4c5a67fb0007eeec00c6d8abba181870bf9b4bbe'
+          test "$(cat /tmp/otlp-config-evidence/committed-tree.txt)" = '6204f87991ca2e0b017466a014e4a1adaa5ced4d'
           auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push "https://github.com/$GITHUB_REPOSITORY.git" "HEAD:refs/heads/ci/otlp-config-validated-20260924"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

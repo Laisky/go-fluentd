@@ -66,10 +66,30 @@ jobs:
           python3 - <<'PY'
           import json,pathlib
           root=pathlib.Path('/tmp/interop-stage')
+          empty={'gofluentd','gofluentd/cmd','gofluentd/internal/global','gofluentd/library/config','gofluentd/library/log'}
+          def validate(rows,count):
+              assert not any(x['Action']=='fail' or (x['Action']=='skip' and 'Test' in x) for x in rows),'failed or skipped test'
+              for x in rows:
+                  if x['Action']=='skip':
+                      pkg=x['Package']
+                      assert pkg in empty,('unexpected package skip',pkg)
+                      assert any(r.get('Package')==pkg and '[no test files]' in r.get('Output','') for r in rows),('missing no-test evidence',pkg)
+              assert sum(x['Action']=='pass' and 'Test' in x for x in rows)==count,'pass count'
+              assert sum(x['Action']=='run' and 'Test' in x for x in rows)==count,'run count'
+          result={}
           for name, count in [('full',749),('decoder',20),('routing',500)]:
               rows=[json.loads(x) for x in (root/(name+'.jsonl')).read_text().splitlines()]
-              assert not any(x['Action'] in ('fail','skip') for x in rows),name
-              assert sum(x['Action']=='pass' and 'Test' in x for x in rows)==count,name
+              validate(rows,count)
+              for action in ['skip','fail']:
+                  try:
+                      validate(rows+[{'Action':action,'Package':'gofluentd/library','Test':'TestInjected'}],count)
+                  except AssertionError as exc:
+                      assert str(exc)=='failed or skipped test'
+                  else:
+                      raise AssertionError('validator accepted '+action)
+              result[name]={'passes':count,'real_failure_and_skipped_test_controls':'rejected'}
+          (root/'test-summary.json').write_text(json.dumps(result,indent=2))
+          print(json.dumps(result,indent=2))
           PY
       - name: Independent official Collector acceptance
         run: |

@@ -3,7 +3,7 @@
 ## One active continuation
 
 Current task: `Laisky/go-fluentd` PR #18, branch `perf/e2e-load-20260925`.
-The checked starting head is `0d704e255d2f2e3e095eebb24c0959db06de20f4`,
+The original reconciliation started at `0d704e255d2f2e3e095eebb24c0959db06de20f4`,
 tree `861850a9b89b518d8f4a0e4e831ce129b81e80d6`.
 Recheck the remote ref before every push; publish only a non-force fast-forward
 that retains intervening work. Do not create another staging/publishing branch.
@@ -23,6 +23,32 @@ The surviving prior work is in mounted evidence archives, not live worktrees.
 This continuation restored one active checkout from the exact current-head
 CI source archive and validated its tree. A separate bare history repository
 is archival only. It has no working tree or live publishing role.
+
+## Corrected-dependency continuation checkpoint
+
+Active application checkpoint: `1a54dd4b3e119a16e783cf304449ca06e11e311a`;
+read PR18's current ref before continuing past documentation-only descendants.
+The interrupted work had already published `cf11a6b0` (sequence tests), `26fcf0e7`
+(corrected journal pin and adoption gate), and `c3b953c9` (preserved measurements).
+They were inherited, not recreated or cherry-picked again. The remaining failed
+native-adoption gate is corrected and tested in `1a54dd4b`; details and evidence
+are in [the adoption report](profiling-selective-sequence-validation.md).
+
+PR8 is merged, but its sequence correction is the separate, still-unmerged
+[go-journal PR9](https://github.com/Laisky/go-journal/pull/9), on the existing
+`perf/selective-replay-pr18-20260926` branch. The application already pins its
+immutable `fc156a60` revision without a replace. Merge that correction before
+PR18; do not revive the unsafe PR8-only pin or apply the old local bundle blindly.
+
+The new branch inventory still has37 application branches and no new staging or
+publishing branch. Historical tips remain the archived entries above; this step
+changes only PR18. No live checkout existed in the inspected runtime locations
+before restoration. One active application checkout was restored from the failed
+native-run source archive, checked against the exact remote tree and aligned to
+verified remote commit objects. Its local reconstruction history is archived
+before alignment, rather than deleted. No alternate library worktree is needed
+because its correction is already published. Evidence ZIPs are archives, not
+active worktrees. Keep this single execution path and the owning PR9 relationship.
 
 ## Retained alternatives and selective recovery
 

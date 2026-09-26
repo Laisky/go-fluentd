@@ -28,6 +28,57 @@ alternate modfile, vendored fork or workspace override. Only the journal require
 line and its two checksum entries change; other application dependencies and
 production source, synchronization/ACK/retry behavior, driver and README remain.
 
+## Native adoption gate repaired and executed
+
+Continuation checkpoint: `1a54dd4b3e119a16e783cf304449ca06e11e311a`, tree
+`af7ff6321ec5977482dc75f6dc1775475820dd8f`. This resumes the already published
+`c3b953c9` dependency/test/report increment; it does not repeat the prior local
+implementation or performance campaign.
+
+The first adoption workflow, run36218163861, failed safely: the original and
+corrected eight-case controls passed, but the merged-PR8 control stopped during
+compilation because its temporary go.sum lacked the module-content hash. Zero
+behavioral failure cases executed. The failed artifact10898019008 and its35-file
+manifest are retained; a compiler failure was not counted as a detected regression.
+
+Control setup now explicitly downloads the selected journal using that control's
+modfile and requires both content and go.mod checksums in the matching sum file
+before readonly tests. Cache priming in the resolver is not treated as proof the
+control sum file is complete. Failed control manifests are retained too. The
+oracle requires each of the eight exact cases once, and the correct semantic
+assertion in every failing leaf. Build errors, timeouts, panics, races, unrelated
+failures, skipped cases and duplicate/missing executions are rejected explicitly.
+These checks also remain active with Python optimization enabled.
+
+Nine Python tests cover the oracle and an isolated file:// module-cache fixture.
+That synthetic fixture alone disables sumdb; real dependency adoption continues
+to use the normal Go checksum verification. Local tests used installed Go1.23.2
+for this small fixture, not as a substitute for application Go1.27.1 acceptance.
+Removing the explicit download recreates the missing-content-checksum assertion;
+restoring it passes. No production source, dependency pin or historical CSV changed.
+
+Fresh native Go1.27.1 run [36243801400](https://github.com/Laisky/go-fluentd/actions/runs/36243801400)
+completed the following on the exact implementation checkpoint:
+
+| Check | Result |
+|---|---|
+| Complete native module graph |220 modules; no Replace/Error; only journal version differs across controls|
+| Original dependency sequence cases |8 pass|
+| PR8 merged dependency sequence cases |8 fail their own intended payload/ID assertions|
+| Corrected committed dependency sequence cases |8 pass|
+| Complete application suite |1,231 test/subtest passes; no failing/skipped test cases|
+| Three focused selective-recovery race repetitions |48 test/subtest passes|
+| Adoption-oracle unit tests |9 pass|
+
+Packages reporting `[no test files]` are not counted as passing or skipped test
+cases. Downloaded artifact10906497595 has ZIP SHA256
+`ecf30facdabf22894204e8fbfd5bbefdca2a3bf000979942964b365bb8af482b`.
+All45 manifest entries and297 source files reconstruct the exact tree. Offline
+rechecking confirms each control's cases/checksums, graph membership/versions and
+unchanged candidate manifests. These are fresh native adoption results, not a new
+sustained-performance experiment. Subsequent documentation commits must be checked
+against their own hosted runs before final review status is updated.
+
 ## Regression and conservative correction
 
 The old generated decoder retains fields missing from the next envelope in its

@@ -24,3 +24,18 @@ func TestPreparedFixtureExactlyMatchesIndependentReference(t *testing.T) {
 		}
 	}
 }
+
+func TestFixtureBufferCapacityBounds(t *testing.T) {
+	maxInt := int(^uint(0) >> 1)
+	for _, size := range []int{0, 1, 16384, maxInt - 64} {
+		got, err := fixtureBufferCapacity(size)
+		if err != nil || got != size+64 {
+			t.Fatalf("capacity(%d) = %d, %v", size, got, err)
+		}
+	}
+	for _, size := range []int{-1, maxInt - 63, maxInt} {
+		if _, err := fixtureBufferCapacity(size); err == nil {
+			t.Fatalf("accepted overflowing capacity for %d", size)
+		}
+	}
+}

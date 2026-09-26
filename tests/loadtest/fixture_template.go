@@ -50,7 +50,11 @@ func prepareFixture(protocol string, payload int) fixtureTemplate {
 }
 func (t fixtureTemplate) render(id int) fixture {
 	f := t.prototype
-	dst := make([]byte, 0, len(f.Body)+64)
+	capacity, err := fixtureBufferCapacity(len(f.Body))
+	if err != nil {
+		panic(err) // templates are private, generated inputs; never a silent wrap
+	}
+	dst := make([]byte, 0, capacity)
 	start := 0
 	for _, s := range t.slots {
 		dst = append(dst, f.Body[start:s.at]...)
@@ -69,4 +73,14 @@ func (t fixtureTemplate) render(id int) fixture {
 	f.Body = append(dst, f.Body[start:]...)
 	f.Canonical = "" // only the reference tests need the canonical string
 	return f
+}
+
+// Keep the allocation arithmetic checked even though normal fixture bodies
+// are bounded by the load driver's payload limit. This is independent of the
+// available address space and can be tested without allocating a huge slice.
+func fixtureBufferCapacity(size int) (int, error) {
+	if size < 0 || size > int(^uint(0)>>1)-64 {
+		return 0, fmt.Errorf("fixture capacity exceeds int range")
+	}
+	return size + 64, nil
 }

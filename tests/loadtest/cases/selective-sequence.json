@@ -1,0 +1,3 @@
+[
+  {"name":"selective16k-c128", "args":["--protocol","ndjson","--requests","300000","--concurrency","128","--payload","16384","--delivery-window","--bounded-fixtures","--timeout","120s"]}
+]

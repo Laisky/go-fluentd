@@ -1,0 +1,19 @@
+[
+  {
+    "name": "ndjson16k-c64",
+    "args": [
+      "--protocol",
+      "ndjson",
+      "--requests",
+      "300000",
+      "--concurrency",
+      "64",
+      "--payload",
+      "16384",
+      "--bounded-fixtures",
+      "--delivery-window",
+      "--timeout",
+      "90s"
+    ]
+  }
+]

@@ -5,7 +5,7 @@ on:
       - go.mod
       - go.sum
       - internal/controller/journal_selective*.go
-      - tests/loadtest/verify_journal_adoption.py
+      - tests/loadtest/*journal_adoption.py
       - .github/workflows/journal-adoption.yml
   push:
     branches: [master]
@@ -13,7 +13,7 @@ on:
       - go.mod
       - go.sum
       - internal/controller/journal_selective*.go
-      - tests/loadtest/verify_journal_adoption.py
+      - tests/loadtest/*journal_adoption.py
       - .github/workflows/journal-adoption.yml
 permissions:
   contents: read
@@ -41,6 +41,7 @@ jobs:
           git archive --format=tar.gz HEAD > /tmp/journal-adoption/source.tar.gz
           go version > /tmp/journal-adoption/toolchain.txt
           cp go.mod go.sum /tmp/journal-adoption/
+          (cd tests/loadtest && python3 -m unittest -v test_journal_adoption) > /tmp/journal-adoption/oracle-tests.log 2>&1
           go mod download
           python3 tests/loadtest/verify_journal_adoption.py /tmp/journal-adoption
           go test -mod=readonly -count=1 -json ./... > /tmp/journal-adoption/full.jsonl

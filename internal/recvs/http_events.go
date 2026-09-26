@@ -5,7 +5,6 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -121,7 +120,9 @@ func (r *HTTPEventsRecv) handle(c *gin.Context) {
 	}
 	bodyReader := http.MaxBytesReader(c.Writer, c.Request.Body, r.cfg.MaxBodySize)
 	defer bodyReader.Close()
-	body, err := io.ReadAll(bodyReader)
+	// Reading and full validation complete before scratch is recycled or any
+	// record is published. Decoded values own their memory independently.
+	records, err := decodeEventInput(bodyReader, c.Request.ContentLength, r.cfg.Format, ct, c.Request.Header, r.cfg.MaxRecords)
 	if err != nil {
 		var limit *http.MaxBytesError
 		if errors.As(err, &limit) {
@@ -129,13 +130,6 @@ func (r *HTTPEventsRecv) handle(c *gin.Context) {
 		} else {
 			c.AbortWithStatus(http.StatusBadRequest)
 		}
-		return
-	}
-	// No allocations from the message pool, IDs or partial publication before
-	// the entire request passes wire-format and record-count validation.
-	records, err := streamformat.Decode(r.cfg.Format, ct, c.Request.Header, body, r.cfg.MaxRecords)
-	if err != nil {
-		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), r.cfg.AckTimeout)

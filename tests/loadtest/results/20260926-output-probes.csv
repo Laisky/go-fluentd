@@ -1,0 +1,3 @@
+experiment,label,requests,delivered_rps,app_cpu_us_per_record,destination_p99_ms,admission_p99_ms,peak_rss_bytes,allocated_bytes_per_record,duplicates,delivery_passed,steady_qualified,mean_app_cpu_fraction,fraction_windows_above_half,delivered_rate_cv,steady_seconds,max_outstanding,binary_sha256
+encoder-state-only,baseline,500000,7964.935455144824,252.04,29.167425,7.225894,284450816,67207.385184,0,True,False,0.4999112104729872,0.6607142857142857,0.3455814028849176,56,128,e381f9f003fc66dcad1c4d6de628acdc136f0a868c561b34447e442d7669af60
+encoder-state-only,candidate,500000,9651.66560093741,235.10000000000002,27.865887,6.183989,265093120,64976.438688,0,True,True,0.5676726710878058,1.0,0.1632665950203074,45,128,dd87d3b59adf179687754de59f3de36bcf01bf56525416536a44c171b191e269

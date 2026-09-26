@@ -1,0 +1,19 @@
+[
+  {
+    "name": "encoder16k-c128",
+    "args": [
+      "--protocol",
+      "ndjson",
+      "--requests",
+      "500000",
+      "--concurrency",
+      "128",
+      "--payload",
+      "16384",
+      "--delivery-window",
+      "--bounded-fixtures",
+      "--timeout",
+      "90s"
+    ]
+  }
+]

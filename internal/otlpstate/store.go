@@ -114,6 +114,11 @@ type Store struct {
 	stripes           [64]chan struct{}
 	faultMu           sync.Mutex
 	fault             error
+	// pending is immutable after Open and contains only pre-existing uncertain
+	// temporary receipts, never a map of every delivered message. While this
+	// exclusive owner is alive any new failed persistence poisons the store.
+	pending map[string]struct{}
+	dirInfo os.FileInfo
 	// Per-instance I/O operations permit deterministic durability-fault tests.
 	syncRecord    func(*os.File) error
 	syncDirectory func(*os.File) error
@@ -158,6 +163,13 @@ func Open(dir string, limits Limits) (*Store, error) {
 	}
 	s := &Store{dir: abs, dirFile: df, lockFile: lock, limits: limits,
 		syncRecord: (*os.File).Sync, syncDirectory: (*os.File).Sync, linkRecord: os.Link}
+	s.dirInfo = st
+	s.pending, err = s.loadPending()
+	if err != nil {
+		df.Close()
+		lock.Close()
+		return nil, err
+	}
 	for i := range s.stripes {
 		s.stripes[i] = make(chan struct{}, 1)
 	}
@@ -340,11 +352,11 @@ func (s *Store) lookup(name string, k Key, e Envelope) (*entry, error) {
 	path := filepath.Join(s.dir, name+".json")
 	st, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
-		pending, err := filepath.Glob(filepath.Join(s.dir, ".pending-"+name+"-*"))
+		pending, err := s.hasPending(name)
 		if err != nil {
 			return nil, err
 		}
-		if len(pending) > 0 {
+		if pending {
 			return nil, ErrUncertain
 		}
 		return nil, nil
@@ -395,6 +407,51 @@ func (s *Store) lookup(name string, k Key, e Envelope) (*entry, error) {
 		return nil, ErrConflict
 	}
 	return &got, nil
+}
+
+// loadPending scans once at startup, with bounded directory-read buffers.
+// Existing .pending-<key hash>-* names remain backward compatible. The directory
+// must not be mutated by other writers while the store owns its lock.
+func (s *Store) loadPending() (map[string]struct{}, error) {
+	var pending map[string]struct{}
+	for {
+		names, err := s.dirFile.Readdirnames(256)
+		for _, name := range names {
+			const prefix = ".pending-"
+			if !strings.HasPrefix(name, prefix) || len(name) < len(prefix)+65 || name[len(prefix)+64] != '-' {
+				continue
+			}
+			key := name[len(prefix) : len(prefix)+64]
+			decoded, decodeErr := hex.DecodeString(key)
+			if decodeErr != nil || hex.EncodeToString(decoded) != key {
+				continue
+			}
+			if pending == nil {
+				pending = make(map[string]struct{})
+			}
+			pending[key] = struct{}{}
+		}
+		if errors.Is(err, io.EOF) {
+			return pending, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+}
+
+func (s *Store) hasPending(name string) (bool, error) {
+	// A replacement directory invalidates the startup inventory. Refuse to
+	// contact a destination rather than use it against a different storage root.
+	st, err := os.Lstat(s.dir)
+	if err != nil {
+		return false, err
+	}
+	if !os.SameFile(st, s.dirInfo) {
+		return false, ErrUncertain
+	}
+	_, pending := s.pending[name]
+	return pending, nil
 }
 
 func (s *Store) persist(name string, rec entry) error {

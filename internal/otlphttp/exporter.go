@@ -44,10 +44,11 @@ type ExporterConfig struct {
 // retry schedule and is lost on restart. Close releases idle connections only;
 // cancel active calls via their contexts before closing the owning pipeline.
 type Exporter struct {
-	cfg       ExporterConfig
-	client    *http.Client
-	mu        sync.Mutex
-	notBefore map[otlpwire.Signal]time.Time
+	cfg         ExporterConfig
+	client      *http.Client
+	mu          sync.Mutex
+	notBefore   map[otlpwire.Signal]time.Time
+	compressors sync.Pool // gzip state only; never retain a request buffer
 }
 
 func NewExporter(c ExporterConfig) (*Exporter, error) {
@@ -195,16 +196,12 @@ func (e *Exporter) Send(ctx context.Context, in otlpstate.Envelope) (otlpstate.O
 	}
 	body := parsed.Payload()
 	if e.cfg.Gzip {
-		var b bytes.Buffer
-		w := gzip.NewWriter(&b)
-		if _, err = w.Write(body); err != nil {
+		body, err = e.compress(body)
+		if err != nil {
 			return otlpstate.Outcome{}, err
 		}
-		if err = w.Close(); err != nil {
-			return otlpstate.Outcome{}, err
-		}
-		body = b.Bytes()
 	}
+
 	if int64(len(body)) > e.cfg.RequestLimits.WireBytes {
 		return otlpstate.Outcome{}, otlpwire.ErrTooLarge
 	}
@@ -300,4 +297,25 @@ func (e *Exporter) Send(ctx context.Context, in otlpstate.Envelope) (otlpstate.O
 		}
 	}
 	return last, lastErr
+}
+
+// compress reuses only the fixed-size compressor workspace. Resetting to
+// io.Discard before pooling prevents the pool from retaining the encoded body.
+func (e *Exporter) compress(body []byte) ([]byte, error) {
+	var b bytes.Buffer
+	var w *gzip.Writer
+	if cached := e.compressors.Get(); cached != nil {
+		w = cached.(*gzip.Writer)
+		w.Reset(&b)
+	} else {
+		w = gzip.NewWriter(&b)
+	}
+	defer func() { w.Reset(io.Discard); e.compressors.Put(w) }()
+	if _, err := w.Write(body); err != nil {
+		return nil, err
+	}
+	if err := w.Close(); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
 }

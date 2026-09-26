@@ -109,6 +109,11 @@ func NewHTTPEventsSender(cfg HTTPEventsSenderCfg) (*HTTPEventsSender, error) {
 		Transport: &http.Transport{Proxy: http.ProxyFromEnvironment,
 			DialContext:       (&net.Dialer{Timeout: cfg.Timeout, KeepAlive: 30 * time.Second}).DialContext,
 			ForceAttemptHTTP2: true, MaxIdleConns: 128, MaxIdleConnsPerHost: cfg.NFork,
+			// Keep common event bodies inside the connection buffer. With a
+			// smaller buffer, net/http's nested TCP ReadFrom path can allocate
+			// a fresh copy buffer per request despite its outer buffer pool.
+			// Request bodies remain privately owned and retry bytes unchanged.
+			WriteBufferSize: 32 << 10,
 			IdleConnTimeout: 90 * time.Second, TLSHandshakeTimeout: cfg.Timeout,
 			TLSClientConfig:    &tls.Config{MinVersion: tls.VersionTLS12},
 			DisableCompression: true,

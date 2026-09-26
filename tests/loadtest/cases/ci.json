@@ -1,0 +1,5 @@
+[
+ {"name":"logs","args":["--protocol","logs","--requests","2048","--concurrency","64"]},
+ {"name":"mixed","args":["--protocol","mixed","--requests","1024","--concurrency","32"]},
+ {"name":"gzip","args":["--protocol","logs","--requests","512","--concurrency","32","--payload","8192","--wire-gzip","--wal-gzip"]}
+]

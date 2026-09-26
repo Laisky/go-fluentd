@@ -43,11 +43,12 @@ type OTLPJournalConfig struct {
 type OTLPBatchReport struct {
 	Seen, Released, Delivered, Quarantined, Pending int
 	Complete                                        bool
+	fresh                                           bool // this call opened a new snapshot; an empty continuation is not an empty WAL
 }
 
 // OTLPJournal owns the dedicated WAL, disposition store and producer. It does
 // not mount a listener or touch the legacy log journal. Admit is suitable for
-// otlphttp.Admission. Run drives bounded replay on a fixed cadence; ReplayBatch
+// otlphttp.Admission. Run drives bounded replay with a retry cadence; ReplayBatch
 // is also available to explicit schedulers. Close cancels active operations and
 // waits for them. Destination callbacks must honor their context.
 type OTLPJournal struct {
@@ -61,8 +62,9 @@ type OTLPJournal struct {
 	store                      *otlpstate.Store
 	producer                   *OTLPProducer
 	walGate, passGate, runGate chan struct{}
-	frontier                   int64 // protected by walGate; recovered from data AND ACK segments
-	replayOpen                 bool  // protected by passGate; never rotate a partially read snapshot
+	wake                       chan struct{} // coalesced successful admission or sticky fault; never one entry per record
+	frontier                   int64         // protected by walGate; recovered from data AND ACK segments
+	replayOpen                 bool          // protected by passGate; never rotate a partially read snapshot
 	faultMu                    sync.Mutex
 	fault                      error
 	// Narrow instance seams supplement real filesystem/crash behavior tests.
@@ -99,7 +101,7 @@ func OpenOTLPJournal(ctx context.Context, cfg OTLPJournalConfig, peers []OTLPDes
 	if err != nil {
 		return nil, err
 	}
-	p := &OTLPJournal{cfg: cfg, store: store, walGate: make(chan struct{}, 1), passGate: make(chan struct{}, 1), runGate: make(chan struct{}, 1)}
+	p := &OTLPJournal{cfg: cfg, store: store, walGate: make(chan struct{}, 1), passGate: make(chan struct{}, 1), runGate: make(chan struct{}, 1), wake: make(chan struct{}, 1)}
 	p.ctx, p.cancel = context.WithCancel(ctx)
 	defer func() {
 		if err != nil {
@@ -237,7 +239,14 @@ func (p *OTLPJournal) poison(err error) error {
 	if p.fault == nil {
 		p.fault = errors.Join(ErrOTLPJournalFault, err)
 	}
+	p.signalWake()
 	return p.fault
+}
+func (p *OTLPJournal) signalWake() {
+	select {
+	case p.wake <- struct{}{}:
+	default:
+	}
 }
 func (p *OTLPJournal) acquire(ctx context.Context, gate chan struct{}) error {
 	if ctx == nil {
@@ -331,6 +340,7 @@ func (p *OTLPJournal) Admit(ctx context.Context, request *otlpwire.Request) erro
 	if err = p.syncWAL(); err != nil {
 		return p.poison(err)
 	}
+	p.signalWake() // even cancellation after Sync leaves a record requiring delivery
 	return ctx.Err()
 }
 
@@ -354,6 +364,7 @@ func (p *OTLPJournal) ReplayBatch(ctx context.Context) (report OTLPBatchReport, 
 		return report, err
 	}
 	if !p.replayOpen {
+		report.fresh = true
 		if err = p.wal.Rotate(callCtx); err != nil {
 			<-p.walGate
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -432,9 +443,10 @@ func (p *OTLPJournal) ReplayBatch(ctx context.Context) (report OTLPBatchReport, 
 	return report, errors.Join(pending...)
 }
 
-// Run uses a fixed minimum pause between batches, including retry exhaustion.
-// The exporter's Retry-After adds its own per-signal not-before bound. Neither
-// timer is durable across restart. No unbounded pending-envelope map is built.
+// Run drains healthy full batches without an artificial inter-batch delay.
+// Empty or unresolved batches keep the configured pause, including retry
+// exhaustion. The exporter's Retry-After adds its per-signal not-before bound.
+// Neither timer is durable across restart. No pending-envelope map is built.
 func (p *OTLPJournal) Run(ctx context.Context) error {
 	if ctx == nil {
 		return errors.New("nil OTLP scheduler context")
@@ -446,7 +458,8 @@ func (p *OTLPJournal) Run(ctx context.Context) error {
 	}
 	defer func() { <-p.runGate }()
 	for {
-		if _, err := p.ReplayBatch(ctx); err != nil {
+		report, err := p.ReplayBatch(ctx)
+		if err != nil {
 			if p.Err() != nil {
 				return p.Err()
 			}
@@ -457,6 +470,18 @@ func (p *OTLPJournal) Run(ctx context.Context) error {
 				return ErrOTLPJournalClosed
 			}
 		}
+		if err == nil && report.fresh && report.Complete && report.Seen == 0 {
+			if err = p.waitForAdmission(ctx); err != nil {
+				return err
+			}
+			continue
+		}
+		// A healthy full batch is evidence of useful backlog, not a reason
+		// to throttle delivery. Retryable/failed batches still take the full
+		// configured pause; empty snapshots also pause, avoiding a busy loop.
+		if err == nil && report.Pending == 0 && !report.Complete && report.Seen == p.cfg.ReplayBatch {
+			continue
+		}
 		timer := time.NewTimer(p.cfg.ReplayInterval)
 		select {
 		case <-timer.C:
@@ -466,6 +491,36 @@ func (p *OTLPJournal) Run(ctx context.Context) error {
 		case <-p.ctx.Done():
 			timer.Stop()
 			return ErrOTLPJournalClosed
+		}
+	}
+}
+
+// A fresh empty snapshot proves there is no work yet. Admission signals are
+// buffered and are never cleared ahead of a snapshot, so concurrent new data
+// cannot lose its wakeup. Idle ticks check storage health without rotating and
+// allocating new WAL buffers; the retry cadence of nonempty work is unchanged.
+func (p *OTLPJournal) waitForAdmission(ctx context.Context) error {
+	ticker := time.NewTicker(p.cfg.ReplayInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-p.ctx.Done():
+			return ErrOTLPJournalClosed
+		case <-p.wake:
+			return nil
+		case <-ticker.C:
+			if err := p.Err(); err != nil {
+				return err
+			}
+			st, err := os.Stat(p.walDir)
+			if err != nil {
+				return p.poison(err)
+			}
+			if !st.IsDir() {
+				return p.poison(errors.New("OTLP WAL directory replaced"))
+			}
 		}
 	}
 }

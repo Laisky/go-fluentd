@@ -5,6 +5,7 @@ package streamformat
 import (
 	"bytes"
 	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"io"
 	"math"
@@ -24,8 +25,11 @@ func JSON(body []byte) (interface{}, error) {
 	if err := validEscapes(body); err != nil {
 		return nil, err
 	}
-	d := json.NewDecoder(bytes.NewReader(body))
-	d.UseNumber()
+	// Use the standard-library tokenizer directly over the immutable body.
+	// encoding/json's compatibility wrapper deliberately hides bytes.Buffer,
+	// causing another geometrically grown input buffer on large records.
+	// Duplicate keys are still rejected by value; token strings own storage.
+	d := &bufferTokens{jsontext.NewDecoder(bytes.NewBuffer(body), jsontext.AllowDuplicateNames(true))}
 	v, err := value(d, 0)
 	if err != nil {
 		return nil, err
@@ -36,7 +40,59 @@ func JSON(body []byte) (interface{}, error) {
 	return v, nil
 }
 
-func value(d *json.Decoder, depth int) (interface{}, error) {
+// Both the production tokenizer and the reader-based test reference use the
+// same domain conversion, including integer precision, depth and duplicate keys.
+type jsonTokens interface {
+	Token() (json.Token, error)
+	More() bool
+}
+
+type bufferTokens struct{ decoder *jsontext.Decoder }
+
+func (d *bufferTokens) More() bool {
+	k := d.decoder.PeekKind()
+	return k != 0 && k != '}' && k != ']'
+}
+func (d *bufferTokens) Token() (json.Token, error) {
+	if d.decoder.PeekKind() == '"' {
+		// ReadValue validates the complete JSON string, including its UTF-8.
+		// An unescaped string needs no unquote workspace. Copy it directly
+		// into owned storage before the decoder can reuse its raw buffer.
+		// This also avoids the tokenizer's extra buffer for non-ASCII text.
+		raw, err := d.decoder.ReadValue()
+		if err != nil {
+			return nil, err
+		}
+		if bytes.IndexByte(raw, '\\') < 0 {
+			return string(raw[1 : len(raw)-1]), nil
+		}
+		decoded, err := jsontext.AppendUnquote(nil, raw)
+		if err != nil {
+			return nil, err
+		}
+		return string(decoded), nil
+	}
+	t, err := d.decoder.ReadToken()
+	if err != nil {
+		return nil, err
+	}
+	switch k := t.Kind(); k {
+	case 'n':
+		return nil, nil
+	case 'f':
+		return false, nil
+	case 't':
+		return true, nil
+	case '0':
+		return json.Number(t.String()), nil
+	case '{', '}', '[', ']':
+		return json.Delim(k), nil
+	default:
+		return nil, fmt.Errorf("invalid JSON token %q", k)
+	}
+}
+
+func value(d jsonTokens, depth int) (interface{}, error) {
 	if depth > 64 {
 		return nil, fmt.Errorf("JSON nesting exceeds 64")
 	}
@@ -118,6 +174,13 @@ func value(d *json.Decoder, depth int) (interface{}, error) {
 // encoding/json replaces lone UTF-16 surrogates with U+FFFD. For a forwarding
 // pipeline that would silently alter caller content, so validate escape pairs.
 func validEscapes(b []byte) error {
+	// UTF-16 surrogate escapes require a backslash. Most log/event strings
+	// contain none; the optimized byte search avoids a branch for every byte.
+	// JSON syntax and UTF-8 validation still run, including on this fast path.
+	if bytes.IndexByte(b, '\\') < 0 {
+		return nil
+	}
+
 	quoted := false
 	for i := 0; i < len(b); i++ {
 		if b[i] == '"' {

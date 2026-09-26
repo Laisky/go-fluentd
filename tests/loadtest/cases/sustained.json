@@ -1,0 +1,6 @@
+[
+  {
+    "name": "steady-ndjson-16k-c64",
+    "args": ["--protocol", "ndjson", "--requests", "150000", "--concurrency", "64", "--payload", "16384", "--bounded-fixtures", "--delivery-window", "--timeout", "45s"]
+  }
+]

@@ -1,0 +1,82 @@
+name: End-to-end load measurements
+on:
+  pull_request:
+  push:
+    branches: [master]
+permissions:
+  contents: read
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GOTOOLCHAIN: local
+      GOMAXPROCS: '4'
+      GOGC: '100'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Build identified ordinary executables and verify the oracle separately
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/load-evidence
+          git rev-parse HEAD HEAD^{tree} > /tmp/load-evidence/source.txt
+          git archive --format=tar.gz HEAD > /tmp/load-evidence/source.tar.gz
+          go version > /tmp/load-evidence/toolchain.txt
+          cp go.mod go.sum /tmp/load-evidence/
+          go mod verify > /tmp/load-evidence/module-verify.txt
+          go test -mod=readonly -race -count=3 -json ./tests/loadtest > /tmp/load-evidence/oracle.jsonl
+          (cd tests/loadtest && python3 -m unittest -v test_sustained) > /tmp/load-evidence/steady-gate-tests.log 2>&1
+          go build -mod=readonly -o /tmp/load-driver ./tests/loadtest
+          go build -mod=readonly -o /tmp/load-candidate .
+          git worktree add --detach /tmp/load-baseline-src 828d34ab1460820cf732810d01b56985d46a4ab9
+          (cd /tmp/load-baseline-src && go build -mod=readonly -o /tmp/load-baseline .)
+          go version -m /tmp/load-candidate > /tmp/load-evidence/candidate-build.txt
+          go version -m /tmp/load-baseline > /tmp/load-evidence/baseline-build.txt
+          sha256sum /tmp/load-driver /tmp/load-candidate /tmp/load-baseline > /tmp/load-evidence/binaries.txt
+          uname -a > /tmp/load-evidence/kernel.txt
+          lscpu > /tmp/load-evidence/cpu.txt
+          cat /proc/meminfo > /tmp/load-evidence/memory.txt
+          df -T /tmp > /tmp/load-evidence/filesystem.txt
+      - name: Counterbalanced real-process delivery and resource trials
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tests/loadtest/compare.py --driver /tmp/load-driver --baseline /tmp/load-baseline --candidate /tmp/load-candidate --pairs 3 --cases tests/loadtest/cases/ci.json --out /tmp/load-evidence/paired
+          /tmp/load-driver --binary /tmp/load-candidate --out /tmp/load-evidence/open-loop --rate 100 --requests 512 --concurrency 32
+          /tmp/load-driver --audit-only /tmp/load-evidence/open-loop
+          git diff --exit-code -- go.mod go.sum
+      - name: Retain raw measurements without copying WAL or receipt stores
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/load-artifact
+          python3 - <<'PY'
+          import pathlib, shutil, hashlib
+          src=pathlib.Path('/tmp/load-evidence'); dst=pathlib.Path('/tmp/load-artifact')
+          entries=[]
+          for p in src.rglob('*'):
+              if not p.is_file():
+                  continue
+              rel=p.relative_to(src)
+              if 'wal' in rel.parts or 'otlp' in rel.parts:
+                  continue
+              target=dst/rel; target.parent.mkdir(parents=True,exist_ok=True)
+              shutil.copyfile(p,target)
+              entries.append(hashlib.sha256(target.read_bytes()).hexdigest()+'  '+str(rel))
+          (dst/'SHA256SUMS').write_text('\n'.join(sorted(entries))+'\n')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: e2e-load-${{ github.sha }}
+          path: /tmp/load-artifact
+          retention-days: 14
+          if-no-files-found: error

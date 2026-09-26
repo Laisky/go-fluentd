@@ -1,0 +1,62 @@
+name: Corrected journal dependency adoption
+on:
+  pull_request:
+    paths:
+      - go.mod
+      - go.sum
+      - internal/controller/journal_selective*.go
+      - tests/loadtest/*journal_adoption.py
+      - .github/workflows/journal-adoption.yml
+  push:
+    branches: [master]
+    paths:
+      - go.mod
+      - go.sum
+      - internal/controller/journal_selective*.go
+      - tests/loadtest/*journal_adoption.py
+      - .github/workflows/journal-adoption.yml
+permissions:
+  contents: read
+jobs:
+  adoption:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GOTOOLCHAIN: local
+      GOWORK: 'off'
+      GOMAXPROCS: '4'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Verify immutable module and three-way consumer contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/journal-adoption
+          git rev-parse HEAD HEAD^{tree} > /tmp/journal-adoption/source.txt
+          git archive --format=tar.gz HEAD > /tmp/journal-adoption/source.tar.gz
+          go version > /tmp/journal-adoption/toolchain.txt
+          cp go.mod go.sum /tmp/journal-adoption/
+          (cd tests/loadtest && python3 -m unittest -v test_journal_adoption) > /tmp/journal-adoption/oracle-tests.log 2>&1
+          go mod download
+          python3 tests/loadtest/verify_journal_adoption.py /tmp/journal-adoption
+          go test -mod=readonly -count=1 -json ./... > /tmp/journal-adoption/full.jsonl
+          go test -mod=readonly -race -shuffle=on -count=3 -json -run Selective ./internal/controller > /tmp/journal-adoption/selective-race.jsonl
+          git diff --exit-code -- go.mod go.sum
+      - name: Preserve exact-head results including failed assertions
+        if: always()
+        shell: bash
+        run: |
+          cd /tmp/journal-adoption
+          find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: journal-adoption-${{ github.sha }}
+          path: /tmp/journal-adoption
+          retention-days: 14
+          if-no-files-found: error

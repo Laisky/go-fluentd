@@ -25,22 +25,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-          fetch-depth: 1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: '1.27.x'
-      - name: Record baseline dependency graph
+      - name: Resolve compatibility diagnostic graph
         run: |
           mkdir -p /tmp/dependency-upgrade
           go version
-          cp go.mod /tmp/dependency-upgrade/before.mod
-          go list -m -json all > /tmp/dependency-upgrade/before.json
-      - name: Adopt the merged go-journal optimization
-        run: |
-          go get github.com/Laisky/go-journal@ad049272dbeafca55f2e0a987942504ab127d3c0
+          go get github.com/gammazero/deque@v0.1.1 github.com/Shopify/sarama@v1.26.4
           go mod tidy
           go mod verify
-      - name: Save resolved journal module and checksums
+      - name: Save resolved dependency graph
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -48,40 +43,30 @@ jobs:
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
             git add go.mod go.sum
-            git commit -m 'chore(deps): adopt merged go-journal performance and correctness fixes'
-            AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
-            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH" push origin HEAD:refs/heads/chore/dependencies-20260928
-          fi
-      - name: Resolve latest compatible module-path versions
-        id: resolve
-        run: |
-          set -o pipefail
-          go get -u -t ./... 2>&1 | tee /tmp/dependency-upgrade/upgrade.log
-          go mod tidy
-          go mod verify
-      - name: Save resolved dependency graph and checksums
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if ! git diff --quiet -- go.mod go.sum; then
-            git add go.mod go.sum
-            git commit -m 'chore(deps): refresh direct and transitive Go dependencies'
+            git commit -m 'test(deps): isolate legacy deque and Kafka compatibility constraints'
             AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
             git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH" push origin HEAD:refs/heads/chore/dependencies-20260928
           fi
       - name: Build and vet
         run: |
-          go build -mod=readonly ./...
-          go vet -mod=readonly ./...
+          set -o pipefail
+          go build -mod=readonly ./... 2>&1 | tee /tmp/dependency-upgrade/build.log
+          go vet -mod=readonly ./... 2>&1 | tee /tmp/dependency-upgrade/vet.log
       - name: Behavior tests
-        run: go test -mod=readonly -count=1 -timeout=180s ./...
+        run: |
+          set -o pipefail
+          go test -mod=readonly -count=1 -timeout=180s ./... 2>&1 | tee /tmp/dependency-upgrade/tests.log
       - name: Race and ordering checks
-        run: go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s ./...
+        run: |
+          set -o pipefail
+          go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s ./... 2>&1 | tee /tmp/dependency-upgrade/race.log
       - name: Record final state
         if: always()
         run: |
+          mkdir -p /tmp/dependency-upgrade
           cp go.mod go.sum /tmp/dependency-upgrade/
           git rev-parse HEAD > /tmp/dependency-upgrade/commit.txt
+          git archive --format=tar.gz HEAD > /tmp/dependency-upgrade/source.tar.gz
           go list -m -u -json all > /tmp/dependency-upgrade/after.json || true
           git diff -- go.mod go.sum
       - name: Retain upgrade evidence

@@ -36,13 +36,13 @@ type KafkaCommitCfg struct {
 // ReconnectInterval bounds the lifetime of each consumer group client.
 type KafkaCfg struct {
 	KafkaCommitCfg
-	Topics, Brokers                []string
+	Topics, Brokers                  []string
 	Group, Tag, MsgKey, TagKey, Name string
-	NConsumer                      int
-	IsJSONFormat                   bool
-	JSONTagKey                     string
-	RewriteTag                     string
-	ReconnectInterval              time.Duration
+	NConsumer                        int
+	IsJSONFormat                     bool
+	JSONTagKey                       string
+	RewriteTag                       string
+	ReconnectInterval                time.Duration
 }
 
 // kafkaConsumerGroup is the portion of Sarama's group API owned by this input.

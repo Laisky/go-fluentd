@@ -9,7 +9,7 @@ import (
 	"gofluentd/library/log"
 
 	"github.com/Laisky/zap"
-	"github.com/cespare/xxhash"
+	"github.com/cespare/xxhash/v2"
 	jsoniter "github.com/json-iterator/go"
 )
 

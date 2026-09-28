@@ -11,7 +11,7 @@ import (
 	"gofluentd/library"
 
 	"github.com/Laisky/go-utils"
-	"github.com/cespare/xxhash"
+	"github.com/cespare/xxhash/v2"
 )
 
 func TestFluentdRecv(t *testing.T) {

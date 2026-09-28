@@ -8,12 +8,18 @@ import (
 	"gofluentd/library"
 	"gofluentd/library/log"
 
+	"github.com/IBM/sarama"
 	"github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
-	"github.com/Shopify/sarama"
 )
 
-func NewKafkaProducer(brokers []string) (p sarama.SyncProducer, err error) {
+// kafkaProducer contains only the operations used by the sender.
+type kafkaProducer interface {
+	SendMessages([]*sarama.ProducerMessage) error
+	Close() error
+}
+
+func NewKafkaProducer(brokers []string) (p kafkaProducer, err error) {
 	cfg := sarama.NewConfig()
 	cfg.Producer.MaxMessageBytes = 1048576
 	cfg.Producer.RequiredAcks = sarama.WaitForLocal
@@ -40,7 +46,7 @@ type KafkaSenderCfg struct {
 type KafkaSender struct {
 	*BaseSender
 	*KafkaSenderCfg
-	newProducer func([]string) (sarama.SyncProducer, error)
+	newProducer func([]string) (kafkaProducer, error)
 }
 
 func NewKafkaSender(cfg *KafkaSenderCfg) *KafkaSender {
@@ -79,7 +85,7 @@ func (s *KafkaSender) Spawn(ctx context.Context) chan<- *library.FluentMsg {
 	in := make(chan *library.FluentMsg, s.InChanSize)
 	for i := 0; i < s.NFork; i++ {
 		go func() {
-			var producer sarama.SyncProducer
+			var producer kafkaProducer
 			closeProducer := func() {
 				if producer != nil {
 					if err := producer.Close(); err != nil {

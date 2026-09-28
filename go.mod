@@ -4,7 +4,6 @@ go 1.27.0
 
 require (
 	github.com/IBM/sarama v1.61.1
-	github.com/Laisky/gin-middlewares v1.3.0
 	github.com/Laisky/go-journal v1.1.7-0.20260928201541-ad049272dbea
 	github.com/Laisky/go-syslog v2.3.3+incompatible
 	// Journal logger compatibility: v1.17 changes *LoggerType to LoggerItf.
@@ -19,6 +18,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/tinylib/msgp v1.6.4
+	github.com/zsais/go-gin-prometheus v1.0.3
 	go.opentelemetry.io/collector/pdata v1.68.0
 	golang.org/x/net v0.59.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260921155816-b14227669459
@@ -51,7 +51,6 @@ require (
 	github.com/go-playground/validator/v10 v10.30.5 // indirect
 	github.com/goccy/go-json v0.11.1 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
-	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/google/go-cpy v0.0.0-20211218193943-a9c933c06932 // indirect
 	github.com/hashicorp/go-uuid v1.0.4 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect
@@ -88,7 +87,6 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.2 // indirect
-	github.com/zsais/go-gin-prometheus v1.0.3 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.9.1 // indirect
 	go.opentelemetry.io/collector/featuregate v1.68.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect

@@ -7,6 +7,7 @@ require (
 	github.com/Laisky/gin-middlewares v1.3.0
 	github.com/Laisky/go-journal v1.1.7-0.20260928201541-ad049272dbea
 	github.com/Laisky/go-syslog v2.3.3+incompatible
+	// Journal logger compatibility: v1.17 changes *LoggerType to LoggerItf.
 	github.com/Laisky/go-utils v1.16.0
 	github.com/Laisky/zap v1.27.0
 	github.com/cespare/xxhash/v2 v2.3.0

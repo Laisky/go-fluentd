@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: grpc-security-resolution-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   resolve:
     if: github.repository == 'Laisky/go-fluentd' && github.ref == 'refs/heads/chore/dependencies-20260928'
@@ -24,7 +28,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: '1.27.x'
-      - name: Resolve reviewed stable security patch
+      - name: Resolve explicitly fixed stable version
         run: |
           set -euo pipefail
           mkdir -p /tmp/grpc-security
@@ -39,7 +43,7 @@ jobs:
           pin = '\tgoogle.golang.org/grpc v1.83.2 // indirect\n'
           if s.count(pin) != 1:
               raise SystemExit('security-patched stable gRPC was not selected')
-          s = s.replace(pin, '\t// GO-2026-6443: v1.83.2 has the stable fix; v1.84.0 is affected.\n'+pin)
+          s = s.replace(pin, '\t// GO-2026-6443: explicitly fixed stable version; v1.84 advisory/source disagree.\n'+pin)
           p.write_text(s)
           PY
           go list -mod=readonly -deps -test -f '{{if .Module}}{{.Module.Path}} {{.Module.Version}}{{end}}' ./... | sort -u > /tmp/grpc-security/active-after.txt
@@ -57,6 +61,16 @@ jobs:
           PY
           go mod verify
           python3 .scripts/check_metrics_dependencies.py /tmp/grpc-security/dependency-policy
+      - name: Create clean local candidate for immutability tests
+        run: |
+          set -euo pipefail
+          # Commit locally, without publishing. Existing cross-version tests
+          # correctly require a clean candidate manifest before and after tests.
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add go.mod go.sum
+          git commit -m 'fix(deps): retain explicitly fixed stable gRPC pending advisory reconciliation'
+          git rev-parse HEAD > /tmp/grpc-security/candidate-head.txt
       - name: Validate build and behavior
         run: |
           set -euo pipefail
@@ -74,15 +88,12 @@ jobs:
           "$RUNNER_TEMP/security-tools/govulncheck" -show=verbose -test ./... > /tmp/grpc-security/source-scan.txt 2>&1
           "$RUNNER_TEMP/security-tools/govulncheck" -show=verbose -mode=binary "$RUNNER_TEMP/security-go-fluentd" > /tmp/grpc-security/binary-scan.txt 2>&1
           go mod tidy -diff
-      - name: Commit only verified dependency files
+          git diff --exit-code -- go.mod go.sum
+      - name: Publish only the verified dependency commit
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add go.mod go.sum
-          git commit -m 'fix(deps): retain gRPC 1.83.2 security backport for GO-2026-6443'
           AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH" push origin HEAD:refs/heads/chore/dependencies-20260928
           git rev-parse HEAD > /tmp/grpc-security/committed-head.txt
@@ -92,7 +103,7 @@ jobs:
           mkdir -p /tmp/grpc-security
           cp go.mod /tmp/grpc-security/after.mod
           cp go.sum /tmp/grpc-security/after.sum
-          git diff -- go.mod go.sum > /tmp/grpc-security/module.patch
+          git diff HEAD^ -- go.mod go.sum > /tmp/grpc-security/module.patch
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

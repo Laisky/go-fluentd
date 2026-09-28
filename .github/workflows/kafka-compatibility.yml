@@ -1,0 +1,65 @@
+name: Kafka broker compatibility
+
+on:
+  push:
+    branches: [master, develop, 'chore/dependencies-*']
+    paths: ['go.mod', 'go.sum', 'internal/recvs/**', 'internal/senders/**', 'library/**', '.github/workflows/kafka-compatibility.yml']
+  pull_request:
+    branches: [master, develop]
+    paths: ['go.mod', 'go.sum', 'internal/recvs/**', 'internal/senders/**', 'library/**', '.github/workflows/kafka-compatibility.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kafka-compatibility-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  broker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.x'
+      - name: Start disposable Kafka
+        run: |
+          mkdir -p /tmp/kafka-compatibility
+          docker run -d --name dependency-kafka -p 127.0.0.1:9092:9092 apache/kafka:4.3.1
+          docker image inspect apache/kafka:4.3.1 --format '{{json .RepoDigests}}' > /tmp/kafka-compatibility/image-digest.json
+          for attempt in $(seq 1 60); do
+            if docker exec dependency-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs dependency-kafka
+          exit 1
+      - name: Real producer, consumer, offsets and restart contract
+        env:
+          FLUENTD_KAFKA_TEST_BROKERS: '127.0.0.1:9092'
+        run: |
+          set -o pipefail
+          go version | tee /tmp/kafka-compatibility/go-version.txt
+          go list -m all > /tmp/kafka-compatibility/modules.txt
+          go test -mod=readonly -race -count=3 -timeout=180s -v -run '^TestRegressionKafkaUpgradeRealBroker$' ./internal/recvs 2>&1 | tee /tmp/kafka-compatibility/tests.log
+          git diff --exit-code -- go.mod go.sum
+      - name: Collect broker logs and stop it
+        if: always()
+        run: |
+          mkdir -p /tmp/kafka-compatibility
+          docker logs dependency-kafka > /tmp/kafka-compatibility/broker.log 2>&1 || true
+          docker rm -f dependency-kafka || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: kafka-compatibility
+          path: /tmp/kafka-compatibility
+          retention-days: 14

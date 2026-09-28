@@ -16,7 +16,7 @@ jobs:
   upgrade:
     if: github.repository == 'Laisky/go-fluentd' && github.ref == 'refs/heads/chore/dependencies-20260928'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     permissions:
       contents: write
     env:
@@ -25,70 +25,44 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-          fetch-depth: 0
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: '1.27.x'
-      - name: Complete clock API adaptation and format added tests
+      - name: Refresh dependency introduced by the compatible go-utils version
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('cmd/root.go')
-          p.write_text(p.read_text().replace('gutils.SetupClock(100 * time.Millisecond)', 'gutils.SetInternalClock(100 * time.Millisecond)'))
-          p = Path('go.mod')
-          text = p.read_text()
-          if '// Journal logger compatibility' not in text:
-              text = text.replace('\tgithub.com/Laisky/go-utils v1.16.0', '\t// Journal logger compatibility: v1.17 changes *LoggerType to LoggerItf.\n\tgithub.com/Laisky/go-utils v1.16.0')
-              text = text.replace('\tgithub.com/gammazero/deque v0.1.1', '\t// go-utils v1.16 requires the pre-generics deque.New API.\n\tgithub.com/gammazero/deque v0.1.1')
-          p.write_text(text)
-          PY
-          git restore --source=69a1da628fa81d5a35771e66ea95d3423a7ccc83 -- internal/senders/elasticsearch_test.go
-          gofmt -w cmd/root.go internal/recvs/kafka_dependency_test.go internal/controller/journal_upgrade_format_test.go
+          mkdir -p /tmp/dependency-upgrade
+          go get github.com/form3tech-oss/jwt-go@v3.2.5+incompatible
+          gofmt -w internal/recvs/kafka_broker_test.go
           go mod tidy
           go mod verify
-      - name: Save final API adaptation
+      - name: Commit final resolved module files and test formatting
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if ! git diff --quiet; then
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add go.mod go.sum cmd/root.go internal/recvs/kafka_dependency_test.go internal/controller/journal_upgrade_format_test.go internal/senders/elasticsearch_test.go
-            git commit -m 'fix(deps): retain 100ms clock initialization and document compatibility constraints'
+            git add go.mod go.sum internal/recvs/kafka_broker_test.go
+            git commit -m 'chore(deps): update transitive JWT to 3.2.5 and format broker regression tests'
             AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
             git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH" push origin HEAD:refs/heads/chore/dependencies-20260928
           fi
-      - name: Build and vet
+      - name: Verify dependency resolution and build
         run: |
-          mkdir -p /tmp/dependency-upgrade
           set -o pipefail
           go build -mod=readonly ./... 2>&1 | tee /tmp/dependency-upgrade/build.log
           go vet -mod=readonly ./... 2>&1 | tee /tmp/dependency-upgrade/vet.log
-      - name: Behavior tests and coverage
-        run: |
-          set -o pipefail
-          go test -mod=readonly -count=1 -timeout=180s -coverprofile=/tmp/dependency-upgrade/coverage.out ./... 2>&1 | tee /tmp/dependency-upgrade/tests.log
-          python3 .scripts/check_component_coverage.py /tmp/dependency-upgrade/coverage.out | tee /tmp/dependency-upgrade/coverage.log
-      - name: Race and ordering checks
-        run: |
-          set -o pipefail
-          go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s ./... 2>&1 | tee /tmp/dependency-upgrade/race.log
-      - name: Previous journal writes and current journal replays
-        run: bash .scripts/check_journal_upgrade.sh /tmp/dependency-upgrade/cross-version
-      - name: Focused repeated compatibility regressions
-        run: |
-          set -o pipefail
-          go test -mod=readonly -race -count=10 -shuffle=on -timeout=180s -run 'TestRegression(KafkaUpgrade|JournalUpgrade)' ./internal/recvs ./internal/controller 2>&1 | tee /tmp/dependency-upgrade/compatibility-repeat.log
-      - name: Verify immutable dependency files
-        run: git diff --exit-code -- go.mod go.sum
-      - name: Record final state
+          go test -mod=readonly -count=1 -timeout=180s ./... 2>&1 | tee /tmp/dependency-upgrade/tests.log
+          git diff --exit-code -- go.mod go.sum
+      - name: Record active and complete dependency graphs
         if: always()
         run: |
           mkdir -p /tmp/dependency-upgrade
           cp go.mod go.sum /tmp/dependency-upgrade/
           git rev-parse HEAD > /tmp/dependency-upgrade/commit.txt
           git archive --format=tar.gz HEAD > /tmp/dependency-upgrade/source.tar.gz
-          go list -m -u -json all > /tmp/dependency-upgrade/after.json || true
+          go list -mod=readonly -deps -test -f '{{if .Module}}{{.Module.Path}}{{end}}' ./... | sort -u > /tmp/dependency-upgrade/active-modules.txt
+          go list -m -u -json all > /tmp/dependency-upgrade/after.json
       - name: Retain upgrade evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

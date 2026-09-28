@@ -1,0 +1,72 @@
+name: Go dependency security
+
+on:
+  push:
+    branches: [master, develop, 'chore/dependencies-*']
+    paths: ['go.mod', 'go.sum', '**/*.go', '.scripts/check_metrics_dependencies.py', '.github/workflows/dependency-security.yml']
+  pull_request:
+    branches: [master, develop]
+    paths: ['go.mod', 'go.sum', '**/*.go', '.scripts/check_metrics_dependencies.py', '.github/workflows/dependency-security.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  govulncheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.x'
+      - name: Record source and dependency provenance
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/dependency-security
+          git rev-parse HEAD > /tmp/dependency-security/commit.txt
+          go version > /tmp/dependency-security/go-version.txt
+          cp go.mod go.sum /tmp/dependency-security/
+          go mod verify
+          go mod graph > /tmp/dependency-security/module-graph.txt
+          python3 .scripts/check_metrics_dependencies.py /tmp/dependency-security/dependency-policy
+      - name: Install reviewed scanner version
+        run: |
+          set -euo pipefail
+          GOBIN="$RUNNER_TEMP/security-tools" go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          "$RUNNER_TEMP/security-tools/govulncheck" -version > /tmp/dependency-security/scanner-version.txt
+      - name: Scan application source and built binary
+        run: |
+          set -euo pipefail
+          go build -mod=readonly -o "$RUNNER_TEMP/security-go-fluentd" .
+          go version -m "$RUNNER_TEMP/security-go-fluentd" > /tmp/dependency-security/binary-modules.txt
+          # Text mode preserves the scanner's failure status. JSON/SARIF modes
+          # exit successfully even when findings exist, so they are not gates.
+          set +e
+          "$RUNNER_TEMP/security-tools/govulncheck" -show=verbose -test ./... > /tmp/dependency-security/source-scan.txt 2>&1
+          source_status=$?
+          "$RUNNER_TEMP/security-tools/govulncheck" -show=verbose -mode=binary "$RUNNER_TEMP/security-go-fluentd" > /tmp/dependency-security/binary-scan.txt 2>&1
+          binary_status=$?
+          set -e
+          printf 'source=%s\nbinary=%s\n' "$source_status" "$binary_status" | tee /tmp/dependency-security/exit-status.txt
+          cat /tmp/dependency-security/source-scan.txt /tmp/dependency-security/binary-scan.txt
+          test "$source_status" -eq 0
+          test "$binary_status" -eq 0
+          go mod tidy -diff
+          git diff --exit-code -- go.mod go.sum
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: dependency-security-${{ github.event_name }}
+          path: /tmp/dependency-security
+          retention-days: 14
+          if-no-files-found: error

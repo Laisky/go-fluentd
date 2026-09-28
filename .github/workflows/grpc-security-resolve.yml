@@ -1,0 +1,102 @@
+name: Resolve gRPC security backport
+
+on:
+  push:
+    branches: [chore/dependencies-20260928]
+    paths: ['.github/workflows/grpc-security-resolve.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    if: github.repository == 'Laisky/go-fluentd' && github.ref == 'refs/heads/chore/dependencies-20260928'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.x'
+      - name: Resolve reviewed stable security patch
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/grpc-security
+          cp go.mod go.sum /tmp/grpc-security/
+          go list -mod=readonly -deps -test -f '{{if .Module}}{{.Module.Path}} {{.Module.Version}}{{end}}' ./... | sort -u > /tmp/grpc-security/active-before.txt
+          go get google.golang.org/grpc@v1.83.2
+          go mod tidy
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('go.mod')
+          s = p.read_text()
+          pin = '\tgoogle.golang.org/grpc v1.83.2 // indirect\n'
+          if s.count(pin) != 1:
+              raise SystemExit('security-patched stable gRPC was not selected')
+          s = s.replace(pin, '\t// GO-2026-6443: v1.83.2 has the stable fix; v1.84.0 is affected.\n'+pin)
+          p.write_text(s)
+          PY
+          go list -mod=readonly -deps -test -f '{{if .Module}}{{.Module.Path}} {{.Module.Version}}{{end}}' ./... | sort -u > /tmp/grpc-security/active-after.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          def graph(name):
+              return dict(line.split(' ', 1) if ' ' in line.strip() else (line.strip(), '') for line in Path('/tmp/grpc-security', name).read_text().splitlines() if line.strip())
+          before, after = graph('active-before.txt'), graph('active-after.txt')
+          if before.keys() != after.keys():
+              raise SystemExit('unexpected active dependency membership change')
+          changes = {k: (before[k], after[k]) for k in before if before[k] != after[k]}
+          if changes != {'google.golang.org/grpc': ('v1.84.0', 'v1.83.2')}:
+              raise SystemExit('unexpected dependency changes: '+repr(changes))
+          print(changes)
+          PY
+          go mod verify
+          python3 .scripts/check_metrics_dependencies.py /tmp/grpc-security/dependency-policy
+      - name: Validate build and behavior
+        run: |
+          set -euo pipefail
+          go build -mod=readonly -o "$RUNNER_TEMP/security-go-fluentd" .
+          go build -mod=readonly ./...
+          go vet -mod=readonly ./...
+          go test -mod=readonly -count=1 -timeout=180s ./... 2>&1 | tee /tmp/grpc-security/tests.log
+          go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s ./... 2>&1 | tee /tmp/grpc-security/race.log
+          bash .scripts/check_journal_upgrade.sh /tmp/grpc-security/cross-version
+      - name: Recheck source and production binary
+        run: |
+          set -euo pipefail
+          GOBIN="$RUNNER_TEMP/security-tools" go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          "$RUNNER_TEMP/security-tools/govulncheck" -version > /tmp/grpc-security/scanner.txt
+          "$RUNNER_TEMP/security-tools/govulncheck" -show=verbose -test ./... > /tmp/grpc-security/source-scan.txt 2>&1
+          "$RUNNER_TEMP/security-tools/govulncheck" -show=verbose -mode=binary "$RUNNER_TEMP/security-go-fluentd" > /tmp/grpc-security/binary-scan.txt 2>&1
+          go mod tidy -diff
+      - name: Commit only verified dependency files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add go.mod go.sum
+          git commit -m 'fix(deps): retain gRPC 1.83.2 security backport for GO-2026-6443'
+          AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH" push origin HEAD:refs/heads/chore/dependencies-20260928
+          git rev-parse HEAD > /tmp/grpc-security/committed-head.txt
+      - name: Record final graph including failures
+        if: always()
+        run: |
+          mkdir -p /tmp/grpc-security
+          cp go.mod /tmp/grpc-security/after.mod
+          cp go.sum /tmp/grpc-security/after.sum
+          git diff -- go.mod go.sum > /tmp/grpc-security/module.patch
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: grpc-security-backport
+          path: /tmp/grpc-security
+          retention-days: 14
+          if-no-files-found: error

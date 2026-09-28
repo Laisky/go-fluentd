@@ -28,22 +28,54 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: '1.27.x'
-      - name: Resolve compatibility diagnostic graph
+      - name: Complete reviewed module-path migration
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('internal/controller/controllor.go')
+          text = p.read_text()
+          text = text.replace('\t"github.com/Laisky/go-kafka"\n', '')
+          old = '\t// init kafka plugins recvs\n\tsharingKMsgPool := &sync.Pool{\n\t\tNew: func() interface{} {\n\t\t\treturn &kafka.KafkaMsg{}\n\t\t},\n\t}\n\n'
+          text = text.replace(old, '')
+          text = text.replace('\t\t\t\t\tKMsgPool:          sharingKMsgPool,\n', '')
+          assert 'go-kafka' not in text and 'KMsgPool' not in text
+          p.write_text(text)
+          p = Path('internal/recvs/components_test.go')
+          text = p.read_text().replace('kafka "github.com/Laisky/go-kafka"', '"github.com/IBM/sarama"')
+          text = text.replace('&kafka.KafkaMsg{Message:', '&sarama.ConsumerMessage{Value:')
+          assert 'KafkaMsg' not in text
+          p.write_text(text)
+          for name in ['internal/senders/kafka.go', 'internal/senders/components_test.go']:
+              p = Path(name)
+              text = p.read_text().replace('github.com/Shopify/sarama', 'github.com/IBM/sarama')
+              text = text.replace('sarama.SyncProducer', 'kafkaProducer')
+              if name.endswith('/kafka.go') and 'type kafkaProducer interface' not in text:
+                  text = text.replace('func NewKafkaProducer(', '// kafkaProducer contains only the operations used by the sender.\ntype kafkaProducer interface {\n\tSendMessages([]*sarama.ProducerMessage) error\n\tClose() error\n}\n\nfunc NewKafkaProducer(')
+              p.write_text(text)
+          for p in Path('.').rglob('*.go'):
+              text = p.read_text()
+              updated = text.replace('"github.com/cespare/xxhash"', '"github.com/cespare/xxhash/v2"').replace('"github.com/mitchellh/mapstructure"', '"github.com/go-viper/mapstructure/v2"')
+              if text != updated:
+                  p.write_text(updated)
+          PY
+          git ls-files -z '*.go' | xargs -0 gofmt -w
+      - name: Resolve supported dependency graph
         run: |
           mkdir -p /tmp/dependency-upgrade
           go version
-          go get github.com/gammazero/deque@v0.1.1 github.com/Shopify/sarama@v1.26.4
+          go mod edit -droprequire=github.com/Laisky/go-kafka -droprequire=github.com/Shopify/sarama -droprequire=github.com/bsm/sarama-cluster -droprequire=github.com/cespare/xxhash -droprequire=github.com/mitchellh/mapstructure
+          go get github.com/IBM/sarama@latest github.com/cespare/xxhash/v2@latest github.com/go-viper/mapstructure/v2@latest github.com/Laisky/go-utils@v1.16.0 github.com/gammazero/deque@v0.1.1
           go mod tidy
           go mod verify
-      - name: Save resolved dependency graph
+      - name: Save resolved migration and dependency graph
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if ! git diff --quiet -- go.mod go.sum; then
+          if ! git diff --quiet; then
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add go.mod go.sum
-            git commit -m 'test(deps): isolate legacy deque and Kafka compatibility constraints'
+            git add go.mod go.sum internal library cmd
+            git commit -m 'fix(deps): migrate Sarama, mapstructure and xxhash; preserve journal logger compatibility'
             AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
             git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH" push origin HEAD:refs/heads/chore/dependencies-20260928
           fi

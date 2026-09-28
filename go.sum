@@ -5,10 +5,8 @@ github.com/Laisky/gin-middlewares v1.1.1 h1:EVFwX94bMVSeJ4a6TXgT6BXvhqyn6j0kKQhE
 github.com/Laisky/gin-middlewares v1.1.1/go.mod h1:IJxjhBGdN+o6BfGME2qbxZl54i5jQmcnwMh6QUd89T8=
 github.com/Laisky/go-chaining v0.0.0-20180507092046-43dcdc5a21be h1:7Rxhm6IjOtDAyj8eScOFntevwzkWhx94zi48lxo4m4w=
 github.com/Laisky/go-chaining v0.0.0-20180507092046-43dcdc5a21be/go.mod h1:1mdzaETo0kjvCQICPSePsoaatJN4l7JvEA1200lyevo=
-github.com/Laisky/go-journal v1.1.7-0.20260924003054-612f5354f538 h1:pVQflNhT32PThZzvmGEMalSwx3GFx4FewcsEoN0GiJY=
-github.com/Laisky/go-journal v1.1.7-0.20260924003054-612f5354f538/go.mod h1:8wjz86nBGSDCpnS/zpdNY/jkz48qUz24/UDszLbbUsY=
-github.com/Laisky/go-journal v1.1.7-0.20260926040517-fc156a60fafc h1:bL1gqp8g8FPymRwWnrHRguChTY2gVXdHw6IqwL7cajI=
-github.com/Laisky/go-journal v1.1.7-0.20260926040517-fc156a60fafc/go.mod h1:8wjz86nBGSDCpnS/zpdNY/jkz48qUz24/UDszLbbUsY=
+github.com/Laisky/go-journal v1.1.7-0.20260928201541-ad049272dbea h1:Ozl/B/Z6UKz+pwKjOFmmi1Npvg7/XsVoP3p8BrViqJA=
+github.com/Laisky/go-journal v1.1.7-0.20260928201541-ad049272dbea/go.mod h1:8wjz86nBGSDCpnS/zpdNY/jkz48qUz24/UDszLbbUsY=
 github.com/Laisky/go-kafka v1.0.1 h1:DNMBLshSMUUedH9nmBhGrpEf0FLGIAQfPlbQBkFcCfw=
 github.com/Laisky/go-kafka v1.0.1/go.mod h1:AksqzI2+yDSX6MtQikP6aTg9om52pSdropjst0oqeZE=
 github.com/Laisky/go-syslog v2.3.3+incompatible h1:TSHhP3iadAPDzC5efyYLPnGkv2pvUtuUInm7poVRkFA=

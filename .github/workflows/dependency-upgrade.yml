@@ -1,24 +1,25 @@
-name: Dependency upgrade verification
+name: Dependency compatibility
 
 on:
   push:
-    branches: [chore/dependencies-20260928]
-    paths: ['.github/workflows/dependency-upgrade.yml']
+    branches: [master, develop, 'chore/dependencies-*']
+    paths: ['go.mod', 'go.sum', '**/*.go', '.scripts/check_journal_upgrade.sh', '.scripts/check_component_coverage.py', '.github/workflows/dependency-upgrade.yml']
+  pull_request:
+    branches: [master, develop]
+    paths: ['go.mod', 'go.sum', '**/*.go', '.scripts/check_journal_upgrade.sh', '.scripts/check_component_coverage.py', '.github/workflows/dependency-upgrade.yml']
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: dependency-upgrade-${{ github.ref }}
+  group: dependency-compatibility-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  upgrade:
-    if: github.repository == 'Laisky/go-fluentd' && github.ref == 'refs/heads/chore/dependencies-20260928'
+  compatibility:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
+    timeout-minutes: 20
     env:
       GOTOOLCHAIN: local
     steps:
@@ -28,46 +29,49 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: '1.27.x'
-      - name: Refresh dependency introduced by the compatible go-utils version
+      - name: Record selected versions and verify modules
         run: |
-          mkdir -p /tmp/dependency-upgrade
-          go get github.com/form3tech-oss/jwt-go@v3.2.5+incompatible
-          gofmt -w internal/recvs/kafka_broker_test.go
-          go mod tidy
+          mkdir -p /tmp/dependency-compatibility
+          git rev-parse HEAD > /tmp/dependency-compatibility/commit.txt
+          go version | tee /tmp/dependency-compatibility/go-version.txt
+          cp go.mod go.sum /tmp/dependency-compatibility/
+          go list -mod=readonly -m -json all > /tmp/dependency-compatibility/modules.json
           go mod verify
-      - name: Commit final resolved module files and test formatting
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if ! git diff --quiet; then
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add go.mod go.sum internal/recvs/kafka_broker_test.go
-            git commit -m 'chore(deps): update transitive JWT to 3.2.5 and format broker regression tests'
-            AUTH=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
-            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $AUTH" push origin HEAD:refs/heads/chore/dependencies-20260928
-          fi
-      - name: Verify dependency resolution and build
+      - name: Build and vet
         run: |
           set -o pipefail
-          go build -mod=readonly ./... 2>&1 | tee /tmp/dependency-upgrade/build.log
-          go vet -mod=readonly ./... 2>&1 | tee /tmp/dependency-upgrade/vet.log
-          go test -mod=readonly -count=1 -timeout=180s ./... 2>&1 | tee /tmp/dependency-upgrade/tests.log
-          git diff --exit-code -- go.mod go.sum
-      - name: Record active and complete dependency graphs
-        if: always()
+          go build -mod=readonly ./... 2>&1 | tee /tmp/dependency-compatibility/build.log
+          go vet -mod=readonly ./... 2>&1 | tee /tmp/dependency-compatibility/vet.log
+      - name: Behavior tests and component coverage floors
         run: |
-          mkdir -p /tmp/dependency-upgrade
-          cp go.mod go.sum /tmp/dependency-upgrade/
-          git rev-parse HEAD > /tmp/dependency-upgrade/commit.txt
-          git archive --format=tar.gz HEAD > /tmp/dependency-upgrade/source.tar.gz
-          go list -mod=readonly -deps -test -f '{{if .Module}}{{.Module.Path}}{{end}}' ./... | sort -u > /tmp/dependency-upgrade/active-modules.txt
-          go list -m -u -json all > /tmp/dependency-upgrade/after.json
-      - name: Retain upgrade evidence
+          set -o pipefail
+          go test -mod=readonly -count=1 -timeout=180s -coverprofile=/tmp/dependency-compatibility/coverage.out ./... 2>&1 | tee /tmp/dependency-compatibility/tests.log
+          python3 .scripts/check_component_coverage.py /tmp/dependency-compatibility/coverage.out | tee /tmp/dependency-compatibility/coverage.log
+      - name: Randomized full-suite race tests
+        run: |
+          set -o pipefail
+          go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s ./... 2>&1 | tee /tmp/dependency-compatibility/race.log
+      - name: Previous journal writes and current journal replays
+        run: bash .scripts/check_journal_upgrade.sh /tmp/dependency-compatibility/cross-version
+      - name: Repeat focused compatibility regressions
+        run: |
+          set -o pipefail
+          go test -mod=readonly -race -count=10 -shuffle=on -timeout=180s -run 'TestRegression(KafkaUpgrade|JournalUpgrade)' ./internal/recvs ./internal/controller 2>&1 | tee /tmp/dependency-compatibility/repeated-tests.log
+      - name: Check formatting and dependency-file immutability
+        run: |
+          test -z "$(gofmt -l internal/recvs/kafka*.go internal/controller/journal_upgrade_format_test.go)"
+          go mod tidy -diff
+          git diff --exit-code -- go.mod go.sum
+      - name: Record available updates without changing selected versions
+        continue-on-error: true
+        run: |
+          go list -mod=readonly -deps -test -f '{{if .Module}}{{.Module.Path}}{{end}}' ./... | sort -u > /tmp/dependency-compatibility/active-modules.txt
+          go list -mod=readonly -m -u -json all > /tmp/dependency-compatibility/available-updates.json
+      - name: Retain compatibility evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: dependency-upgrade-evidence
-          path: /tmp/dependency-upgrade
+          name: dependency-compatibility
+          path: /tmp/dependency-compatibility
           retention-days: 14
           if-no-files-found: error

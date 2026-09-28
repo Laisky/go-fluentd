@@ -19,8 +19,6 @@ go mod tidy -modfile="$evidence/previous.mod"
 go list -modfile="$evidence/previous.mod" -m github.com/Laisky/go-journal > "$evidence/previous-version.txt"
 go list -mod=readonly -m github.com/Laisky/go-journal > "$evidence/candidate-version.txt"
 
-env FLUENTD_JOURNAL_UPGRADE_MODE=seed FLUENTD_JOURNAL_UPGRADE_DIR="$fixture" 
-  go version > /dev/null
 FLUENTD_JOURNAL_UPGRADE_MODE=seed FLUENTD_JOURNAL_UPGRADE_DIR="$fixture" \
   go test -modfile="$evidence/previous.mod" -count=1 -timeout=180s -v \
   -run '^TestRegressionJournalUpgradeDiskFixture$' ./internal/controller \

@@ -15,7 +15,7 @@ import (
 
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
-	"github.com/cespare/xxhash"
+	"github.com/cespare/xxhash/v2"
 	"github.com/tinylib/msgp/msgp"
 )
 

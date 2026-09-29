@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 	"gofluentd/internal/otlphttp"
 	"gofluentd/internal/otlpstate"
 	"gofluentd/library/otlpwire"

@@ -3,7 +3,7 @@ package tagfilters
 import (
 	"context"
 	"fmt"
-	"github.com/cespare/xxhash"
+	"github.com/cespare/xxhash/v2"
 	"github.com/gin-gonic/gin"
 	"gofluentd/internal/monitor"
 	"gofluentd/library"

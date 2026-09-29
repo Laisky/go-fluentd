@@ -2,26 +2,26 @@ package recvs
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"gofluentd/library"
 	"gofluentd/library/log"
 
-	"github.com/Laisky/go-kafka"
+	"github.com/IBM/sarama"
+	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/pkg/errors"
 )
 
 const (
 	defaultKafkaReconnectInterval = 1 * time.Hour
+	kafkaRetryInterval            = 100 * time.Millisecond
 )
 
 func GetKafkaRewriteTag(rewriteTag, env string) string {
 	if rewriteTag == "" {
 		return ""
 	}
-
 	return rewriteTag + "." + env
 }
 
@@ -31,229 +31,249 @@ type KafkaCommitCfg struct {
 	IntervalDuration time.Duration
 }
 
-/*
-KafkaCfg kafka client configuration
-
-Args:
-
-	IsJSONFormat: unmarshal json into `msg.Message`
-	MsgKey: put kafka msg body into `msg.Message[MsgKey]`
-	TagKey: set tag into `msg.Message[TagKey]`
-	Name: name of this recv plugin
-	KMsgPool: sync.Pool for `*utils.kafka.KafkaMsg`
-	Meta: add new field and value into `msg.Message`
-	JSONTagKey: load tag from kafka message(only work when IsJSONFormat is true)
-	RewriteTag: rewrite `msg.Tag`, `msg.Message["tag"]` will keep origin value
-	ReconnectInterval: restart consumer periodically
-*/
+// KafkaCfg configures Kafka input. JSONTagKey selects the input tag before
+// RewriteTag is applied; TagKey retains that original tag in the payload.
+// ReconnectInterval bounds the lifetime of each consumer group client.
 type KafkaCfg struct {
 	KafkaCommitCfg
 	Topics, Brokers                  []string
 	Group, Tag, MsgKey, TagKey, Name string
 	NConsumer                        int
-	KMsgPool                         *sync.Pool
 	IsJSONFormat                     bool
 	JSONTagKey                       string
 	RewriteTag                       string
 	ReconnectInterval                time.Duration
 }
 
+// kafkaConsumerGroup is the portion of Sarama's group API owned by this input.
+type kafkaConsumerGroup interface {
+	Consume(context.Context, []string, sarama.ConsumerGroupHandler) error
+	Errors() <-chan error
+	Close() error
+}
+
 type KafkaRecv struct {
 	BaseRecv
 	*KafkaCfg
+	newConsumerGroup func([]string, string, *sarama.Config) (kafkaConsumerGroup, error)
 }
 
 func NewKafkaRecv(cfg *KafkaCfg) *KafkaRecv {
-	k := &KafkaRecv{
+	r := &KafkaRecv{
 		KafkaCfg: cfg,
+		newConsumerGroup: func(brokers []string, group string, cfg *sarama.Config) (kafkaConsumerGroup, error) {
+			return sarama.NewConsumerGroup(brokers, group, cfg)
+		},
 	}
-	if err := k.valid(); err != nil {
+	if err := r.valid(); err != nil {
 		log.Logger.Panic("new kafka recv", zap.Error(err))
 	}
-
-	log.Logger.Info("new kafka recv",
-		zap.Strings("topics", cfg.Topics),
-		zap.Strings("brokers", cfg.Brokers),
-		zap.Bool("is_json_format", cfg.IsJSONFormat),
-		zap.String("tag_key", cfg.TagKey),
-		zap.String("tag", cfg.Tag),
-		zap.Int("nconsumer", cfg.NConsumer),
-		zap.Int("interval_num", cfg.IntervalNum),
-		zap.Duration("interval_sec", cfg.IntervalDuration),
-		zap.String("msg_key", cfg.MsgKey),
-		zap.Duration("reconnect_sec", cfg.ReconnectInterval),
-		zap.String("json_tag_key", cfg.JSONTagKey),
-	)
-	return k
+	log.Logger.Info("new kafka recv", zap.Strings("topics", cfg.Topics),
+		zap.Strings("brokers", cfg.Brokers), zap.Int("nconsumer", cfg.NConsumer),
+		zap.Int("interval_num", cfg.IntervalNum), zap.Duration("interval_sec", cfg.IntervalDuration))
+	return r
 }
 
 func (r *KafkaRecv) valid() error {
-	if !r.IsJSONFormat {
-		if r.MsgKey == "" {
-			r.MsgKey = "log"
-			log.Logger.Info("reset msg_key", zap.String("msg_key", r.MsgKey))
-		}
+	if !r.IsJSONFormat && r.MsgKey == "" {
+		r.MsgKey = "log"
 	}
-
 	if r.ReconnectInterval <= 0 {
 		r.ReconnectInterval = defaultKafkaReconnectInterval
-		log.Logger.Info("reset reconnect_sec", zap.Duration("reconnect_sec", r.ReconnectInterval))
 	}
-
 	if r.NConsumer <= 0 {
 		r.NConsumer = 1
-		log.Logger.Info("reset nconsumer", zap.Int("nconsumer", r.NConsumer))
 	}
-
 	if r.IntervalNum <= 0 {
 		r.IntervalNum = 1000
-		log.Logger.Info("reset interval_num", zap.Int("interval_num", r.IntervalNum))
 	}
-
 	if r.IntervalDuration <= 0 {
 		r.IntervalDuration = 3 * time.Second
-		log.Logger.Info("reset interval_sec", zap.Duration("interval_sec", r.IntervalDuration))
 	}
-
 	return nil
 }
 
-func (r *KafkaRecv) GetName() string {
-	return r.Name
+func (r *KafkaRecv) GetName() string { return r.Name }
+
+func (r *KafkaRecv) consumerConfig() *sarama.Config {
+	cfg := sarama.NewConfig()
+	cfg.Net.KeepAlive = 30 * time.Second
+	cfg.Consumer.Return.Errors = true
+	// Keep the legacy new-group policy: start at the end when no committed
+	// offset exists. Never silently replay a whole topic during an upgrade.
+	cfg.Consumer.Offsets.Initial = sarama.OffsetNewest
+	cfg.Consumer.Offsets.AutoCommit.Enable = true
+	cfg.Consumer.Offsets.AutoCommit.Interval = r.IntervalDuration
+	// Eager range assignment cancels the session on revocation, including
+	// claims currently blocked by downstream backpressure.
+	cfg.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.NewBalanceStrategyRange()}
+	return cfg
 }
 
 func (r *KafkaRecv) Run(ctx context.Context) {
-	log.Logger.Info("run KafkaRecv")
 	for i := 0; i < r.NConsumer; i++ {
-		go func(i int) {
-			defer log.Logger.Info("kafka reciver exit", zap.Int("n", i))
-			var (
-				ok           bool
-				kmsg         *kafka.KafkaMsg
-				msg          *library.FluentMsg
-				ctx2Consumer context.Context
-				cancel       func()
-			)
-
-			for {
-				select {
-				case <-ctx.Done():
-					if cancel != nil {
-						cancel()
-					}
-					return
-				default:
-				}
-
-				ctx2Consumer, cancel = context.WithTimeout(ctx, r.ReconnectInterval)
-				cli, err := kafka.NewKafkaCliWithGroupID(
-					ctx2Consumer,
-					&kafka.KafkaCliCfg{
-						Brokers:  r.Brokers,
-						Topics:   r.Topics,
-						Groupid:  r.Group,
-						KMsgPool: r.KMsgPool,
-					},
-					kafka.WithCommitFilterCheckInterval(r.IntervalDuration),
-					kafka.WithCommitFilterCheckNum(r.IntervalNum),
-				)
-				if err != nil {
-					log.Logger.Error("try to connect to kafka got error", zap.Error(err))
-					cancel()
-					continue
-				}
-				log.Logger.Info("connect to kafka brokers",
-					zap.Strings("brokers", r.Brokers),
-					zap.Strings("topics", r.Topics),
-					zap.Int("intervalnum", r.IntervalNum),
-					zap.Int("nconsumer", r.NConsumer),
-					zap.Duration("intervalduration", r.IntervalDuration),
-					zap.String("group", r.Group))
-
-				msgChan := cli.Messages(ctx)
-			CONSUMER_LOOP:
-				for { // receive new kmsg, and convert to fluent msg
-					select {
-					case <-ctx2Consumer.Done():
-						break CONSUMER_LOOP
-					case kmsg, ok = <-msgChan:
-						if !ok {
-							log.Logger.Info("consumer break")
-							cancel()
-							break CONSUMER_LOOP
-						}
-					}
-
-					log.Logger.Debug("got new message from kafka",
-						zap.Int("n", i),
-						zap.Int32("partition", kmsg.Partition),
-						zap.ByteString("msg", kmsg.Message),
-						zap.String("name", r.GetName()))
-					if msg, err = r.parse2Msg(kmsg); err != nil {
-						log.Logger.Error("try to parse kafka message got error",
-							zap.String("name", r.GetName()),
-							zap.Error(err),
-							zap.ByteString("log", kmsg.Message))
-						cli.CommitWithMsg(kmsg)
-						continue
-					}
-
-					r.syncOutChan <- msg // blockable
-					cli.CommitWithMsg(kmsg)
-				}
-				cli.Close()
-			}
-		}(i)
+		go r.runConsumer(ctx)
 	}
 }
 
-// parse2Msg parse kafkamsg to fluentdmsg
-func (r *KafkaRecv) parse2Msg(kmsg *kafka.KafkaMsg) (msg *library.FluentMsg, err error) {
+func kafkaRetry(ctx context.Context) bool {
+	timer := time.NewTimer(kafkaRetryInterval)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+func (r *KafkaRecv) runConsumer(ctx context.Context) {
+	for ctx.Err() == nil {
+		cycleCtx, cancel := context.WithTimeout(ctx, r.ReconnectInterval)
+		group, err := r.newConsumerGroup(r.Brokers, r.Group, r.consumerConfig())
+		if err == nil {
+			r.consumeGroup(cycleCtx, group)
+		} else {
+			log.Logger.Error("connect Kafka consumer", zap.Error(err))
+		}
+		cancel()
+		if !kafkaRetry(ctx) {
+			return
+		}
+	}
+}
+
+func (r *KafkaRecv) consumeGroup(ctx context.Context, group kafkaConsumerGroup) {
+	// Keep draining errors until Close finishes: stopping the drain first can
+	// deadlock a client that reports its final errors while shutting down.
+	stopErrors, errorsDone := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(errorsDone)
+		for {
+			select {
+			case err, ok := <-group.Errors():
+				if !ok {
+					return
+				}
+				log.Logger.Warn("Kafka consumer error", zap.Error(err))
+			case <-stopErrors:
+				return
+			}
+		}
+	}()
+	defer func() {
+		if err := group.Close(); err != nil {
+			log.Logger.Warn("close Kafka consumer", zap.Error(err))
+		}
+		close(stopErrors)
+		<-errorsDone
+	}()
+	handler := &kafkaGroupHandler{recv: r, dry: utils.Settings.GetBool("dry")}
+	for ctx.Err() == nil {
+		// Consume returns after an eager rebalance. Re-enter it on the same
+		// client; client recreation is reserved for the configured lifetime.
+		if err := group.Consume(ctx, r.Topics, handler); err != nil && ctx.Err() == nil {
+			log.Logger.Warn("consume Kafka group", zap.Error(err))
+			if !kafkaRetry(ctx) {
+				return
+			}
+		}
+	}
+}
+
+type kafkaGroupHandler struct {
+	recv *KafkaRecv
+	dry  bool
+}
+
+func (*kafkaGroupHandler) Setup(sarama.ConsumerGroupSession) error   { return nil }
+func (*kafkaGroupHandler) Cleanup(sarama.ConsumerGroupSession) error { return nil }
+
+func (h *kafkaGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+	count := 0 // claim-local: never mix offsets from different partitions
+	ctx := session.Context()
+	for {
+		if ctx.Err() != nil {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case record, ok := <-claim.Messages():
+			if !ok {
+				return nil
+			}
+			if !h.recv.forwardKafkaRecord(ctx, record) {
+				return nil
+			}
+			if !h.dry {
+				session.MarkMessage(record, "")
+				count++
+				if count >= h.recv.IntervalNum {
+					session.Commit()
+					count = 0
+				}
+			}
+		}
+	}
+}
+
+// forwardKafkaRecord preserves the existing admission boundary: offsets become
+// eligible only after handoff to the acceptor, not after end-to-end delivery.
+// Malformed records retain the existing discard-and-advance policy.
+func (r *KafkaRecv) forwardKafkaRecord(ctx context.Context, record *sarama.ConsumerMessage) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	msg, err := r.parse2Msg(record)
+	if err != nil {
+		log.Logger.Error("parse Kafka message", zap.String("name", r.Name), zap.Error(err))
+		return true
+	}
+	select {
+	case <-ctx.Done():
+		r.msgPool.Put(msg)
+		return false
+	case r.syncOutChan <- msg:
+		return true
+	}
+}
+
+// parse2Msg converts a Kafka record while retaining original-tag metadata.
+func (r *KafkaRecv) parse2Msg(kmsg *sarama.ConsumerMessage) (msg *library.FluentMsg, err error) {
 	msg = r.newMsg()
 	msg.ID = r.counter.Count()
 	msg.Tag = r.Tag
-
-	// remove old messages log
 	msg.Message = map[string]interface{}{}
-
 	if r.IsJSONFormat {
-		if err = json.Unmarshal(kmsg.Message, &msg.Message); err != nil {
+		if err = json.Unmarshal(kmsg.Value, &msg.Message); err != nil {
 			r.msgPool.Put(msg)
-			return nil, errors.Wrap(err, "try to unmarshal kmsg got error")
+			return nil, errors.Wrap(err, "unmarshal Kafka message")
 		}
-
 		if msg.Message == nil {
 			r.msgPool.Put(msg)
 			return nil, errors.New("Kafka JSON must be an object")
 		}
-
-		if r.JSONTagKey != "" { // load msg.Tag from json
-			switch msg.Message[r.JSONTagKey].(type) {
+		if r.JSONTagKey != "" {
+			switch tag := msg.Message[r.JSONTagKey].(type) {
 			case []byte:
-				msg.Tag = string(msg.Message[r.JSONTagKey].([]byte))
+				msg.Tag = string(tag)
 			case string:
-				msg.Tag = msg.Message[r.JSONTagKey].(string)
+				msg.Tag = tag
 			default:
-				log.Logger.Error("discard log since unknown JSONTagKey format", zap.String("tagkey", r.JSONTagKey))
 				r.msgPool.Put(msg)
 				return nil, errors.New("unknown JSONTagKey format")
 			}
 		}
 	} else {
-		msg.Message[r.MsgKey] = kmsg.Message
+		msg.Message[r.MsgKey] = kmsg.Value
 	}
-
 	if r.TagKey != "" {
 		msg.Message[r.TagKey] = msg.Tag
 	}
-	// log.Logger.Debug("parse2Msg got new msg",
-	// 	zap.String("tag", msg.Tag),
-	// 	zap.String("rewrite_tag", r.RewriteTag),
-	// 	zap.ByteString("msg", kmsg.Message))
 	if r.RewriteTag != "" {
 		msg.Tag = r.RewriteTag
 	}
-
 	library.ProcessAdd(r.AddCfg, msg)
 	return msg, nil
 }

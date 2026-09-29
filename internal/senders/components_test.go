@@ -7,7 +7,7 @@ import (
 	stdjson "encoding/json"
 	"errors"
 	"fmt"
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 	"gofluentd/library"
 	"io"
 	"net/http"
@@ -210,7 +210,7 @@ func (p *componentKafkaProducer) SendMessages(msgs []*sarama.ProducerMessage) er
 func (p *componentKafkaProducer) Close() error { p.once.Do(func() { close(p.closed) }); return nil }
 func newComponentKafka(p *componentKafkaProducer) *KafkaSender {
 	s := NewKafkaSender(&KafkaSenderCfg{Name: "kafka", Brokers: []string{"unused"}, Topic: "logs", Tags: []string{"logs"}, NFork: 1, BatchSize: 1, InChanSize: 8, MaxWait: time.Hour})
-	s.newProducer = func([]string) (sarama.SyncProducer, error) { return p, nil }
+	s.newProducer = func([]string) (kafkaProducer, error) { return p, nil }
 	return s
 }
 func TestComponentKafkaInvalidRecordNeverReusesPreviousPayload(t *testing.T) {
@@ -277,7 +277,7 @@ func TestComponentKafkaRetryFailureAndRecovery(t *testing.T) {
 	s := newComponentKafka(p)
 	healthy := &componentKafkaProducer{closed: make(chan struct{})}
 	connections := 0
-	s.newProducer = func([]string) (sarama.SyncProducer, error) {
+	s.newProducer = func([]string) (kafkaProducer, error) {
 		connections++
 		if connections == 1 {
 			return p, nil

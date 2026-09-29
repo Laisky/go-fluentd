@@ -1,0 +1,82 @@
+name: Dependency compatibility
+
+on:
+  push:
+    branches: [master, develop, 'chore/dependencies-*']
+    paths: ['go.mod', 'go.sum', '**/*.go', '.scripts/check_journal_upgrade.sh', '.scripts/check_component_coverage.py', '.scripts/check_metrics_dependencies.py', '.scripts/test_metrics_dependencies.py', '.github/workflows/dependency-upgrade.yml']
+  pull_request:
+    branches: [master, develop]
+    paths: ['go.mod', 'go.sum', '**/*.go', '.scripts/check_journal_upgrade.sh', '.scripts/check_component_coverage.py', '.scripts/check_metrics_dependencies.py', '.scripts/test_metrics_dependencies.py', '.github/workflows/dependency-upgrade.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dependency-compatibility-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.x'
+      - name: Record selected versions and verify modules
+        run: |
+          mkdir -p /tmp/dependency-compatibility
+          git rev-parse HEAD > /tmp/dependency-compatibility/commit.txt
+          go version | tee /tmp/dependency-compatibility/go-version.txt
+          cp go.mod go.sum /tmp/dependency-compatibility/
+          go list -mod=readonly -m -json all > /tmp/dependency-compatibility/modules.json
+          go mod verify
+      - name: Reject the removed metrics JWT dependency chain
+        run: |
+          set -o pipefail
+          python3 .scripts/test_metrics_dependencies.py
+          python3 .scripts/check_metrics_dependencies.py /tmp/dependency-compatibility/metrics-dependencies | tee /tmp/dependency-compatibility/metrics-dependencies.log
+      - name: Build and vet
+        run: |
+          set -o pipefail
+          go build -mod=readonly ./... 2>&1 | tee /tmp/dependency-compatibility/build.log
+          go vet -mod=readonly ./... 2>&1 | tee /tmp/dependency-compatibility/vet.log
+      - name: Behavior tests and component coverage floors
+        run: |
+          set -o pipefail
+          go test -mod=readonly -count=1 -timeout=180s -coverprofile=/tmp/dependency-compatibility/coverage.out ./... 2>&1 | tee /tmp/dependency-compatibility/tests.log
+          python3 .scripts/check_component_coverage.py /tmp/dependency-compatibility/coverage.out | tee /tmp/dependency-compatibility/coverage.log
+      - name: Randomized full-suite race tests
+        run: |
+          set -o pipefail
+          go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s ./... 2>&1 | tee /tmp/dependency-compatibility/race.log
+      - name: Previous journal writes and current journal replays
+        run: bash .scripts/check_journal_upgrade.sh /tmp/dependency-compatibility/cross-version
+      - name: Repeat focused compatibility regressions
+        run: |
+          set -o pipefail
+          go test -mod=readonly -race -count=10 -shuffle=on -timeout=180s -run 'TestRegression(KafkaUpgrade|JournalUpgrade|MetricsDependencyCompatibility)' ./internal/recvs ./internal/controller 2>&1 | tee /tmp/dependency-compatibility/repeated-tests.log
+      - name: Check formatting and dependency-file immutability
+        run: |
+          test -z "$(gofmt -l internal/recvs/kafka*.go internal/controller/journal_upgrade_format_test.go internal/controller/metrics_dependency_test.go internal/controller/server.go)"
+          go mod tidy -diff
+          git diff --exit-code -- go.mod go.sum
+      - name: Record available updates without changing selected versions
+        continue-on-error: true
+        run: |
+          go list -mod=readonly -deps -test -f '{{if .Module}}{{.Module.Path}}{{end}}' ./... | sort -u > /tmp/dependency-compatibility/active-modules.txt
+          go list -mod=readonly -m -u -json all > /tmp/dependency-compatibility/available-updates.json
+      - name: Retain compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: dependency-compatibility
+          path: /tmp/dependency-compatibility
+          retention-days: 14
+          if-no-files-found: error

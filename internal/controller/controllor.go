@@ -18,10 +18,9 @@ import (
 	"gofluentd/library"
 	"gofluentd/library/log"
 
-	"github.com/Laisky/go-kafka"
 	gutils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
-	"github.com/cespare/xxhash"
+	"github.com/cespare/xxhash/v2"
 )
 
 // Controllor is an IoC that manage all roles
@@ -66,13 +65,6 @@ func (c *Controllor) initJournal(ctx context.Context) *Journal {
 func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 	// init tcp recvs
 	receivers := []recvs.AcceptorRecvItf{}
-
-	// init kafka plugins recvs
-	sharingKMsgPool := &sync.Pool{
-		New: func() interface{} {
-			return &kafka.KafkaMsg{}
-		},
-	}
 
 	switch gutils.Settings.Get("settings.acceptor.recvs.plugins").(type) {
 	case map[string]interface{}:
@@ -139,7 +131,6 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 				}))
 			case "kafka":
 				kafkaCfg := &recvs.KafkaCfg{
-					KMsgPool:          sharingKMsgPool,
 					Name:              name,
 					MsgKey:            gutils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".msg_key"),
 					Brokers:           gutils.Settings.GetStringSlice("settings.acceptor.recvs.plugins." + name + ".brokers." + env),

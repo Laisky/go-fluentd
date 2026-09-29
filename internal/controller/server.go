@@ -8,11 +8,11 @@ import (
 
 	"gofluentd/library/log"
 
-	middlewares "github.com/Laisky/gin-middlewares"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
+	ginprometheus "github.com/zsais/go-gin-prometheus"
 )
 
 var (
@@ -39,7 +39,10 @@ func RunServer(ctx context.Context, addr string) {
 	// supported action:
 	// cmdline, profile, symbol, goroutine, heap, threadcreate, block
 	pprof.Register(server, "pprof")
-	middlewares.BindPrometheus(server)
+	// This is the same metrics registration as gin-middlewares.BindPrometheus,
+	// without importing its unused JWT/authentication dependency. Keep the
+	// subsystem and registration order so existing scrapes remain compatible.
+	ginprometheus.NewPrometheus("gin").Use(server)
 
 	log.Logger.Info("listening on http", zap.String("addr", addr))
 	serveErr := make(chan error, 1)

@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	kafka "github.com/Laisky/go-kafka"
+	"github.com/IBM/sarama"
 	utils "github.com/Laisky/go-utils"
 	"github.com/gin-gonic/gin"
 	"github.com/tinylib/msgp/msgp"
@@ -167,7 +167,7 @@ func TestComponentKafkaDecodingRoutingAndPoolReset(t *testing.T) {
 			if isJSON {
 				payload = []byte(`{"origin":"app","value":3}`)
 			}
-			got, err := r.parse2Msg(&kafka.KafkaMsg{Message: payload})
+			got, err := r.parse2Msg(&sarama.ConsumerMessage{Value: payload})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -204,7 +204,7 @@ func TestComponentKafkaRejectsNonObjectJSON(t *testing.T) {
 					t.Errorf("malformed JSON panic: %v", v)
 				}
 			}()
-			if got, err := r.parse2Msg(&kafka.KafkaMsg{Message: []byte(body)}); err == nil || got != nil {
+			if got, err := r.parse2Msg(&sarama.ConsumerMessage{Value: []byte(body)}); err == nil || got != nil {
 				t.Fatalf("bad JSON accepted: %+v %v", got, err)
 			}
 		})

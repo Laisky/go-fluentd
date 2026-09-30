@@ -174,8 +174,12 @@ func persistOTLPCheckpoint(dir string, g otlpGeneration) error {
 // including receipts, WAL/recovery files and incomplete evidence. Hard links
 // count twice conservatively. This is an admission check, not a filesystem quota:
 // replay and receipt writes need separate headroom and are never discarded to fit.
-func otlpDirectoryBytes(ctx context.Context, root string) (int64, error) {
+// Once stopAfter is exceeded, the caller already must refuse admission, so it
+// returns a lower bound without scanning the rest of a full ownership directory.
+func otlpDirectoryBytes(ctx context.Context, root string, stopAfter int64, maxEntries int) (int64, error) {
 	var total int64
+	seen := 0
+	full := errors.New("OTLP storage scan admission threshold exceeded")
 	var walk func(string) error
 	walk = func(dir string) error {
 		f, err := os.Open(dir)
@@ -189,6 +193,13 @@ func otlpDirectoryBytes(ctx context.Context, root string) (int64, error) {
 			}
 			entries, readErr := f.ReadDir(256)
 			for _, item := range entries {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				if seen == maxEntries {
+					return ErrOTLPJournalScanBudget
+				}
+				seen++
 				info, err := item.Info()
 				// A replay can remove completed files while admission inspects storage.
 				if errors.Is(err, os.ErrNotExist) {
@@ -206,6 +217,9 @@ func otlpDirectoryBytes(ctx context.Context, root string) (int64, error) {
 						return errors.New("OTLP storage size overflow")
 					}
 					total += info.Size()
+					if total > stopAfter {
+						return full
+					}
 				} else {
 					return fmt.Errorf("unexpected OTLP storage entry %q", item.Name())
 				}
@@ -218,7 +232,7 @@ func otlpDirectoryBytes(ctx context.Context, root string) (int64, error) {
 			}
 		}
 	}
-	if err := walk(root); err != nil {
+	if err := walk(root); err != nil && !errors.Is(err, full) {
 		return 0, err
 	}
 	return total, nil

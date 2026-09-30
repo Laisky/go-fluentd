@@ -97,8 +97,8 @@ func TestOTLPServiceConfigurationContracts(t *testing.T) {
 			}
 		})
 	}
-	c, e := controller.ParseOTLPServiceConfig(map[string]interface{}{"enabled": true, "idle_timeout": "75ms", "max_connections": 17})
-	if e != nil || c.IdleTimeout != 75*time.Millisecond || c.MaxConnections != 17 {
+	c, e := controller.ParseOTLPServiceConfig(map[string]interface{}{"enabled": true, "idle_timeout": "75ms", "max_connections": 17, "storage_scan_max_entries": 1024, "storage_scan_timeout": "10ms"})
+	if e != nil || c.IdleTimeout != 75*time.Millisecond || c.MaxConnections != 17 || c.StorageScanMaxEntries != 1024 || c.StorageScanTimeout != 10*time.Millisecond {
 		t.Fatal(c, e)
 	}
 }

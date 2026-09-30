@@ -17,9 +17,10 @@ import (
 )
 
 var (
-	ErrOTLPJournalClosed   = errors.New("OTLP journal closed")
-	ErrOTLPJournalCapacity = errors.New("OTLP journal admission byte limit reached")
-	ErrOTLPJournalFault    = errors.New("OTLP journal stopped after storage or identity failure")
+	ErrOTLPJournalClosed     = errors.New("OTLP journal closed")
+	ErrOTLPJournalCapacity   = errors.New("OTLP journal admission byte limit reached")
+	ErrOTLPJournalScanBudget = errors.New("OTLP journal admission storage scan budget exhausted")
+	ErrOTLPJournalFault      = errors.New("OTLP journal stopped after storage or identity failure")
 )
 
 // OTLPJournalConfig requires an existing, private persistent directory. The
@@ -35,6 +36,11 @@ type OTLPJournalConfig struct {
 	ReplayInterval time.Duration
 	// MaxStorageBytes is an optional whole-directory admission threshold, not a filesystem quota.
 	MaxStorageBytes int64
+	// StorageScanMaxEntries caps each admission metadata scan. Exhaustion refuses
+	// telemetry with ErrOTLPJournalScanBudget; it never treats a partial sum as free space.
+	StorageScanMaxEntries int
+	// StorageScanTimeout bounds metadata work between syscalls, not kernel I/O.
+	StorageScanTimeout time.Duration
 	// ReceiptGC enables checkpoint-proven reclamation of accepted receipts only.
 	ReceiptGC bool
 }
@@ -74,10 +80,12 @@ type OTLPJournal struct {
 	snapshotPending            int64 // smallest unresolved ID across the entire snapshot
 	hasSnapshotPending         bool
 	storageRejected            atomic.Uint64
+	scanBudgetRejected         atomic.Uint64
 	receiptsReclaimed          atomic.Uint64
 	// Narrow instance seams supplement real filesystem/crash behavior tests.
 	syncWAL  func() error
 	writeWAL func(*journal.Data) error
+	scanWAL  func(context.Context) (int64, error)
 }
 
 // OpenOTLPJournal creates metadata only in an empty provisioned directory. An
@@ -101,6 +109,18 @@ func OpenOTLPJournal(ctx context.Context, cfg OTLPJournalConfig, peers []OTLPDes
 	}
 	if cfg.ReplayInterval == 0 {
 		cfg.ReplayInterval = time.Second
+	}
+	if cfg.StorageScanMaxEntries == 0 {
+		cfg.StorageScanMaxEntries = 4096
+	}
+	if cfg.StorageScanMaxEntries < 1 || cfg.StorageScanMaxEntries > 1<<20 {
+		return nil, errors.New("storage_scan_max_entries must be between 1 and 1048576")
+	}
+	if cfg.StorageScanTimeout == 0 {
+		cfg.StorageScanTimeout = 25 * time.Millisecond
+	}
+	if cfg.StorageScanTimeout < time.Millisecond || cfg.StorageScanTimeout > time.Second {
+		return nil, errors.New("storage_scan_timeout must be between 1ms and 1s")
 	}
 	if cfg.MaxStorageBytes < 0 || cfg.MaxStorageBytes > 1<<50 || (cfg.MaxStorageBytes > 0 && cfg.MaxStorageBytes < cfg.MaxWALBytes) {
 		return nil, errors.New("max_storage_bytes must be zero or at least max_wal_bytes")
@@ -148,6 +168,7 @@ func OpenOTLPJournal(ctx context.Context, cfg OTLPJournalConfig, peers []OTLPDes
 		p.frontier = max(p.frontier, p.generation.ReleasedThrough)
 	}
 	p.syncWAL, p.writeWAL = p.wal.Sync, p.wal.WriteData
+	p.scanWAL = p.storageBytes
 	if err = ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -160,6 +181,16 @@ func (p *OTLPJournal) Counters() OTLPCounters { return p.producer.Counters() }
 // StorageCounters returns process-local admission rejections and reclaimed receipts.
 func (p *OTLPJournal) StorageCounters() (uint64, uint64) {
 	return p.storageRejected.Load(), p.receiptsReclaimed.Load()
+}
+
+// ScanBudgetRejected is the subset of admission rejections caused by metadata
+// entry/time budgets rather than measured byte thresholds; process-local only.
+func (p *OTLPJournal) ScanBudgetRejected() uint64 { return p.scanBudgetRejected.Load() }
+
+func (p *OTLPJournal) rejectScanBudget() error {
+	p.storageRejected.Add(1)
+	p.scanBudgetRejected.Add(1)
+	return errors.Join(ErrOTLPJournalCapacity, ErrOTLPJournalScanBudget)
 }
 
 // Err returns a sticky storage/identity fault. Retryable peer rejection is not
@@ -205,26 +236,46 @@ func (p *OTLPJournal) acquire(ctx context.Context, gate chan struct{}) error {
 	}
 	return nil
 }
-func (p *OTLPJournal) storageBytes() (int64, error) {
-	entries, err := os.ReadDir(p.walDir)
+func (p *OTLPJournal) storageBytes(ctx context.Context) (int64, error) {
+	f, err := os.Open(p.walDir)
 	if err != nil {
 		return 0, err
 	}
+	defer f.Close()
 	var size int64
-	for _, e := range entries {
-		st, err := e.Info()
-		if err != nil {
+	seen := 0
+	for {
+		if err := ctx.Err(); err != nil {
 			return 0, err
 		}
-		if !st.Mode().IsRegular() {
-			return 0, fmt.Errorf("unexpected OTLP WAL entry %q", e.Name())
+		entries, readErr := f.ReadDir(256)
+		for _, e := range entries {
+			if err := ctx.Err(); err != nil {
+				return 0, err
+			}
+			if seen == p.cfg.StorageScanMaxEntries {
+				return 0, ErrOTLPJournalScanBudget
+			}
+			seen++
+			st, err := e.Info()
+			if err != nil {
+				return 0, err
+			}
+			if !st.Mode().IsRegular() {
+				return 0, fmt.Errorf("unexpected OTLP WAL entry %q", e.Name())
+			}
+			if st.Size() < 0 || st.Size() > math.MaxInt64-size {
+				return 0, errors.New("OTLP WAL size overflow")
+			}
+			size += st.Size()
 		}
-		if st.Size() > math.MaxInt64-size {
-			return 0, errors.New("OTLP WAL size overflow")
+		if errors.Is(readErr, io.EOF) {
+			return size, nil
 		}
-		size += st.Size()
+		if readErr != nil {
+			return 0, readErr
+		}
 	}
-	return size, nil
 }
 
 // Admit returns nil only after the frozen plan and original payload are written
@@ -255,20 +306,39 @@ func (p *OTLPJournal) Admit(ctx context.Context, request *otlpwire.Request) erro
 	if err != nil {
 		return err
 	}
-	size, err := p.storageBytes()
-	if err != nil {
-		return p.poison(err)
-	}
 	// Conservative room for the encoded wrapper, compression overhead and framing.
 	// Replay copies/receipts are intentionally outside this admission threshold.
 	reserve := int64(len(d.Data["otlp_delivery"].([]byte)))*2 + 1024
+	// An envelope that cannot fit even an empty WAL needs no directory scan.
+	if reserve > p.cfg.MaxWALBytes {
+		p.storageRejected.Add(1)
+		return ErrOTLPJournalCapacity
+	}
+	scanCtx, cancelScan := context.WithTimeout(ctx, p.cfg.StorageScanTimeout)
+	defer cancelScan()
+	size, err := p.scanWAL(scanCtx)
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if errors.Is(err, ErrOTLPJournalScanBudget) || scanCtx.Err() != nil {
+			return p.rejectScanBudget()
+		}
+		return p.poison(err)
+	}
 	if size > p.cfg.MaxWALBytes-reserve {
 		p.storageRejected.Add(1)
 		return ErrOTLPJournalCapacity
 	}
 	if p.cfg.MaxStorageBytes > 0 {
-		used, scanErr := otlpDirectoryBytes(ctx, p.cfg.Directory)
+		used, scanErr := otlpDirectoryBytes(scanCtx, p.cfg.Directory, p.cfg.MaxStorageBytes-reserve, p.cfg.StorageScanMaxEntries)
 		if scanErr != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if errors.Is(scanErr, ErrOTLPJournalScanBudget) || scanCtx.Err() != nil {
+				return p.rejectScanBudget()
+			}
 			return scanErr
 		}
 		if used > p.cfg.MaxStorageBytes-reserve {
@@ -276,6 +346,15 @@ func (p *OTLPJournal) Admit(ctx context.Context, request *otlpwire.Request) erro
 			return ErrOTLPJournalCapacity
 		}
 	}
+	// A scan can end exactly as its budget expires. Refuse before any write;
+	// parent cancellation retains its own meaning instead of poisoning storage.
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if scanCtx.Err() != nil {
+		return p.rejectScanBudget()
+	}
+	cancelScan()
 	p.frontier = r.ID
 	if err = p.writeWAL(d); err != nil {
 		return p.poison(err)

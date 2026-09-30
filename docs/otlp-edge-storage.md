@@ -12,14 +12,27 @@ authentication, destinations and separate persistent journal directories:
 ```yaml
 max_wal_bytes: 1073741824       # 1 GiB logical WAL admission threshold
 max_storage_bytes: 2147483648   # 2 GiB whole-root admission threshold
+storage_scan_max_entries: 4096 # metadata entries per scan; refusal on exhaustion
+storage_scan_timeout: 25ms     # combined admission scan time between syscalls
 receipt_gc: true               # upgrades generation metadata; read rollback below
 ```
 
 `max_storage_bytes` defaults to zero (disabled), must be at least
 `max_wal_bytes` when enabled, and is limited to 2^50 bytes. Admission accounts
 regular files throughout the owned root, including WAL, receipts, recovery files
-and retained incomplete evidence. The scan uses bounded directory chunks, but
-its work scales with retained file count; measure the selected envelope rate.
+and retained incomplete evidence. Each WAL/root scan visits at most
+`storage_scan_max_entries` entries (default 4096, range 1–1048576), including
+directories. The two scans share `storage_scan_timeout` (default 25ms, range
+1ms–1s). A scan that exhausts either budget refuses the request with HTTP 503
+without appending, advancing identity, or poisoning the journal. It does not
+treat a partial size sum as free space. Scanning stops early once it proves the
+byte threshold is already exceeded. An oversized envelope is refused before
+any metadata scan. The scans retain all evidence, and recovery/replay continues.
+Operators should measure and tune these budgets on the edge host. A pending
+gap or retained quarantine can exceed the entry budget even below the byte cap;
+repair the destination or increase a measured budget without deleting evidence.
+Context checks run between entries; a blocked kernel metadata syscall or fsync
+cannot be interrupted, so the timeout is not a hard I/O latency guarantee.
 Hard links count twice conservatively; unexpected non-regular entries are not
 followed. Trusted storage paths must not be modified concurrently by operators.
 
@@ -78,9 +91,11 @@ restore the whole coherent owner state, not just the WAL.
 
 The protected management `/monitor` includes `otlpStorage` with:
 
-- `admissionRejected`: process-local WAL/root capacity rejection count;
+- `admissionRejected`: process-local byte/scan-budget admission rejection count;
+- `scanBudgetRejected`: the subset caused by metadata entry/time budgets;
 - `acceptedReceiptsReclaimed`: accepted receipt files reclaimed this process;
-- `maxStorageBytes` and `receiptGC`: configured control values.
+- `maxStorageBytes`, `storageScanMaxEntries`, `storageScanTimeout` and `receiptGC`:
+  configured control values.
 
 Counters reset on restart and are not durable delivery receipts. Monitor actual
 filesystem usage/free space and existing OTLP destination outcomes too. Native
@@ -91,6 +106,21 @@ Run `go test -race -count=3 -shuffle=on ./internal/otlpstate ./internal/controll
 on the supported Unix build. New tests cover healthy plain/gzip restart cycles,
 unresolved fan-out gaps, concurrent admission, corrupt metadata/receipts,
 checkpoint publication failure, quarantines and large/zero-item admission.
+`TestOTLPJournalRetainedReceiptsDrainRestoresSameScanCap` specifically admits 32
+records with a 16-entry scan cap, then retains 31 real full-acceptance receipts
+behind a retryable first record. The next admission must refuse without writing,
+advancing identity/checkpoint, changing receipt bytes, or poisoning storage.
+After repairing that isolated destination, existing replay reaches EOF, advances
+the durable checkpoint, and reclaims all 32 receipts despite the admission cap.
+Closing/reopening the same ownership directory with the unchanged 16-entry cap
+then admits and delivers a new record with the next ID. Previously accepted
+records are not sent again. This is recovery from a retryable prefix gap;
+permanent quarantine and uncertain evidence remain outside accepted-receipt GC.
+
+```sh
+go test -mod=readonly -race -count=3 -shuffle=on -timeout=90s -run '^TestOTLPJournalRetainedReceiptsDrainRestoresSameScanCap$' ./internal/controller
+```
+
 The `OTLP edge acceptance` workflow retains source, toolchain and executable
 format/restart evidence. The companion VPS workflow additionally tests the real
 Victoria/Collector pipeline, including SIGKILL after edge receipt collection.

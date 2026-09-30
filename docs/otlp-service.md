@@ -79,6 +79,8 @@ admission limit returns 503 when body-decoding/admission slots are exhausted.
 | `max_response_bytes` | 1 MiB |
 | `max_wal_bytes` | 256 MiB logical WAL admission threshold |
 | `max_storage_bytes` | 0: whole-root admission check disabled |
+| `storage_scan_max_entries` | 4096 per admission metadata scan; HTTP 503 on exhaustion |
+| `storage_scan_timeout` | 25ms shared between admission scans; checked between syscalls |
 | `receipt_gc` | false: accepted receipts retained |
 | `replay_batch` / `replay_interval` | 64 envelopes / minimum 1 second |
 

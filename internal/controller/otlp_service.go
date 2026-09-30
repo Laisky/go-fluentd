@@ -28,32 +28,34 @@ import (
 // OTLPServiceConfig is an opt-in, isolated pipeline. Secrets are named by
 // environment variable, never embedded in the persisted destination plan.
 type OTLPServiceConfig struct {
-	Enabled           bool                     `mapstructure:"enabled"`
-	ListenAddress     string                   `mapstructure:"listen_addr"`
-	StorageDirectory  string                   `mapstructure:"storage_dir"`
-	BearerTokenEnv    string                   `mapstructure:"bearer_token_env"`
-	TLSCertFile       string                   `mapstructure:"tls_cert_file"`
-	TLSKeyFile        string                   `mapstructure:"tls_key_file"`
-	ClientCAFile      string                   `mapstructure:"client_ca_file"`
-	MaxConnections    int                      `mapstructure:"max_connections"`
-	MaxHeaderBytes    int                      `mapstructure:"max_header_bytes"`
-	ReadHeaderTimeout time.Duration            `mapstructure:"read_header_timeout"`
-	IdleTimeout       time.Duration            `mapstructure:"idle_timeout"`
-	ShutdownTimeout   time.Duration            `mapstructure:"shutdown_timeout"`
-	RequestTimeout    time.Duration            `mapstructure:"request_timeout"`
-	BodyReadTimeout   time.Duration            `mapstructure:"body_read_timeout"`
-	MaxConcurrent     int                      `mapstructure:"max_concurrent"`
-	MaxWireBytes      int64                    `mapstructure:"max_wire_bytes"`
-	MaxDecodedBytes   int64                    `mapstructure:"max_decoded_bytes"`
-	MaxItems          int                      `mapstructure:"max_items"`
-	MaxResponseBytes  int64                    `mapstructure:"max_response_bytes"`
-	MaxStorageBytes   int64                    `mapstructure:"max_storage_bytes"`
-	ReceiptGC         bool                     `mapstructure:"receipt_gc"`
-	MaxWALBytes       int64                    `mapstructure:"max_wal_bytes"`
-	JournalGzip       bool                     `mapstructure:"journal_gzip"`
-	ReplayBatch       int                      `mapstructure:"replay_batch"`
-	ReplayInterval    time.Duration            `mapstructure:"replay_interval"`
-	Destinations      []OTLPServiceDestination `mapstructure:"destinations"`
+	Enabled               bool                     `mapstructure:"enabled"`
+	ListenAddress         string                   `mapstructure:"listen_addr"`
+	StorageDirectory      string                   `mapstructure:"storage_dir"`
+	BearerTokenEnv        string                   `mapstructure:"bearer_token_env"`
+	TLSCertFile           string                   `mapstructure:"tls_cert_file"`
+	TLSKeyFile            string                   `mapstructure:"tls_key_file"`
+	ClientCAFile          string                   `mapstructure:"client_ca_file"`
+	MaxConnections        int                      `mapstructure:"max_connections"`
+	MaxHeaderBytes        int                      `mapstructure:"max_header_bytes"`
+	ReadHeaderTimeout     time.Duration            `mapstructure:"read_header_timeout"`
+	IdleTimeout           time.Duration            `mapstructure:"idle_timeout"`
+	ShutdownTimeout       time.Duration            `mapstructure:"shutdown_timeout"`
+	RequestTimeout        time.Duration            `mapstructure:"request_timeout"`
+	BodyReadTimeout       time.Duration            `mapstructure:"body_read_timeout"`
+	MaxConcurrent         int                      `mapstructure:"max_concurrent"`
+	MaxWireBytes          int64                    `mapstructure:"max_wire_bytes"`
+	MaxDecodedBytes       int64                    `mapstructure:"max_decoded_bytes"`
+	MaxItems              int                      `mapstructure:"max_items"`
+	MaxResponseBytes      int64                    `mapstructure:"max_response_bytes"`
+	MaxStorageBytes       int64                    `mapstructure:"max_storage_bytes"`
+	StorageScanMaxEntries int                      `mapstructure:"storage_scan_max_entries"`
+	StorageScanTimeout    time.Duration            `mapstructure:"storage_scan_timeout"`
+	ReceiptGC             bool                     `mapstructure:"receipt_gc"`
+	MaxWALBytes           int64                    `mapstructure:"max_wal_bytes"`
+	JournalGzip           bool                     `mapstructure:"journal_gzip"`
+	ReplayBatch           int                      `mapstructure:"replay_batch"`
+	ReplayInterval        time.Duration            `mapstructure:"replay_interval"`
+	Destinations          []OTLPServiceDestination `mapstructure:"destinations"`
 }
 
 type OTLPServiceDestination struct {
@@ -172,6 +174,12 @@ func (c *OTLPServiceConfig) defaults() {
 	if c.MaxWALBytes == 0 {
 		c.MaxWALBytes = 256 << 20
 	}
+	if c.StorageScanMaxEntries == 0 {
+		c.StorageScanMaxEntries = 4096
+	}
+	if c.StorageScanTimeout == 0 {
+		c.StorageScanTimeout = 25 * time.Millisecond
+	}
 	if c.ReplayBatch == 0 {
 		c.ReplayBatch = 64
 	}
@@ -273,6 +281,12 @@ func StartOTLPService(parent context.Context, c OTLPServiceConfig) (_ *OTLPServi
 	if c.MaxStorageBytes < 0 || c.MaxStorageBytes > 1<<50 || (c.MaxStorageBytes > 0 && c.MaxStorageBytes < c.MaxWALBytes) {
 		return nil, errors.New("max_storage_bytes must be zero or at least max_wal_bytes")
 	}
+	if c.StorageScanMaxEntries < 1 || c.StorageScanMaxEntries > 1<<20 {
+		return nil, errors.New("storage_scan_max_entries must be between 1 and 1048576")
+	}
+	if c.StorageScanTimeout < time.Millisecond || c.StorageScanTimeout > time.Second {
+		return nil, errors.New("storage_scan_timeout must be between 1ms and 1s")
+	}
 	if c.MaxResponseBytes < 1 || c.MaxResponseBytes > 8<<20 || c.MaxWALBytes < 4096 || c.MaxWALBytes > 1<<50 || c.ReplayBatch < 1 || c.ReplayBatch > 1024 || c.ReplayInterval < 10*time.Millisecond || c.ReplayInterval > time.Hour {
 		return nil, errors.New("invalid OTLP storage/replay limits")
 	}
@@ -347,14 +361,14 @@ func StartOTLPService(parent context.Context, c OTLPServiceConfig) (_ *OTLPServi
 		return nil, fmt.Errorf("bind OTLP listener: %w", e)
 	}
 	s.listener = netutil.LimitListener(ln, c.MaxConnections)
-	s.owner, err = OpenOTLPJournal(ctx, OTLPJournalConfig{Directory: c.StorageDirectory, Compress: c.JournalGzip, Limits: otlpstate.Limits{PayloadBytes: int(c.MaxDecodedBytes), ResponseBytes: int(c.MaxResponseBytes)}, MaxWALBytes: c.MaxWALBytes, MaxStorageBytes: c.MaxStorageBytes, ReceiptGC: c.ReceiptGC, ReplayBatch: c.ReplayBatch, ReplayInterval: c.ReplayInterval}, peers)
+	s.owner, err = OpenOTLPJournal(ctx, OTLPJournalConfig{Directory: c.StorageDirectory, Compress: c.JournalGzip, Limits: otlpstate.Limits{PayloadBytes: int(c.MaxDecodedBytes), ResponseBytes: int(c.MaxResponseBytes)}, MaxWALBytes: c.MaxWALBytes, MaxStorageBytes: c.MaxStorageBytes, StorageScanMaxEntries: c.StorageScanMaxEntries, StorageScanTimeout: c.StorageScanTimeout, ReceiptGC: c.ReceiptGC, ReplayBatch: c.ReplayBatch, ReplayInterval: c.ReplayInterval}, peers)
 	if err != nil {
 		return nil, err
 	}
 	s.server = &http.Server{Handler: receiver, ReadHeaderTimeout: c.ReadHeaderTimeout, ReadTimeout: c.BodyReadTimeout, WriteTimeout: c.RequestTimeout + time.Second, IdleTimeout: c.IdleTimeout, MaxHeaderBytes: c.MaxHeaderBytes, TLSConfig: tc, BaseContext: func(net.Listener) context.Context { return ctx }, TLSNextProto: map[string]func(*http.Server, *tls.Conn, http.Handler){}}
 	monitor.AddMetric("otlpStorage", func() map[string]interface{} {
 		rejected, reclaimed := s.owner.StorageCounters()
-		return map[string]interface{}{"admissionRejected": rejected, "acceptedReceiptsReclaimed": reclaimed, "maxStorageBytes": c.MaxStorageBytes, "receiptGC": c.ReceiptGC}
+		return map[string]interface{}{"admissionRejected": rejected, "scanBudgetRejected": s.owner.ScanBudgetRejected(), "acceptedReceiptsReclaimed": reclaimed, "maxStorageBytes": c.MaxStorageBytes, "storageScanMaxEntries": c.StorageScanMaxEntries, "storageScanTimeout": c.StorageScanTimeout.String(), "receiptGC": c.ReceiptGC}
 	})
 	// HTTP/1.1 is deliberate: max_connections is not an HTTP/2 stream quota.
 	go s.run(ctx, c.ShutdownTimeout)

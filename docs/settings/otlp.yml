@@ -27,6 +27,8 @@ settings:
     # Optional whole-root admission guard, NOT a filesystem quota. Reserve
     # additional recovery/receipt space. Zero (default) disables this check.
     # max_storage_bytes: 536870912
+    storage_scan_max_entries: 4096
+    storage_scan_timeout: 25ms
     # Optional accepted-receipt GC. Upgrades generation metadata to v2;
     # old binaries reject that directory. See ../otlp-edge-storage.md.
     # receipt_gc: true

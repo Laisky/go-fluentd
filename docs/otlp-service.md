@@ -78,12 +78,18 @@ admission limit returns 503 when body-decoding/admission slots are exhausted.
 | `max_items` | 10,000 log records, spans or metric data points |
 | `max_response_bytes` | 1 MiB |
 | `max_wal_bytes` | 256 MiB logical WAL admission threshold |
+| `max_storage_bytes` | 0: whole-root admission check disabled |
+| `receipt_gc` | false: accepted receipts retained |
 | `replay_batch` / `replay_interval` | 64 envelopes / minimum 1 second |
 
 These are not aggregate memory, decoder-allocation or filesystem quotas. Receipt
 files and recovery copies are not included in the WAL admission threshold.
-Accepted and quarantined envelopes currently retain per-destination copies with
-no compaction or receipt TTL. Capacity requires operational monitoring.
+By default, accepted and quarantined envelopes retain per-destination copies.
+Opt-in `receipt_gc` reclaims accepted receipts only behind a durable released
+frontier; quarantine and uncertain evidence remain. `max_storage_bytes` adds a
+whole-root admission check, not a hard quota. Read the
+[edge storage and rollback contract](otlp-edge-storage.md) before enabling them.
+Capacity still requires separate filesystem protection and operational monitoring.
 
 ## Startup, failure and stop
 
@@ -108,13 +114,16 @@ Saved acceptance or quarantine receipts prevent another peer's retry from
 resending already recorded outcomes. Quarantine is not full delivery. The
 management `/monitor` response exposes an `otlp` section with process-local
 accepted/quarantined/retryable/blocked envelope counters and receipt replay hits.
-Counters are observations, not durable lifetime totals or telemetry item counts.
-No health, profiling, or management endpoint is mounted on the OTLP listener.
+An additional `otlpStorage` section reports admission capacity rejections and
+accepted receipt reclamation. Counters are observations, not durable lifetime
+totals or telemetry item counts. No health, profiling, or management endpoint is
+mounted on the OTLP listener.
 
 Keep generation metadata, WAL and receipts together on restart. Removing a
 required destination blocks its saved plans rather than erasing obligations.
 A crash between a remote response and local receipt persistence can duplicate
-exports. Retry-After scheduling is process-local. There is no exactly-once or
+exports. Retry-After scheduling is process-local. Receipt GC upgrades generation
+metadata to v2; old binaries reject it. There is no exactly-once or
 physical-power-loss qualification.
 
 ## Reproduce the acceptance tests
@@ -145,7 +154,7 @@ counted as a valid mutation-test result.
 
 See the [wire plan](otlp.md), [transport contract](otlp-http-transports.md),
 [journal lifecycle](otlp-journal-lifecycle.md), [accounting](otlp-accounting.md),
-and [receipt recovery](otlp-dispositions.md).
+[receipt recovery](otlp-dispositions.md), and [edge storage](otlp-edge-storage.md).
 
 Primary references: [OTLP specification](https://opentelemetry.io/docs/specs/otlp/),
 [Go HTTP server](https://pkg.go.dev/net/http#Server), and

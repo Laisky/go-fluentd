@@ -107,7 +107,7 @@ import hashlib
 import json
 from pathlib import Path
 
-ts = datetime.datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 salt = "local-demo-only-not-a-production-secret"
 event = {
     "event": "readme-demo-001",

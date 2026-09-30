@@ -43,7 +43,9 @@ acknowledgement behavior, before rollout.
 See the [tested settings](docs/settings/otlp.yml), [service guide](docs/otlp-service.md)
 and [Collector 0.161.0 interoperability scope](docs/otlp-collector-acceptance.md).
 HTTP 200 means local journal synchronization, not completed downstream delivery.
-Per-destination receipts have no compaction or aggregate disk quota; plan storage
+Receipts are retained by default. Optional [edge storage controls](docs/otlp-edge-storage.md)
+add checkpoint-safe accepted-receipt GC and a whole-root admission check; neither
+is a hard filesystem quota, and quarantines remain retained. Plan recovery
 headroom. OTLP/gRPC, profiles, aggregation and sampling are not supported.
 
 These instructions describe the checked-out source, not an older release image.
@@ -351,6 +353,7 @@ console payload, health/monitor responses, and invalid-request behavior.
 | --- | --- |
 | Tested demo and troubleshooting | [Quickstart](docs/quickstart.md) |
 | OTLP service and real Collector acceptance | [Service](docs/otlp-service.md) / [settings](docs/settings/otlp.yml) / [acceptance](docs/otlp-collector-acceptance.md) |
+| OTLP edge storage and checkpoint rollback | [Admission controls and receipt GC](docs/otlp-edge-storage.md) |
 | Full configuration reference | [English](docs/settings/settings.yml) / [Chinese](docs/settings/settings_cn.yml) |
 | Reliability and recovery | [Design notes](docs/reliability.md) / [executable contract](tests/delivery/CONTRACT.md) |
 | Behavior tests | [Component testing](docs/component-testing.md) / [delivery tests](tests/delivery/README.md) |

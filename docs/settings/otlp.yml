@@ -24,6 +24,12 @@ settings:
     max_items: 10000
     max_response_bytes: 1048576
     max_wal_bytes: 268435456
+    # Optional whole-root admission guard, NOT a filesystem quota. Reserve
+    # additional recovery/receipt space. Zero (default) disables this check.
+    # max_storage_bytes: 536870912
+    # Optional accepted-receipt GC. Upgrades generation metadata to v2;
+    # old binaries reject that directory. See ../otlp-edge-storage.md.
+    # receipt_gc: true
     journal_gzip: false
     replay_batch: 64
     replay_interval: 1s

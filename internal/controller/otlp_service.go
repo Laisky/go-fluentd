@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/go-viper/mapstructure/v2"
+	"gofluentd/internal/monitor"
 	"gofluentd/internal/otlphttp"
 	"gofluentd/internal/otlpstate"
 	"gofluentd/library/otlpwire"
@@ -46,6 +47,8 @@ type OTLPServiceConfig struct {
 	MaxDecodedBytes   int64                    `mapstructure:"max_decoded_bytes"`
 	MaxItems          int                      `mapstructure:"max_items"`
 	MaxResponseBytes  int64                    `mapstructure:"max_response_bytes"`
+	MaxStorageBytes   int64                    `mapstructure:"max_storage_bytes"`
+	ReceiptGC         bool                     `mapstructure:"receipt_gc"`
 	MaxWALBytes       int64                    `mapstructure:"max_wal_bytes"`
 	JournalGzip       bool                     `mapstructure:"journal_gzip"`
 	ReplayBatch       int                      `mapstructure:"replay_batch"`
@@ -267,6 +270,9 @@ func StartOTLPService(parent context.Context, c OTLPServiceConfig) (_ *OTLPServi
 	if c.MaxConnections < 1 || c.MaxConnections > 65536 || c.MaxHeaderBytes < 1024 || c.MaxHeaderBytes > 1<<20 || c.ReadHeaderTimeout <= 0 || c.ReadHeaderTimeout > time.Minute || c.IdleTimeout <= 0 || c.IdleTimeout > time.Hour || c.ShutdownTimeout <= 0 || c.ShutdownTimeout > time.Minute {
 		return nil, errors.New("invalid OTLP listener limits")
 	}
+	if c.MaxStorageBytes < 0 || c.MaxStorageBytes > 1<<50 || (c.MaxStorageBytes > 0 && c.MaxStorageBytes < c.MaxWALBytes) {
+		return nil, errors.New("max_storage_bytes must be zero or at least max_wal_bytes")
+	}
 	if c.MaxResponseBytes < 1 || c.MaxResponseBytes > 8<<20 || c.MaxWALBytes < 4096 || c.MaxWALBytes > 1<<50 || c.ReplayBatch < 1 || c.ReplayBatch > 1024 || c.ReplayInterval < 10*time.Millisecond || c.ReplayInterval > time.Hour {
 		return nil, errors.New("invalid OTLP storage/replay limits")
 	}
@@ -341,11 +347,15 @@ func StartOTLPService(parent context.Context, c OTLPServiceConfig) (_ *OTLPServi
 		return nil, fmt.Errorf("bind OTLP listener: %w", e)
 	}
 	s.listener = netutil.LimitListener(ln, c.MaxConnections)
-	s.owner, err = OpenOTLPJournal(ctx, OTLPJournalConfig{Directory: c.StorageDirectory, Compress: c.JournalGzip, Limits: otlpstate.Limits{PayloadBytes: int(c.MaxDecodedBytes), ResponseBytes: int(c.MaxResponseBytes)}, MaxWALBytes: c.MaxWALBytes, ReplayBatch: c.ReplayBatch, ReplayInterval: c.ReplayInterval}, peers)
+	s.owner, err = OpenOTLPJournal(ctx, OTLPJournalConfig{Directory: c.StorageDirectory, Compress: c.JournalGzip, Limits: otlpstate.Limits{PayloadBytes: int(c.MaxDecodedBytes), ResponseBytes: int(c.MaxResponseBytes)}, MaxWALBytes: c.MaxWALBytes, MaxStorageBytes: c.MaxStorageBytes, ReceiptGC: c.ReceiptGC, ReplayBatch: c.ReplayBatch, ReplayInterval: c.ReplayInterval}, peers)
 	if err != nil {
 		return nil, err
 	}
 	s.server = &http.Server{Handler: receiver, ReadHeaderTimeout: c.ReadHeaderTimeout, ReadTimeout: c.BodyReadTimeout, WriteTimeout: c.RequestTimeout + time.Second, IdleTimeout: c.IdleTimeout, MaxHeaderBytes: c.MaxHeaderBytes, TLSConfig: tc, BaseContext: func(net.Listener) context.Context { return ctx }, TLSNextProto: map[string]func(*http.Server, *tls.Conn, http.Handler){}}
+	monitor.AddMetric("otlpStorage", func() map[string]interface{} {
+		rejected, reclaimed := s.owner.StorageCounters()
+		return map[string]interface{}{"admissionRejected": rejected, "acceptedReceiptsReclaimed": reclaimed, "maxStorageBytes": c.MaxStorageBytes, "receiptGC": c.ReceiptGC}
+	})
 	// HTTP/1.1 is deliberate: max_connections is not an HTTP/2 stream quota.
 	go s.run(ctx, c.ShutdownTimeout)
 	return s, nil

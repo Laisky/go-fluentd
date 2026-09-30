@@ -106,6 +106,21 @@ Run `go test -race -count=3 -shuffle=on ./internal/otlpstate ./internal/controll
 on the supported Unix build. New tests cover healthy plain/gzip restart cycles,
 unresolved fan-out gaps, concurrent admission, corrupt metadata/receipts,
 checkpoint publication failure, quarantines and large/zero-item admission.
+`TestOTLPJournalRetainedReceiptsDrainRestoresSameScanCap` specifically admits 32
+records with a 16-entry scan cap, then retains 31 real full-acceptance receipts
+behind a retryable first record. The next admission must refuse without writing,
+advancing identity/checkpoint, changing receipt bytes, or poisoning storage.
+After repairing that isolated destination, existing replay reaches EOF, advances
+the durable checkpoint, and reclaims all 32 receipts despite the admission cap.
+Closing/reopening the same ownership directory with the unchanged 16-entry cap
+then admits and delivers a new record with the next ID. Previously accepted
+records are not sent again. This is recovery from a retryable prefix gap;
+permanent quarantine and uncertain evidence remain outside accepted-receipt GC.
+
+```sh
+go test -mod=readonly -race -count=3 -shuffle=on -timeout=90s -run '^TestOTLPJournalRetainedReceiptsDrainRestoresSameScanCap$' ./internal/controller
+```
+
 The `OTLP edge acceptance` workflow retains source, toolchain and executable
 format/restart evidence. The companion VPS workflow additionally tests the real
 Victoria/Collector pipeline, including SIGKILL after edge receipt collection.

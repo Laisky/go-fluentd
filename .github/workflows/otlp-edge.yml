@@ -1,0 +1,53 @@
+name: OTLP edge acceptance
+
+on:
+  push:
+    branches: [feat/otlp-edge-storage-20260930]
+  pull_request:
+    paths:
+      - 'internal/controller/otlp*'
+      - 'internal/otlpstate/**'
+      - 'tests/otlp_service/**'
+      - '.github/workflows/otlp-edge.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: otlp-edge-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Record source and build reproducible test bundle
+        run: |
+          mkdir -p /tmp/edge-evidence
+          git rev-parse HEAD > /tmp/edge-evidence/source.txt
+          go version > /tmp/edge-evidence/toolchain.txt
+          go mod verify
+          go build -mod=readonly -o /tmp/edge-evidence/go-fluentd .
+          git archive HEAD | gzip > /tmp/edge-evidence/source.tar.gz
+      - name: Race and lifecycle contracts
+        run: |
+          set -o pipefail
+          go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s -json ./internal/otlpstate ./internal/controller | tee /tmp/edge-evidence/tests.jsonl
+      - name: Executable restart and OTLP contracts
+        run: |
+          python3 tests/otlp_service/run.py --binary /tmp/edge-evidence/go-fluentd --artifacts /tmp/edge-evidence/service
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: otlp-edge-evidence
+          path: /tmp/edge-evidence
+          retention-days: 7
+          if-no-files-found: error

@@ -42,17 +42,11 @@ jobs:
         run: go test -mod=readonly -race -count=10 -shuffle=on -timeout=180s -run 'Test(Regression|Component)' ./...
       - name: MessagePack routing and decoded-string lifetime under GC pressure
         run: |
+          python3 -m unittest discover -s .scripts -p test_msgpack_gc_gate.py
           mkdir -p /tmp/msgpack-gc
           git rev-parse HEAD > /tmp/msgpack-gc/source.txt
           cp go.mod go.sum /tmp/msgpack-gc/
-          GOMAXPROCS=2 GOGC=10 go test -mod=readonly -race -count=1000 -timeout=180s -json -run '^TestRegressionFluent(ConcurrentTagRouting|WireOracleRejectsWrongRoute)$' ./internal/senders > /tmp/msgpack-gc/tests.jsonl
-          python3 - <<'PY'
-          import collections, json
-          rows = [json.loads(line) for line in open('/tmp/msgpack-gc/tests.jsonl')]
-          assert not any(row['Action'] in ('fail', 'skip') for row in rows)
-          counts = collections.Counter(row.get('Test') for row in rows if row['Action'] == 'pass' and 'Test' in row)
-          assert counts == {'TestRegressionFluentConcurrentTagRouting': 1000, 'TestRegressionFluentWireOracleRejectsWrongRoute': 1000}, counts
-          PY
+          python3 .scripts/run_msgpack_gc.py /tmp/msgpack-gc/tests.jsonl
       - name: Retain GC regression results even on failure
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

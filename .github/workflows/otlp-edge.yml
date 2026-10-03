@@ -70,8 +70,6 @@ jobs:
       GOMEMLIMIT: 128MiB
       OTLP_MEASURE_FAST_VALIDATE: '1'
       OTLP_MEASURE_PACED: ${{ matrix.paced }}
-      OTLP_MEASURE_STATE: ${{ runner.temp }}/b1-harness/state
-      B1_EVIDENCE: ${{ runner.temp }}/b1-harness
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -81,6 +79,9 @@ jobs:
           go-version-file: go.mod
       - name: Record exact source and validate evidence gate
         run: |
+          export B1_EVIDENCE="$RUNNER_TEMP/b1-harness"
+          export OTLP_MEASURE_STATE="$B1_EVIDENCE/state"
+          printf 'B1_EVIDENCE=%s\nOTLP_MEASURE_STATE=%s\n' "$B1_EVIDENCE" "$OTLP_MEASURE_STATE" >> "$GITHUB_ENV"
           mkdir -p "$OTLP_MEASURE_STATE"
           git rev-parse HEAD > "$B1_EVIDENCE/source.txt"
           go version > "$B1_EVIDENCE/toolchain.txt"
@@ -100,6 +101,6 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: b1-fast-harness-paced-${{ matrix.paced }}
-          path: ${{ env.B1_EVIDENCE }}
+          path: ${{ runner.temp }}/b1-harness
           retention-days: 7
           if-no-files-found: error

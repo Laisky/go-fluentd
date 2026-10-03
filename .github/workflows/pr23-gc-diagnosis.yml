@@ -1,0 +1,66 @@
+name: PR23 unchanged GC diagnosis
+on:
+  push:
+    branches: [codex/pr23-gc-diagnosis]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    strategy:
+      fail-fast: false
+      matrix:
+        revision: [bdc874d6591664d0538c6fe974f11079b255de1e, 3b55ccf13fcbd0618a7e569f73644f4419eb282a]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ matrix.revision }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.x'
+      - name: Reproduce the unchanged 1000-repeat gate with visible diagnostics
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p /tmp/gc-diagnosis
+          git rev-parse HEAD | tee /tmp/gc-diagnosis/source.txt
+          go version
+          go test -mod=readonly -race -run '^$' ./internal/senders || exit $?
+          started=$SECONDS
+          GOMAXPROCS=2 GOGC=10 go test -mod=readonly -race -count=1000 -timeout=180s -json -run '^TestRegressionFluent(ConcurrentTagRouting|WireOracleRejectsWrongRoute)$' ./internal/senders > /tmp/gc-diagnosis/tests.jsonl 2>&1
+          status=$?
+          echo "exit_status=$status elapsed_seconds=$((SECONDS-started))"
+          python3 - <<'PY'
+          import collections, json
+          counts = collections.Counter()
+          tail = collections.deque(maxlen=140)
+          with open('/tmp/gc-diagnosis/tests.jsonl') as stream:
+              for line in stream:
+                  try:
+                      row = json.loads(line)
+                  except json.JSONDecodeError:
+                      tail.append(line)
+                      continue
+                  if row.get('Action') in ('pass', 'fail', 'skip'):
+                      counts[(row.get('Test', '<package>'), row['Action'])] += 1
+                  text = row.get('Output', '')
+                  if text:
+                      tail.append(text)
+                  if any(word in text for word in ('panic:', 'DATA RACE', 'routed to tag', 'free object', 'missing delivery outcomes')):
+                      print(text, end='')
+          print('RESULT COUNTS:', sorted(counts.items()))
+          print('LAST OUTPUT:')
+          print(''.join(tail))
+          PY
+          exit "$status"
+      - name: Retain original output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gc-diagnosis-${{ matrix.revision }}
+          path: /tmp/gc-diagnosis
+          retention-days: 14

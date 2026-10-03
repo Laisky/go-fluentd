@@ -75,7 +75,8 @@ func TestOTLPB1IsolatedCapacity(t *testing.T) {
 	const healthy, offeredDown = 12, 96 // total attempted requests 108, below 128
 	paced := os.Getenv("OTLP_MEASURE_PACED") == "1"
 	pace, holdInterval := 500*time.Millisecond, time.Second
-	if os.Getenv("OTLP_MEASURE_FAST_VALIDATE") == "1" {
+	fastValidate := os.Getenv("OTLP_MEASURE_FAST_VALIDATE") == "1"
+	if fastValidate {
 		pace, holdInterval = 5*time.Millisecond, 5*time.Millisecond
 	}
 	root, err := os.MkdirTemp(os.Getenv("OTLP_MEASURE_STATE"), "synthetic-")
@@ -85,6 +86,12 @@ func TestOTLPB1IsolatedCapacity(t *testing.T) {
 	cfg := OTLPJournalConfig{Directory: root, MaxWALBytes: 128 << 10, MaxStorageBytes: 512 << 10,
 		StorageScanMaxEntries: 1024, StorageScanTimeout: 10 * time.Millisecond,
 		ReceiptGC: true, ReplayBatch: 8, ReplayInterval: time.Second}
+	// Fast CI validates behavior, not the 10ms host qualification budget. A
+	// generous scan timeout avoids treating runner scheduling as a portable SLA.
+	if fastValidate {
+		cfg.StorageScanTimeout = time.Second
+	}
+	t.Logf("B1_SYNTHETIC_STATE state=%s preserved=true", root)
 	online := true
 	delivered := map[string]int{}
 	peer := OTLPDestination{ID: "synthetic-home", Send: func(_ context.Context, e otlpstate.Envelope) (otlpstate.Outcome, error) {
@@ -152,6 +159,8 @@ func TestOTLPB1IsolatedCapacity(t *testing.T) {
 		data["max_rss_kib"], data["read_bytes"], data["write_bytes"] = after.MaxRSSKiB, after.ReadBytes-before.ReadBytes, after.WriteBytes-before.WriteBytes
 		data["root_logical_bytes"], data["root_allocated_bytes"], data["wal_logical_bytes"], data["entries"] = logical, allocated, walBytes, entries
 		data["scan_budget_rejected"], data["frontier"] = p.ScanBudgetRejected(), p.frontier
+		data["fast_validate"], data["paced"] = fastValidate, paced
+		data["storage_scan_timeout_ms"], data["storage_scan_max_entries"] = cfg.StorageScanTimeout.Milliseconds(), cfg.StorageScanMaxEntries
 		data["platform"], data["proc_disk_io_available"] = runtime.GOOS, runtime.GOOS == "linux"
 		encoded, err := json.Marshal(data)
 		if err != nil {
@@ -164,18 +173,26 @@ func TestOTLPB1IsolatedCapacity(t *testing.T) {
 		start, before := time.Now(), b1Resources(t)
 		var admitted []*otlpwire.Request
 		counts, drops := map[otlpwire.Signal]int{}, map[otlpwire.Signal]int{}
+		byteDrops, scanDrops := map[otlpwire.Signal]int{}, map[otlpwire.Signal]int{}
+		var scanRefusals uint64
 		latency := make([]float64, 0, len(requests))
 		scheduledReplay := 0
 		for i, request := range requests {
 			began := time.Now()
 			err := p.Admit(context.Background(), request)
 			latency = append(latency, float64(time.Since(began).Microseconds())/1000)
-			if err == nil {
+			switch b1ClassifyAdmission(err) {
+			case b1AdmissionAccepted:
 				admitted = append(admitted, request)
 				counts[request.Signal()]++
-			} else if errors.Is(err, ErrOTLPJournalCapacity) {
+			case b1AdmissionScanBudget:
 				drops[request.Signal()]++
-			} else {
+				scanDrops[request.Signal()]++
+				scanRefusals++
+			case b1AdmissionByteLimit:
+				drops[request.Signal()]++
+				byteDrops[request.Signal()]++
+			default:
 				t.Fatal(err)
 			}
 			if paced && phase == "home_down_growing_to_full" {
@@ -193,8 +210,13 @@ func TestOTLPB1IsolatedCapacity(t *testing.T) {
 		}
 		sort.Float64s(latency)
 		report(phase, start, before, map[string]interface{}{"offered": len(requests), "admitted": len(admitted), "admitted_per_signal": counts,
-			"refused_per_signal": drops, "admission_p50_ms": latency[len(latency)/2], "admission_p95_ms": latency[(len(latency)-1)*95/100], "admission_max_ms": latency[len(latency)-1],
+			"refused_per_signal": drops, "byte_limit_refused_per_signal": byteDrops, "scan_budget_refused_per_signal": scanDrops, "admission_p50_ms": latency[len(latency)/2], "admission_p95_ms": latency[(len(latency)-1)*95/100], "admission_max_ms": latency[len(latency)-1],
 			"paced": paced, "pace_ms": pace.Milliseconds(), "scheduled_replay_batches": scheduledReplay})
+		// Log the disjoint refusal counts before rejecting invalid evidence. The
+		// independent journal counter also catches a future classifier regression.
+		if err := b1CheckByteCapacityEvidence(scanRefusals, p.ScanBudgetRejected()); err != nil {
+			t.Fatal(err)
+		}
 		return admitted
 	}
 	drain := func(phase string) OTLPBatchReport {
@@ -272,10 +294,12 @@ func TestOTLPB1IsolatedCapacity(t *testing.T) {
 		t.Fatal("repair did not deliver retained backlog")
 	}
 	accepted = append(accepted, downAccepted...)
+	admittedPayloads := make(map[string]bool, len(accepted))
 	for _, request := range accepted {
-		if delivered[string(request.Payload())] != 1 {
-			t.Fatal("admitted original payload lost or delivered twice")
-		}
+		admittedPayloads[string(request.Payload())] = true
+	}
+	if err := b1CheckDeliverySet(admittedPayloads, delivered); err != nil {
+		t.Fatal(err)
 	}
 	if p.generation.ReleasedThrough != p.frontier || p.receiptsReclaimed.Load() != uint64(len(accepted)) {
 		t.Fatal("recovery did not complete checkpoint/receipt reclamation")
@@ -283,5 +307,5 @@ func TestOTLPB1IsolatedCapacity(t *testing.T) {
 	if err := p.Close(); err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("B1_SYNTHETIC_FINAL state=%s attempted=%d admitted=%d delivered=%d preserved=true transport=in-process-no-network", root, len(requests), len(accepted), len(delivered))
+	t.Logf("B1_SYNTHETIC_FINAL state=%s attempted=%d admitted=%d delivered=%d preserved=true transport=in-process-no-network fast_validate=%t paced=%t", root, len(requests), len(accepted), len(delivered), fastValidate, paced)
 }

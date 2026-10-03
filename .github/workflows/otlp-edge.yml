@@ -2,12 +2,16 @@ name: OTLP edge acceptance
 
 on:
   push:
-    branches: [feat/otlp-edge-storage-20260930]
+    branches: [master, develop, feat/otlp-edge-storage-20260930]
   pull_request:
     paths:
       - 'internal/controller/otlp*'
       - 'internal/otlpstate/**'
       - 'tests/otlp_service/**'
+      - 'library/otlpwire/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.scripts/*b1_measure.py'
       - '.github/workflows/otlp-edge.yml'
   workflow_dispatch:
 
@@ -49,5 +53,53 @@ jobs:
         with:
           name: otlp-edge-evidence
           path: /tmp/edge-evidence
+          retention-days: 7
+          if-no-files-found: error
+
+  b1-harness:
+    name: B1 fast harness (paced=${{ matrix.paced }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        paced: ['0', '1']
+    env:
+      GOTOOLCHAIN: local
+      GOMAXPROCS: '2'
+      GOMEMLIMIT: 128MiB
+      OTLP_MEASURE_FAST_VALIDATE: '1'
+      OTLP_MEASURE_PACED: ${{ matrix.paced }}
+      OTLP_MEASURE_STATE: ${{ runner.temp }}/b1-harness/state
+      B1_EVIDENCE: ${{ runner.temp }}/b1-harness
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: go.mod
+      - name: Record exact source and validate evidence gate
+        run: |
+          mkdir -p "$OTLP_MEASURE_STATE"
+          git rev-parse HEAD > "$B1_EVIDENCE/source.txt"
+          go version > "$B1_EVIDENCE/toolchain.txt"
+          cp go.mod go.sum "$B1_EVIDENCE/"
+          go mod verify
+          python3 -m unittest discover -s .scripts -p 'test_verify_b1_measure.py' -v
+      - name: Compile and run both contracts and tagged measurement
+        run: |
+          set -o pipefail
+          go test -mod=readonly -tags=otlp_b1_measure,timetzdata -race -count=3 -shuffle=on -timeout=180s -json \
+            -run '^(TestOTLPB1IsolatedCapacity|TestRegressionB1.*)$' ./internal/controller \
+            | tee "$B1_EVIDENCE/tests.jsonl"
+          python3 .scripts/verify_b1_measure.py "$B1_EVIDENCE/tests.jsonl" --repeats 3 --paced "$OTLP_MEASURE_PACED"
+          git diff --exit-code -- go.mod go.sum
+      - name: Retain synthetic state and results even on failure
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: b1-fast-harness-paced-${{ matrix.paced }}
+          path: ${{ env.B1_EVIDENCE }}
           retention-days: 7
           if-no-files-found: error

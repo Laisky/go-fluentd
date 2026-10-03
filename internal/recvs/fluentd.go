@@ -1,6 +1,7 @@
 package recvs
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -16,7 +17,6 @@ import (
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/cespare/xxhash/v2"
-	"github.com/tinylib/msgp/msgp"
 )
 
 const (
@@ -26,6 +26,7 @@ const (
 
 // FluentdRecvCfg configuration of FluentdRecv
 type FluentdRecvCfg struct {
+	Ingress FluentIngressCfg
 	Name,
 	// Addr: like `127.0.0.1:24225;`
 	Addr,
@@ -111,6 +112,9 @@ func NewFluentdRecv(cfg *FluentdRecvCfg) (r *FluentdRecv) {
 }
 
 func (r *FluentdRecv) valid() error {
+	if err := r.Ingress.setDefaultsAndValidate(); err != nil {
+		return err
+	}
 	if r.IsRewriteTagFromTagKey {
 		if r.OriginRewriteTagKey == "" {
 			log.Logger.Panic("if IsRewriteTagFromTagKey is setted, OriginRewriteTagKey should not empty")
@@ -167,6 +171,7 @@ func (r *FluentdRecv) GetName() string {
 func (r *FluentdRecv) Run(ctx context.Context) {
 	r.concators = r.startConcators(ctx)
 	var connections sync.WaitGroup
+	slots := make(chan struct{}, r.Ingress.MaxConnections)
 	defer connections.Wait()
 	for ctx.Err() == nil {
 		ln, err := net.Listen("tcp", r.Addr)
@@ -182,14 +187,7 @@ func (r *FluentdRecv) Run(ctx context.Context) {
 			continue
 		}
 		stop := context.AfterFunc(ctx, func() { ln.Close() })
-		for {
-			conn, err := ln.Accept()
-			if err != nil {
-				break
-			}
-			connections.Add(1)
-			go func(conn net.Conn) { defer connections.Done(); r.decodeMsg(ctx, conn) }(conn)
-		}
+		r.acceptFluent(ctx, ln, slots, &connections)
 		stop()
 		ln.Close()
 	}
@@ -200,18 +198,18 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 	defer stop()
 	defer conn.Close()
 	var (
-		reader = msgp.NewReader(conn)
+		reader = bufio.NewReader(conn)
 		v      = library.FluentBatchMsg{nil, nil, nil} // tag, time, messages
 		// 2 means inner decoder for embedded format such like [][]interface{tag, messages}
 		buf2    *bytes.Reader
-		reader2 *msgp.Reader
+		reader2 *bufio.Reader
 		v2      = library.FluentBatchMsg{nil, nil, nil} // tag, time, messages
 		msg     *library.FluentMsg
 		err     error
 		tag     string
 		ok      bool
 		entryI  interface{}
-		eof     = msgp.WrapError(io.EOF)
+		eof     = io.EOF
 
 		msgCnt, totalMsgCnt int
 	)
@@ -226,7 +224,16 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 		default:
 		}
 
-		if err = v.DecodeMsg(reader); err == eof {
+		clear(v2)
+		// Do not retain the preceding packed payload during the next idle wait.
+		if buf2 != nil {
+			buf2.Reset(nil)
+		}
+		if reader2 != nil {
+			reader2.Reset(buf2)
+		}
+		budget, decodeErr := r.readFluentFrame(conn, reader, &v)
+		if err = decodeErr; err == eof {
 			r.logger.Info("remote closed",
 				zap.String("remote", conn.RemoteAddr().String()))
 			return
@@ -283,16 +290,20 @@ func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
 			}
 
 			if reader2 == nil {
-				reader2 = msgp.NewReader(buf2)
+				reader2 = bufio.NewReader(buf2)
 			} else {
 				reader2.Reset(buf2)
 			}
 
 			for {
-				if err = v2.DecodeMsg(reader2); err == eof {
+				if err = decodeFluentFrame(reader2, budget, &v2, 2, 2); err == eof {
 					break
 				} else if err != nil {
-					r.logger.Warn("discard msg since unknown message format, cannot decode")
+					r.logger.Warn("reject malformed or oversized packed Fluent frame", zap.Error(err))
+					if isFluentIngressLimit(err) {
+						return
+					}
+					// The bounded binary payload is consumed: the next outer boundary is known.
 					break
 				} else if len(v2) < 2 {
 					r.logger.Warn("discard msg since unknown message format, length should be 2",

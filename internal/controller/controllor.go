@@ -78,6 +78,7 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 			switch t {
 			case "fluentd":
 				receivers = append(receivers, recvs.NewFluentdRecv(&recvs.FluentdRecvCfg{
+					Ingress:                fluentIngressConfig(name),
 					Name:                   name,
 					Addr:                   gutils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".addr"),
 					TagKey:                 gutils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".tag_key"),

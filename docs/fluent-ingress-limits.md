@@ -52,17 +52,20 @@ for a declared-but-missing payload. It preserves pipelined bytes across frame
 boundaries. Packed entries share the outer frame's value budget; the budget
 resets only for a new outer frame, not for each packed entry.
 
-Malformed or oversized input closes the connection; parsing does not attempt
-to recover from an unknown stream position. Valid packed entries already
-published before a later malformed packed entry are not rolled back. A TCP
-write succeeding is not a durable application acknowledgement. Reconnect/retry
-behavior and duplicate handling remain the sender's responsibility.
+Malformed outer framing or a resource-budget violation closes the connection;
+parsing never attempts recovery from an unknown stream position. A syntax error
+inside an already-consumed, bounded binary PackedForward payload discards that
+payload's remaining entries, preserving existing recovery at the next known
+outer-frame boundary. Valid packed entries already published are not rolled back.
+A TCP write succeeding is not a durable application acknowledgement.
+Reconnect/retry behavior and duplicate handling remain the sender's responsibility.
 
 The timeouts bound stalled **reads**, not time spent waiting for downstream
 capacity. Downstream backpressure retains an admitted, bounded worker and
 remains cancelable by receiver shutdown; a read timeout does not silently drop
 an already-decoded record waiting for downstream admission. Completed frame
-references are cleared before the next idle wait.
+references are cleared before the next idle wait. Peer closure does not discard
+complete frames already buffered; other deadline-setting errors fail closed.
 
 ## Regression validation
 
@@ -74,9 +77,9 @@ not send a maximal array declaration into the vulnerable production decoder.
 The fixed-path suite additionally covers maximal outer/nested/packed headers,
 large string/bin/extension declarations, exact byte boundaries, aggregate
 values, nesting, truncations, fragmented/pipelined frames, existing wire forms,
-record ownership, idle/stalled/trickled reads, overload rejection, slot recovery
-and cancellation. The scanner includes an allocation-budget regression, a fuzz
-target and representative-frame benchmarks.
+record ownership, idle/stalled/trickled reads, overload rejection, slot recovery,
+cancellation and buffered-frame delivery after peer closure. The scanner includes
+an allocation-budget regression, a fuzz target and representative-frame benchmarks.
 
 ```sh
 go test -mod=readonly -race -count=10 -shuffle=on ./internal/recvs/...

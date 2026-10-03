@@ -4,7 +4,9 @@ import (
  "bufio"
  "bytes"
  "context"
+ "errors"
  "fmt"
+ "io"
  "net"
  "sync"
  "time"
@@ -63,9 +65,9 @@ func(r *FluentdRecv)acceptFluent(ctx context.Context,ln net.Listener,slots chan 
 func(r *FluentdRecv)readFluentFrame(conn net.Conn,reader *bufio.Reader,v *library.FluentBatchMsg)(*fluentwire.Budget,error){
  // Release references to the previous frame before waiting on an idle peer.
  clear(*v)
- if err:=conn.SetReadDeadline(time.Now().Add(r.Ingress.IdleTimeout));err!=nil{return nil,err}
+ if err:=setFluentReadDeadline(conn,time.Now().Add(r.Ingress.IdleTimeout));err!=nil{return nil,err}
  if _,err:=reader.Peek(1);err!=nil{return nil,err}
- if err:=conn.SetReadDeadline(time.Now().Add(r.Ingress.FrameTimeout));err!=nil{return nil,err}
+ if err:=setFluentReadDeadline(conn,time.Now().Add(r.Ingress.FrameTimeout));err!=nil{return nil,err}
  b,err:=fluentwire.NewBudget(r.Ingress.wireLimits());if err!=nil{return nil,err}
  err=decodeFluentFrame(reader,b,v,2,4);return b,err
 }
@@ -77,3 +79,14 @@ func decodeFluentFrame(reader *bufio.Reader,b *fluentwire.Budget,v *library.Flue
  wire,err:=b.ReadFrame(reader,minFields,maxFields);if err!=nil{return err}
  return msgp.Decode(bytes.NewReader(wire),v)
 }
+
+// A peer can close after filling the reader but before the deadline update.
+// Closed transports cannot stall another read, so preserve already buffered
+// frames. Other deadline failures still fail closed instead of disabling limits.
+func setFluentReadDeadline(conn net.Conn,deadline time.Time)error{
+ err:=conn.SetReadDeadline(deadline)
+ if errors.Is(err,io.ErrClosedPipe)||errors.Is(err,net.ErrClosed){return nil}
+ return err
+}
+
+func isFluentIngressLimit(err error)bool{return errors.Is(err,fluentwire.ErrLimit)}

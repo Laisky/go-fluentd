@@ -32,7 +32,9 @@ s = replace_once(s, '''\t\t\t\t} else if err != nil {
 \t\t\t\t\tr.logger.Warn("discard msg since unknown message format, cannot decode")
 \t\t\t\t\tbreak''', '''\t\t\t\t} else if err != nil {
 \t\t\t\t\tr.logger.Warn("reject malformed or oversized packed Fluent frame", zap.Error(err))
-\t\t\t\t\treturn''')
+\t\t\t\t\tif isFluentIngressLimit(err) { return }
+\t\t\t\t\t// The bounded binary payload is consumed: the next outer boundary is known.
+\t\t\t\t\tbreak''')
 path.write_text(s)
 path = Path("internal/controller/controllor.go")
 s = path.read_text()

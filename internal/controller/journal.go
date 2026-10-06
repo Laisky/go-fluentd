@@ -6,7 +6,6 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -49,6 +48,9 @@ type JournalCfg struct {
 type Journal struct {
 	*JournalCfg
 	legacyLock *utils.Mutex
+	// Keep descriptor-backed child paths alive until their journal is closed.
+	tag2Directory     *sync.Map
+	directoriesClosed chan struct{}
 
 	outChan    chan *library.FluentMsg
 	commitChan chan *library.FluentMsg
@@ -64,8 +66,10 @@ type Journal struct {
 // NewJournal create new Journal with `bufDirPath` and `BufSizeBytes`
 func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 	j := &Journal{
-		JournalCfg: cfg,
-		legacyLock: &utils.Mutex{},
+		JournalCfg:        cfg,
+		legacyLock:        &utils.Mutex{},
+		tag2Directory:     &sync.Map{},
+		directoriesClosed: make(chan struct{}),
 
 		jjLock:              &sync.Mutex{},
 		tag2JMap:            &sync.Map{},
@@ -84,6 +88,7 @@ func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 	j.initLegacyJJ(ctx)
 	j.registerMonitor()
 	j.startCommitRunner(ctx)
+	go j.closeJournalDirectories(ctx)
 
 	log.Logger.Info("new journal",
 		zap.String("buf_dir_path", j.BufDirPath),
@@ -154,6 +159,11 @@ func (j *Journal) CloseTag(tag string) error {
 	}
 
 	jj.(*journal.Journal).Close()
+	if j.tag2Directory != nil {
+		if dir, ok := j.tag2Directory.LoadAndDelete(tag); ok {
+			dir.(*os.File).Close()
+		}
+	}
 	j.tag2JMap.Delete(tag)
 	j.tag2IDsCounter.Delete(tag)
 	j.tag2DataCounter.Delete(tag)
@@ -331,10 +341,24 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) error {
 		return nil // double check to prevent duplicate create jj runner
 	}
 
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	directory, path, err := openJournalDirectory(j.BufDirPath, tag)
+	if err != nil {
+		return errors.Wrap(err, "contain journal tag")
+	}
+	installed := false
+	defer func() {
+		if !installed {
+			directory.Close()
+		}
+	}()
+
 	log.Logger.Info("create new journal.Journal", zap.String("tag", tag))
 	jj, err := journal.NewJournal(
 		journal.WithLogger(log.Logger.Named("journal."+tag)),
-		journal.WithBufDirPath(filepath.Join(j.BufDirPath, tag)),
+		journal.WithBufDirPath(path),
 		journal.WithBufSizeByte(j.BufSizeBytes),
 		journal.WithIsCompress(j.IsCompress),
 		journal.WithCommitIDTTL(j.CommittedIDTTL),
@@ -348,6 +372,8 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) error {
 		return errors.Wrap(err, "run journal")
 	}
 
+	j.tag2Directory.Store(tag, directory)
+	installed = true
 	if _, ok = j.tag2JMap.LoadOrStore(tag, jj); ok {
 		log.Logger.Panic("tag already exists in tag2JMap", zap.String("tag", tag))
 	}
@@ -364,26 +390,17 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) error {
 		log.Logger.Panic("tag already exists in tag2DataCounter", zap.String("tag", tag))
 	}
 
+	// Capture runner ownership before CloseTag can remove its registration.
+	idChannel, _ := j.tag2JJCommitChanMap.Load(tag)
+	idCounter, _ := j.tag2IDsCounter.Load(tag)
 	// create ids writer
-	go func() {
+	go func(msgChan chan *library.FluentMsg, counter *utils.Counter) {
 		var (
-			mid             int64
-			err             error
-			msg             *library.FluentMsg
-			ok              bool
-			chani, counteri interface{}
-			msgChan         chan *library.FluentMsg
-			counter         *utils.Counter
+			mid int64
+			err error
+			msg *library.FluentMsg
+			ok  bool
 		)
-
-		if chani, ok = j.tag2JJCommitChanMap.Load(tag); !ok {
-			log.Logger.Panic("tag must in `j.tag2JJCommitChanMap`", zap.String("tag", tag))
-		}
-		msgChan = chani.(chan *library.FluentMsg)
-		if counteri, ok = j.tag2IDsCounter.Load(tag); !ok {
-			log.Logger.Panic("tag must in `j.tag2IDsCounter`", zap.String("tag", tag))
-		}
-		counter = counteri.(*utils.Counter)
 
 		defer log.Logger.Info("journal ids writer exit")
 		for {
@@ -416,7 +433,7 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) error {
 
 			j.MsgPool.Put(msg)
 		}
-	}()
+	}(idChannel.(chan *library.FluentMsg), idCounter.(*utils.Counter))
 
 	// A single worker owns each tag's data writes and acceptance receipts.
 	dataChan, _ := j.tag2JJInchanMap.Load(tag)
@@ -665,4 +682,22 @@ func writeCommittedID(write func(int64) error, id int64) (err error) {
 		}
 	}
 	return err
+}
+
+// closeJournalDirectories closes the backend before releasing its path anchor.
+// A single lifecycle worker owns this across all tags, rather than one per tag.
+func (j *Journal) closeJournalDirectories(ctx context.Context) {
+	<-ctx.Done()
+	j.jjLock.Lock()
+	defer j.jjLock.Unlock()
+	defer close(j.directoriesClosed)
+	j.tag2JMap.Range(func(_, value interface{}) bool {
+		value.(*journal.Journal).Close()
+		return true
+	})
+	j.tag2Directory.Range(func(tag, value interface{}) bool {
+		value.(*os.File).Close()
+		j.tag2Directory.Delete(tag)
+		return true
+	})
 }

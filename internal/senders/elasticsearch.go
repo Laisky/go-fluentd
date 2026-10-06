@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"strings"
 	"time"
@@ -32,6 +31,7 @@ type ElasticSearchSenderCfg struct {
 	Tags                         []string
 	BatchSize, InChanSize, NFork int
 	MaxWait                      time.Duration
+	MaxResponseBytes             int64
 	TagIndexMap                  map[string]string
 	IsDiscardWhenBlocked         bool
 }
@@ -67,6 +67,7 @@ func NewElasticSearchSender(cfg *ElasticSearchSenderCfg) *ElasticSearchSender {
 		zap.Int("batch_size", s.BatchSize),
 		zap.Int("n_fork", s.NFork),
 		zap.Duration("max_wait_sec", s.MaxWait),
+		zap.Int64("max_response_byte", s.MaxResponseBytes),
 		zap.Strings("tags", s.Tags),
 		zap.String("tag_key", s.TagKey),
 	)
@@ -74,6 +75,13 @@ func NewElasticSearchSender(cfg *ElasticSearchSenderCfg) *ElasticSearchSender {
 }
 
 func (s *ElasticSearchSender) valid() error {
+	if s.MaxResponseBytes < 0 || s.MaxResponseBytes > maximumESResponseBytes {
+		return fmt.Errorf("max_response_byte must be between 0 and %d", maximumESResponseBytes)
+	}
+	if s.MaxResponseBytes == 0 {
+		s.MaxResponseBytes = defaultESResponseBytes
+	}
+
 	if s.Addr == "" {
 		s.logger.Panic("`addr` not set")
 	}
@@ -217,31 +225,6 @@ func isStatusCodeOk(s int) bool {
 	return s/100 == 2
 }
 
-func (s *ElasticSearchSender) checkResp(resp *http.Response) error {
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return errors.Wrap(err, "read Elasticsearch response")
-	}
-	if !isStatusCodeOk(resp.StatusCode) {
-		return fmt.Errorf("Elasticsearch returned status %d: %s", resp.StatusCode, body)
-	}
-	// A missing result is not evidence of successful delivery. Keep accepting
-	// filter_path=errors responses, but require an explicit boolean result.
-	var result struct {
-		Errors *bool `json:"errors"`
-	}
-	if err = utils.JSON.Unmarshal(body, &result); err != nil {
-		return errors.Wrap(err, "decode Elasticsearch response")
-	}
-	if result.Errors == nil {
-		return fmt.Errorf("Elasticsearch response is missing the errors result")
-	}
-	if *result.Errors {
-		return fmt.Errorf("Elasticsearch rejected one or more bulk items: %s", body)
-	}
-	return nil
-}
-
 func (s *ElasticSearchSender) Spawn(ctx context.Context) chan<- *library.FluentMsg {
 	in := make(chan *library.FluentMsg, s.InChanSize)
 	for i := 0; i < s.NFork; i++ {
@@ -260,7 +243,7 @@ func (s *ElasticSearchSender) Spawn(ctx context.Context) chan<- *library.FluentM
 						return false
 					}
 					err = s.sendBulkMsgs(ctx, bulk, msgs)
-					if err == nil {
+					if err == nil || !retryESResponse(err) {
 						break
 					}
 				}

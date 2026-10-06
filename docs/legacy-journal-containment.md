@@ -13,8 +13,14 @@ the service keeps that descriptor alive until the backend closes. Replacing a
 child name with a symlink later therefore does not redirect rotation or replay
 to the replacement target. Descriptor paths are checked against the opened inode.
 
-This backend integration requires Linux and a usable `/proc/self/fd`. If that
-capability is unavailable, journal admission fails closed. A configured root can
+Supported deployment is **Linux with procfs mounted and `/proc/self/fd`
+accessible to the service**. macOS and other non-Linux deployments are not
+supported. Standard Linux container runtimes provide procfs; a chroot or a
+container that masks/restricts `/proc` must provide usable descriptor paths.
+If that capability is unavailable, journal admission fails closed: the acceptance
+receipt contains an error, the event is not forwarded as durable, no backend is
+registered, and the temporary child descriptor is closed. An empty tag directory
+may already have been created, but no lock or segment state is created there. A configured root can
 itself be a trusted operator-managed symlink; the child is anchored in its opened
 target. The journal root and its contents must remain owned by trusted operators:
 this change does not defend against malicious segment contents, bind mounts, or

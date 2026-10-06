@@ -55,6 +55,15 @@ needed for the quickstart checks; Docker is optional. This application uses the
 module name `gofluentd`, so build from a checkout rather than assuming
 `go install github.com/Laisky/go-fluentd@latest` is supported.
 
+**Supported deployment: Linux with procfs mounted and `/proc/self/fd` accessible
+to the service.** The legacy journal retains directory descriptors through this
+interface; containers normally provide it, but a chroot or restricted container
+must provide the same capability. If it is unavailable, journal admission returns
+an error and does not report durable acceptance or forward the event. macOS and
+other non-Linux deployments are not supported. See
+[legacy journal containment](docs/legacy-journal-containment.md) for the storage
+and descriptor-lifetime contract.
+
 ## Quickstart
 
 This local-only demo runs **HTTP → journal → console**. It requires no Kafka,

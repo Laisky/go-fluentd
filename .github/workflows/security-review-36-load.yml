@@ -1,0 +1,72 @@
+name: Validate PR36 load fixture policy
+on:
+  push:
+    branches: [codex/security-review-workspace-20261006]
+    paths: [.github/workflows/security-review-36-load.yml]
+permissions:
+  contents: write
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GOMAXPROCS: '4'
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: c0873b18b6b6be468ce56ee77dccab7d57e14309
+          path: candidate
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: candidate/go.sum
+      - name: Apply locally validated fixture change
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/load-review
+          python3 .github/review/fix36load.py
+          cd candidate
+          gofmt -w tests/loadtest/main.go tests/loadtest/storage_scan_config_test.go
+          git add tests/loadtest/main.go tests/loadtest/compare.py tests/loadtest/cases/ci.json tests/loadtest/storage_scan_config_test.go tests/loadtest/test_compare.py docs/otlp-edge-storage.md .github/workflows/e2e-load.yml
+          test "$(git write-tree)" = 9e3b9da8fcefc8960b37c1b6541329b0321a4516
+          git diff --cached --check
+          go test -mod=readonly -race -count=3 ./tests/loadtest > /tmp/load-review/tests.log 2>&1
+          (cd tests/loadtest && python3 -m unittest -v test_sustained test_compare) > /tmp/load-review/python.log 2>&1
+          go build -mod=readonly -o /tmp/load-driver ./tests/loadtest
+          go build -mod=readonly -o /tmp/load-app .
+          for trial in 1 2 3; do
+            for protocol in logs mixed; do
+              /tmp/load-driver --binary /tmp/load-app --out /tmp/load-review/$protocol-$trial --protocol "$protocol" --requests 2048 --concurrency 64 --delivery-window --storage-scan-timeout 1s > /tmp/load-review/$protocol-$trial.log
+            done
+            /tmp/load-driver --binary /tmp/load-app --out /tmp/load-review/gzip-$trial --protocol logs --requests 512 --concurrency 32 --payload 8192 --wire-gzip --wal-gzip --delivery-window --storage-scan-timeout 1s > /tmp/load-review/gzip-$trial.log
+          done
+          # Only source changes are published by this contents-scoped token.
+          git restore --source=HEAD --staged --worktree .github/workflows/e2e-load.yml
+          git config user.name 'Laisky.Cai'
+          git config user.email 'github@laisky.com'
+          git commit -m 'test: make shared-runner capacity scan policy explicit in load campaigns'
+          git push origin HEAD:refs/heads/codex/security-27-load-reviewed-20261006
+          git rev-parse HEAD | tee /tmp/load-review/candidate-sha.txt
+      - name: Retain non-storage evidence
+        if: always()
+        run: |
+          mkdir -p /tmp/load-artifact
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          src=Path('/tmp/load-review'); dst=Path('/tmp/load-artifact')
+          for p in src.rglob('*'):
+              rel=p.relative_to(src)
+              if p.is_file() and 'wal' not in rel.parts and 'otlp' not in rel.parts:
+                  out=dst/rel; out.parent.mkdir(parents=True,exist_ok=True); shutil.copyfile(p,out)
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: pr36-load-policy-evidence
+          path: /tmp/load-artifact
+          retention-days: 7

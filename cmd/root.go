@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -123,7 +122,7 @@ func setupSettings() {
 		global.Config.CMDArgs.ConfigServerProfile != "" &&
 		global.Config.CMDArgs.ConfigServerLabel != "" &&
 		global.Config.CMDArgs.ConfigServerKey != "" {
-		if err := gutils.Settings.LoadFromConfigServer(
+		if err := loadRemoteSettings(context.Background(),
 			global.Config.CMDArgs.ConfigServer,
 			global.Config.CMDArgs.ConfigServerAppname,
 			global.Config.CMDArgs.ConfigServerProfile,
@@ -140,11 +139,14 @@ func setupSettings() {
 		log.Logger.Panic("can not load any configuration")
 	}
 	if err := gutils.Settings.Unmarshal(global.Config); err != nil {
-		log.Logger.Panic("unmarshal settings", zap.Error(err))
+		// Decoder errors can contain arbitrary configuration values.
+		log.Logger.Panic("invalid configuration structure")
 	}
 
-	c := global.Config
-	fmt.Println(c)
+	// Configuration is secret-bearing, including unknown nested plugin values.
+	// Log only an allowlisted diagnostic, never the struct or a redacted copy.
+	log.Logger.Info("configuration loaded",
+		zap.Int("receiver_plugins", len(global.Config.Settings.Acceptor.Recvs.Plugins)))
 }
 
 func init() {
@@ -183,7 +185,7 @@ func setupLogger(ctx context.Context) {
 			gutils.Settings.GetString("settings.logger.push_token"),
 		)
 		if err != nil {
-			log.Logger.Panic("create AlertPusher", zap.Error(err))
+			log.Logger.Panic("create AlertPusher", zap.Error(log.SafeHTTPError("initialize alert pusher", gutils.Settings.GetString("settings.logger.push_api"), err)))
 		}
 		log.Logger = log.Logger.
 			WithOptions(zap.HooksWithFields(alertPusher.GetZapHook()))
@@ -197,7 +199,7 @@ func setupLogger(ctx context.Context) {
 			gutils.Settings.GetString("settings.pateo_alert.token"),
 		)
 		if err != nil {
-			log.Logger.Panic("create PateoAlertPusher", zap.Error(err))
+			log.Logger.Panic("create PateoAlertPusher", zap.Error(log.SafeHTTPError("initialize alert pusher", gutils.Settings.GetString("settings.pateo_alert.push_api"), err)))
 		}
 		log.Logger = log.Logger.WithOptions(zap.HooksWithFields(pateoAlertPusher.GetZapHook()))
 	}

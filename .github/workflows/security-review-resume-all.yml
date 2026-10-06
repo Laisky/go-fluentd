@@ -1,0 +1,41 @@
+name: Recover merged review baseline
+on:
+  push:
+    branches: [codex/security-review-workspace-20261006]
+    paths: [.github/workflows/security-review-resume-all.yml]
+permissions:
+  contents: read
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Archive exact merged baseline and pinned offline dependencies
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin 01051874665cef0dddf06b358e3a9bd02821ce1c
+          git checkout --detach 01051874665cef0dddf06b358e3a9bd02821ce1c
+          test "$(git rev-parse HEAD)" = 01051874665cef0dddf06b358e3a9bd02821ce1c
+          mkdir /tmp/resumed
+          git archive HEAD | tar -x -C /tmp/resumed
+          cd /tmp/resumed
+          go mod vendor
+          printf 'source=01051874665cef0dddf06b358e3a9bd02821ce1c\n' > REVIEW_SOURCE.txt
+          go version >> REVIEW_SOURCE.txt
+          tar -czf /tmp/resumed-source.tar.gz .
+          sha256sum /tmp/resumed-source.tar.gz > /tmp/resumed-source.sha256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: resumed-merged-source
+          path: |
+            /tmp/resumed-source.tar.gz
+            /tmp/resumed-source.sha256
+          retention-days: 3
+          compression-level: 0
+          if-no-files-found: error

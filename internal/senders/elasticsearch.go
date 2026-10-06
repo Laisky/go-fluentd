@@ -63,7 +63,7 @@ func NewElasticSearchSender(cfg *ElasticSearchSenderCfg) *ElasticSearchSender {
 
 	s.SetSupportedTags(cfg.Tags)
 	s.logger.Info("new elasticsearch sender",
-		zap.String("addr", s.Addr),
+		zap.String("addr", log.SafeURL(s.Addr)),
 		zap.Int("batch_size", s.BatchSize),
 		zap.Int("n_fork", s.NFork),
 		zap.Duration("max_wait_sec", s.MaxWait),
@@ -179,14 +179,14 @@ func (s *ElasticSearchSender) sendBulkMsgs(ctx context.Context, bulkCtx *bulkOpC
 	}
 	req, err := http.NewRequestWithContext(ctx, "POST", s.Addr, bulkCtx.buf)
 	if err != nil {
-		return errors.Wrap(err, "try to init es request")
+		return log.SafeHTTPError("create Elasticsearch request", s.Addr, err)
 	}
 	req.Close = true
 	req.Header.Set("Content-encoding", "gzip")
 	req.Header.Set("Content-Type", "application/json;charset=UTF-8")
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return errors.Wrap(err, "try to request es")
+		return log.SafeHTTPError("send Elasticsearch request", s.Addr, err)
 	}
 	defer resp.Body.Close()
 

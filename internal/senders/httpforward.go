@@ -32,7 +32,7 @@ type HTTPSender struct {
 
 func NewHTTPSender(cfg *HTTPSenderCfg) *HTTPSender {
 	log.Logger.Info("new http sender",
-		zap.String("addr", cfg.Addr),
+		zap.String("addr", log.SafeURL(cfg.Addr)),
 		zap.Strings("tags", cfg.Tags))
 
 	if cfg.Addr == "" {
@@ -131,13 +131,13 @@ func (s *HTTPSender) sendBulkMsgs(ctx context.Context, bulkCtx *bulkOpCtx, msgs 
 	}
 	req, err := http.NewRequestWithContext(ctx, "POST", s.Addr, bulkCtx.buf)
 	if err != nil {
-		return errors.Wrap(err, "create HTTP request")
+		return log.SafeHTTPError("create HTTP request", s.Addr, err)
 	}
 	req.Header.Set("Content-Encoding", "gzip")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return errors.Wrap(err, "send HTTP batch")
+		return log.SafeHTTPError("send HTTP batch", s.Addr, err)
 	}
 	defer resp.Body.Close()
 	// Bound diagnostic bodies; do not let a failing peer exhaust memory.

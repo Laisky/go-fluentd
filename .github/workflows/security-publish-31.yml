@@ -1,0 +1,83 @@
+name: Verify and publish issue 31
+on:
+  push:
+    branches: [codex/security-resume-20261006-2149]
+    paths: [.github/workflows/security-publish-31.yml, .scripts/security-31-repair.py]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Verify transport before applying source
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/evidence31
+          cp .scripts/security-31-patch.b64 /tmp/evidence31/transport.b64
+          if test -f .scripts/security-31-repair.py; then python .scripts/security-31-repair.py; fi
+          python - <<'PY'
+          import base64,zlib,hashlib,pathlib
+          p=pathlib.Path('/tmp/evidence31')
+          patch=zlib.decompress(base64.b64decode((p/'transport.b64').read_text()))
+          assert hashlib.sha256(patch).hexdigest()=='fe1c22edac6ac71a0459d6a4590acd7b3315bc54bb2ee118b2cd2971b838beea'
+          (p/'fix.patch').write_bytes(patch)
+          PY
+          git checkout --detach 6291350b30933ae1e1898d6428f9671bfd2aa486
+          git apply --index /tmp/evidence31/fix.patch
+          git diff --cached --check
+          test "$(git write-tree)" = 1b8b2250b59d0f450802364239a6c5475df21ea8
+      - name: Assert three baseline behavioral failures
+        run: |
+          set -euo pipefail
+          git worktree add --detach /tmp/red31 6291350b30933ae1e1898d6428f9671bfd2aa486
+          cp internal/controller/tag_budget_regression_test.go /tmp/red31/internal/controller/
+          cd /tmp/red31
+          set +e
+          go test -mod=readonly -count=1 -timeout=180s -run TestRegressionLegacyTag -json ./internal/controller > /tmp/evidence31/red.json 2>&1
+          code=$?
+          set -e
+          test "$code" = 1
+          python - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('/tmp/evidence31/red.json')
+          events=[json.loads(l) for l in p.read_text().splitlines() if l.startswith('{')]
+          wanted={'TestRegressionLegacyTagJournalDefaultBound','TestRegressionLegacyTagDispatcherDefaultBound','TestRegressionLegacyTagProducerNegativeCacheDefaultBound'}
+          failed={e.get('Test') for e in events if e.get('Action')=='fail' and e.get('Test')}
+          assert failed==wanted,(failed,wanted)
+          for name in wanted:
+              assert any(e.get('Test')==name and 'TAG_BUDGET_REGRESSION:' in e.get('Output','') for e in events),name
+          print('All three baseline assertion failures verified')
+          PY
+      - name: Full acceptance and unchanged manifests
+        run: |
+          set -euo pipefail
+          go mod verify | tee /tmp/evidence31/modules.log
+          go build -mod=readonly ./...
+          go vet -mod=readonly ./...
+          go test -mod=readonly -count=1 -timeout=180s -coverprofile=/tmp/evidence31/coverage.out ./... | tee /tmp/evidence31/full.log
+          python .scripts/check_component_coverage.py /tmp/evidence31/coverage.out | tee /tmp/evidence31/coverage.log
+          go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s ./internal/controller | tee /tmp/evidence31/race.log
+          git diff --exit-code
+          test "$(git write-tree)" = 1b8b2250b59d0f450802364239a6c5475df21ea8
+      - name: Publish only accepted source
+        run: |
+          set -euo pipefail
+          git config user.name 'Laisky.Cai'
+          git config user.email 'github@laisky.com'
+          git commit -m 'fix: bound legacy routing identities across persistence and routing'
+          git rev-parse HEAD HEAD^{tree} | tee /tmp/evidence31/source.txt
+          git push origin HEAD:refs/heads/codex/security-31-tag-budget-20261006
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: issue31-red-green-evidence
+          path: /tmp/evidence31
+          retention-days: 14
+          if-no-files-found: error

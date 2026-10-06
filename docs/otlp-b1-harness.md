@@ -82,3 +82,8 @@ representative sustained ingress with concurrent replay, real TLS/backend
 persistence and correlation, crash durability, source privacy and business
 streaming/nonstreaming/error/metric-cycle acceptance. Merging these test-only
 changes does not clear that gate or establish a 24-hour/zero-loss guarantee.
+
+The current harness reserves future receipt/replay work under the finite
+whole-root policy: 16 MiB root admission and a 256-byte synthetic response bound.
+The 128 KiB WAL threshold and independent 16 MiB actual-use assertion remain.
+Historical reports retain the settings used when those measurements ran.

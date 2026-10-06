@@ -83,7 +83,10 @@ func TestOTLPB1IsolatedCapacity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg := OTLPJournalConfig{Directory: root, MaxWALBytes: 128 << 10, MaxStorageBytes: 512 << 10,
+	cfg := OTLPJournalConfig{Directory: root, MaxWALBytes: 128 << 10, MaxStorageBytes: 16 << 20,
+		// The fake peer returns no body; reserve a bounded 256-byte response.
+		// Keep the original WAL/full-state and 16-MiB actual-use assertions.
+		Limits:                otlpstate.Limits{PayloadBytes: 4 << 20, ResponseBytes: 256},
 		StorageScanMaxEntries: 1024, StorageScanTimeout: 10 * time.Millisecond,
 		ReceiptGC: true, ReplayBatch: 8, ReplayInterval: time.Second}
 	// Fast CI validates behavior, not the 10ms host qualification budget. A

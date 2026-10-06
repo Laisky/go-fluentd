@@ -18,7 +18,10 @@ import (
 
 func TestOTLPJournalRetainedReceiptsDrainRestoresSameScanCap(t *testing.T) {
 	const records, capEntries = 32, 16
-	cfg := OTLPJournalConfig{Directory: t.TempDir(), MaxWALBytes: 1 << 20, MaxStorageBytes: 2 << 20,
+	// This test isolates scan-entry pressure, not response/receipt byte pressure.
+	// Include finite worst-case response reservations without changing capEntries.
+	cfg := OTLPJournalConfig{Directory: t.TempDir(), MaxWALBytes: 1 << 20, MaxStorageBytes: 8 << 20,
+		Limits:                otlpstate.Limits{PayloadBytes: 4096, ResponseBytes: 256},
 		StorageScanMaxEntries: capEntries, StorageScanTimeout: time.Second, ReceiptGC: true, ReplayBatch: 8}
 	requests := make([]*otlpwire.Request, records+1)
 	for i := range requests {

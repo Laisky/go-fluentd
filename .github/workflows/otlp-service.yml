@@ -60,6 +60,7 @@ jobs:
       - name: Listener, TLS, authentication, bounds and shutdown contracts
         run: |
           set -euo pipefail
+          python3 -m unittest discover -s tests/otlp_service -p 'test_*.py' -v
           go test -mod=readonly -count=1 -timeout=180s -json -coverprofile=/tmp/otlp-service-evidence/coverage.out -run '^TestOTLPService' ./internal/controller > /tmp/otlp-service-evidence/tests.jsonl
           go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s -json -run '^TestOTLPService' ./internal/controller > /tmp/otlp-service-evidence/race.jsonl
       - name: Configured executable and independent HTTP peers

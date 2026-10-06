@@ -21,6 +21,7 @@ require (
 	github.com/zsais/go-gin-prometheus v1.0.3
 	go.opentelemetry.io/collector/pdata v1.68.0
 	golang.org/x/net v0.59.0
+	golang.org/x/sys v0.48.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260921155816-b14227669459
 	google.golang.org/protobuf v1.36.12
 )
@@ -96,7 +97,6 @@ require (
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/lint v0.0.0-20241112194109-818c5a804067 // indirect
 	golang.org/x/sync v0.23.0 // indirect
-	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/tools v0.50.0 // indirect
 	// GO-2026-6443: explicitly fixed stable version; v1.84 advisory/source disagree.

@@ -101,9 +101,40 @@ class ConfigPath:
     def __str__(self):return str(self.path)
 
 
+def validate_generation(g):
+    assert g['version'] in (1, 2), 'unsupported generation version'
+    assert len(g['namespace']) == 64 and bytes.fromhex(g['namespace']).hex() == g['namespace'], 'invalid namespace'
+    released = g.get('released_through', 0)
+    assert type(released) is int and 0 <= released <= 2**63 - 1, 'invalid released frontier'
+    if g['version'] == 1:
+        assert released == 0 and not g.get('checksum'), 'invalid v1 checkpoint'
+    else:
+        expected = hashlib.sha256(f"2:{g['namespace']}:{released}".encode()).hexdigest()
+        assert g.get('checksum') == expected, 'invalid checkpoint checksum'
+    return g
+
+
+def read_generation(path):
+    return validate_generation(json.loads(path.read_bytes()))
+
+
+def assert_generation_progress(before, after):
+    validate_generation(before); validate_generation(after)
+    assert before['namespace'] == after['namespace'], 'namespace changed'
+    assert after['version'] >= before['version'], 'generation version regressed'
+    assert after.get('released_through', 0) >= before.get('released_through', 0), 'released frontier regressed'
+
+
+def wait_capacity_ready(management):
+    # Listener readiness alone does not mean retained WAL reservation recovery
+    # has finished. This observation never asserts available storage capacity.
+    until(lambda: json.loads(request(management + '/monitor')[1])['otlpStorage']['capacity']['recovery_ready'],
+          'retained WAL capacity recovery did not finish')
+
+
 def config(root,listen,management,peer,wal_gzip):
     obj={'settings':{
-        'otlp':{'enabled':True,'listen_addr':f'127.0.0.1:{listen}','storage_dir':str(root/'state'),'bearer_token_env':'TEST_EXEC_OTLP_TOKEN','journal_gzip':wal_gzip,'replay_batch':8,'replay_interval':'50ms','max_wire_bytes':65536,'max_decoded_bytes':65536,'destinations':[
+        'otlp':{'enabled':True,'listen_addr':f'127.0.0.1:{listen}','storage_dir':str(root/'state'),'bearer_token_env':'TEST_EXEC_OTLP_TOKEN','journal_gzip':wal_gzip,'storage_scan_timeout':'1s','replay_batch':8,'replay_interval':'50ms','max_wire_bytes':65536,'max_decoded_bytes':65536,'destinations':[
           {'id':d,**{s+'_endpoint':f'{peer}/{d}/v1/{s}' for s in ['logs','metrics','traces']},'max_attempts':1,'timeout':'2s','gzip':True} for d in ['a','b','c']]},
         'journal':{'buf_dir_path':str(root/'legacy'),'buf_file_bytes':1048576,'committed_id_sec':120,'gc_inteval_sec':3600},
     }}
@@ -156,7 +187,9 @@ def run_case(binary,root,sig,ct,wal_gzip):
     def start(n):
         p=Process(binary,cfg,root,n,token);procs.append(p)
         until(lambda:request(mgmt+'/health')[0]==200,'configured binary not ready')
-        assert p.p.poll() is None,'process exited during startup';return p
+        assert p.p.poll() is None,'process exited during startup'
+        wait_capacity_ready(mgmt)
+        return p
     def counters():return json.loads(request(mgmt+'/monitor')[1])['otlp']
     def receive(seq):
         raw=payload(sig,ct,seq);status,response=request(base+'/v1/'+sig,raw,ct,token,True)
@@ -171,13 +204,13 @@ def run_case(binary,root,sig,ct,wal_gzip):
         assert request(base+'/v1/'+sig,b'x'*65537,'application/json',token)[0]==413
         receive(1)
         until(lambda:counters()['acceptedEnvelopes']==1 and counters()['quarantinedEnvelopes']==1,'mixed peer receipts were not persisted')
-        generation=(root/'state/generation.json').read_bytes();p.stop(kill=True)
+        generation=read_generation(root/'state/generation.json');p.stop(kill=True)
         gate.set();p=start(2)
         until(lambda:counters()['acceptedEnvelopes']==1,'retryable destination not delivered after restart')
-        assert (root/'state/generation.json').read_bytes()==generation,'namespace changed'
+        assert_generation_progress(generation, read_generation(root/'state/generation.json'))
         p.stop(kill=True);p=start(3);receive(2)
         until(lambda:counters()['acceptedEnvelopes']==2 and counters()['quarantinedEnvelopes']==1,'new record did not progress after second restart')
-        assert (root/'state/generation.json').read_bytes()==generation,'namespace changed'
+        assert_generation_progress(generation, read_generation(root/'state/generation.json'))
         p.stop();procs.remove(p)
         result=audit(root)
         # Negative evidence control: changing both copies is not delivery proof.

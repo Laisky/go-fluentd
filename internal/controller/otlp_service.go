@@ -48,6 +48,7 @@ type OTLPServiceConfig struct {
 	MaxItems              int                      `mapstructure:"max_items"`
 	MaxResponseBytes      int64                    `mapstructure:"max_response_bytes"`
 	MaxStorageBytes       int64                    `mapstructure:"max_storage_bytes"`
+	MaxStorageFiles       int                      `mapstructure:"max_storage_files"`
 	StorageScanMaxEntries int                      `mapstructure:"storage_scan_max_entries"`
 	StorageScanTimeout    time.Duration            `mapstructure:"storage_scan_timeout"`
 	ReceiptGC             bool                     `mapstructure:"receipt_gc"`
@@ -78,7 +79,7 @@ func ParseOTLPServiceConfig(raw interface{}) (*OTLPServiceConfig, error) {
 	if raw == nil {
 		return nil, nil
 	}
-	var c OTLPServiceConfig
+	c := OTLPServiceConfig{ReceiptGC: true}
 	dec, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		Result: &c, TagName: "mapstructure", ErrorUnused: true,
 		DecodeHook: func(from, to reflect.Type, value interface{}) (interface{}, error) {
@@ -173,6 +174,12 @@ func (c *OTLPServiceConfig) defaults() {
 	}
 	if c.MaxWALBytes == 0 {
 		c.MaxWALBytes = 256 << 20
+	}
+	if c.MaxStorageBytes == 0 {
+		c.MaxStorageBytes = defaultOTLPStorageBytes(c.MaxWALBytes)
+	}
+	if c.MaxStorageFiles == 0 {
+		c.MaxStorageFiles = defaultOTLPStorageFiles
 	}
 	if c.StorageScanMaxEntries == 0 {
 		c.StorageScanMaxEntries = 4096
@@ -278,8 +285,11 @@ func StartOTLPService(parent context.Context, c OTLPServiceConfig) (_ *OTLPServi
 	if c.MaxConnections < 1 || c.MaxConnections > 65536 || c.MaxHeaderBytes < 1024 || c.MaxHeaderBytes > 1<<20 || c.ReadHeaderTimeout <= 0 || c.ReadHeaderTimeout > time.Minute || c.IdleTimeout <= 0 || c.IdleTimeout > time.Hour || c.ShutdownTimeout <= 0 || c.ShutdownTimeout > time.Minute {
 		return nil, errors.New("invalid OTLP listener limits")
 	}
-	if c.MaxStorageBytes < 0 || c.MaxStorageBytes > 1<<50 || (c.MaxStorageBytes > 0 && c.MaxStorageBytes < c.MaxWALBytes) {
-		return nil, errors.New("max_storage_bytes must be zero or at least max_wal_bytes")
+	if c.MaxStorageBytes < c.MaxWALBytes || c.MaxStorageBytes > 1<<50 {
+		return nil, errors.New("max_storage_bytes must be at least max_wal_bytes")
+	}
+	if c.MaxStorageFiles < 16 || c.MaxStorageFiles > 1<<20 {
+		return nil, errors.New("max_storage_files must be between 16 and 1048576")
 	}
 	if c.StorageScanMaxEntries < 1 || c.StorageScanMaxEntries > 1<<20 {
 		return nil, errors.New("storage_scan_max_entries must be between 1 and 1048576")
@@ -361,14 +371,14 @@ func StartOTLPService(parent context.Context, c OTLPServiceConfig) (_ *OTLPServi
 		return nil, fmt.Errorf("bind OTLP listener: %w", e)
 	}
 	s.listener = netutil.LimitListener(ln, c.MaxConnections)
-	s.owner, err = OpenOTLPJournal(ctx, OTLPJournalConfig{Directory: c.StorageDirectory, Compress: c.JournalGzip, Limits: otlpstate.Limits{PayloadBytes: int(c.MaxDecodedBytes), ResponseBytes: int(c.MaxResponseBytes)}, MaxWALBytes: c.MaxWALBytes, MaxStorageBytes: c.MaxStorageBytes, StorageScanMaxEntries: c.StorageScanMaxEntries, StorageScanTimeout: c.StorageScanTimeout, ReceiptGC: c.ReceiptGC, ReplayBatch: c.ReplayBatch, ReplayInterval: c.ReplayInterval}, peers)
+	s.owner, err = OpenOTLPJournal(ctx, OTLPJournalConfig{Directory: c.StorageDirectory, Compress: c.JournalGzip, Limits: otlpstate.Limits{PayloadBytes: int(c.MaxDecodedBytes), ResponseBytes: int(c.MaxResponseBytes)}, MaxWALBytes: c.MaxWALBytes, MaxStorageBytes: c.MaxStorageBytes, MaxStorageFiles: c.MaxStorageFiles, StorageScanMaxEntries: c.StorageScanMaxEntries, StorageScanTimeout: c.StorageScanTimeout, ReceiptGC: c.ReceiptGC, ReplayBatch: c.ReplayBatch, ReplayInterval: c.ReplayInterval}, peers)
 	if err != nil {
 		return nil, err
 	}
 	s.server = &http.Server{Handler: receiver, ReadHeaderTimeout: c.ReadHeaderTimeout, ReadTimeout: c.BodyReadTimeout, WriteTimeout: c.RequestTimeout + time.Second, IdleTimeout: c.IdleTimeout, MaxHeaderBytes: c.MaxHeaderBytes, TLSConfig: tc, BaseContext: func(net.Listener) context.Context { return ctx }, TLSNextProto: map[string]func(*http.Server, *tls.Conn, http.Handler){}}
 	monitor.AddMetric("otlpStorage", func() map[string]interface{} {
 		rejected, reclaimed := s.owner.StorageCounters()
-		return map[string]interface{}{"admissionRejected": rejected, "scanBudgetRejected": s.owner.ScanBudgetRejected(), "acceptedReceiptsReclaimed": reclaimed, "maxStorageBytes": c.MaxStorageBytes, "storageScanMaxEntries": c.StorageScanMaxEntries, "storageScanTimeout": c.StorageScanTimeout.String(), "receiptGC": c.ReceiptGC}
+		return map[string]interface{}{"admissionRejected": rejected, "scanBudgetRejected": s.owner.ScanBudgetRejected(), "acceptedReceiptsReclaimed": reclaimed, "maxStorageBytes": c.MaxStorageBytes, "maxStorageFiles": c.MaxStorageFiles, "capacity": s.owner.CapacitySnapshot(), "storageScanMaxEntries": c.StorageScanMaxEntries, "storageScanTimeout": c.StorageScanTimeout.String(), "receiptGC": c.ReceiptGC}
 	})
 	// HTTP/1.1 is deliberate: max_connections is not an HTTP/2 stream quota.
 	go s.run(ctx, c.ShutdownTimeout)

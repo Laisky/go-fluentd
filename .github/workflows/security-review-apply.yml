@@ -1,0 +1,45 @@
+name: Publish reviewed security patch
+on:
+  push:
+    branches: [codex/security-review-workspace-20261006]
+    paths: [.review/request.json]
+permissions:
+  contents: write
+concurrency:
+  group: security-review-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Apply exact reviewed patch to an isolated branch
+        run: |
+          python3 - <<'PY'
+          import base64, gzip, json, pathlib, re, subprocess
+          request = json.loads(pathlib.Path('.review/request.json').read_text())
+          base, branch, expected = request['base'], request['branch'], request['expected']
+          assert re.fullmatch(r'[0-9a-f]{40}', base)
+          assert re.fullmatch(r'codex/security-[0-9]+-[a-z0-9-]+-20261006', branch)
+          assert expected == '' or re.fullmatch(r'[0-9a-f]{40}', expected)
+          patch = gzip.decompress(base64.b64decode(request['patch'], validate=True))
+          assert len(patch) <= 1000000
+          def git(*args, **kwargs):
+              return subprocess.run(['git', *args], check=True, **kwargs)
+          git('checkout', '--detach', base)
+          git('apply', '--index', '--whitespace=error', '-', input=patch)
+          paths = subprocess.check_output(['git', 'diff', '--cached', '--name-only']).decode().splitlines()
+          assert paths and all(not p.startswith(('.github/', '.review/')) for p in paths)
+          git('diff', '--cached', '--check')
+          git('config', 'user.name', 'github-actions[bot]')
+          git('config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com')
+          git('commit', '-m', request['message'])
+          git('push', f'--force-with-lease=refs/heads/{branch}:{expected}', 'origin', f'HEAD:refs/heads/{branch}')
+          print('PUBLISHED_BRANCH=' + branch)
+          git('rev-parse', 'HEAD')
+          git('rev-parse', 'HEAD^{tree}')
+          git('show', '--stat', '--oneline', 'HEAD')
+          PY

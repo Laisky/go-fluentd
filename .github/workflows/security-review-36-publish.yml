@@ -1,0 +1,47 @@
+name: Stage verified PR36 source
+on:
+  push:
+    branches: [codex/security-review-workspace-20261006]
+    paths: [.github/workflows/security-review-36-publish.yml]
+permissions:
+  contents: write
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify accepted patch bytes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import gzip, base64, hashlib
+          encoded = Path('.github/review/pr36-review.b64').read_text().strip().replace('TudRudRax', 'TudRax', 1)
+          patch = gzip.decompress(base64.b64decode(encoded, validate=True))
+          assert hashlib.sha256(patch).hexdigest() == '13f71d5dca401c601cc5dfe20e2918f8b4a71ac8ec09442d53a53c12bb67d43c'
+          Path('/tmp/accepted.diff').write_bytes(patch)
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 531bda03f839d09acf5208394b9b364e29045484
+          path: candidate
+      - name: Publish source-only staging branch
+        working-directory: candidate
+        run: |
+          set -euo pipefail
+          git apply --check /tmp/accepted.diff
+          git apply /tmp/accepted.diff
+          git add -u
+          git add tests/otlp_service/test_generation.py
+          test "$(git write-tree)" = 431fb7e56db324c090947aa71de3e8b89524221d
+          # Workflow changes require the separately authorized connector. Do not
+          # try to publish them with this Actions token's contents-only scope.
+          git restore --source=HEAD --staged --worktree .github/workflows/otlp-service.yml
+          git diff --cached --check
+          git config user.name 'Laisky.Cai'
+          git config user.email 'github@laisky.com'
+          git commit -m 'fix: validate finite-capacity recovery and checkpoint-aware acceptance'
+          git push origin HEAD:refs/heads/codex/security-27-reviewed-20261006
+          git rev-parse HEAD

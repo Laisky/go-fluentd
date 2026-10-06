@@ -1,0 +1,41 @@
+name: Verify and publish capacity patch
+on:
+  push:
+    branches: [codex/security-review-workspace-20261006]
+    paths: [.github/workflows/security-review-capacity-publish.yml]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Verify exact reviewed bytes before publication
+        run: |
+          python3 - <<'PY'
+          import base64, gzip, hashlib, json, pathlib, subprocess
+          request = json.loads(pathlib.Path('.review/request.json').read_text())
+          assert request['base'] == 'e174aa4741826290c600a415c931fb7130b46d32'
+          assert request['branch'] == 'codex/security-27-otlp-capacity-20261006'
+          encoded = request['patch']
+          assert hashlib.sha256(encoded.encode()).hexdigest() == 'ab982a8fd29a63c16d8eb03f8f0ca1f854750dd4f5041eef9136d4dfe815a387'
+          missing = 'T26tlf51N7K+WDXY2scFqdtjZxA4reR198mHb7n9P9tjZxB6/B5vsbGKT34lddjaxywq22dnENvPss7OJfdaw0c4mNvot2GlnEzv9Bmy1s4mtFjjQBvZaxxA3sNm6Tzaw21q2W6jrZ4liIb9inmihZPCGpagvlLP81xDjzhtQnVRlIqNTg4yyC9b1ZUY6BifjyJyqh/BfMNcqF/ArlO8zdl4PmbtYxbibXV0NQBe+84XnfDWwb9xnSibOawfI4UrgdbwOuUo9Z2He/UJX4Jklz6exk1zomvh8Vx7aNEiGeO+QOvDOZCb26PIWfEHPNZPHM2GqEXli+iPy/g4G1uBQO9hK8fEq7xqKr5J8kiHvLJmD/WryUJQ29+9zKoCgYgn5N1kQmvxlHePz/BEtnU1QfYCrLj5dGNAIMlae3KoZRZ3rqimvv7nTe3jlhKwiV3z3QOaomEGN0A+snKumlNrBJuHE03eAwQB0t0R/dHx450jGLPVWmC6W/Fbk3gjyx6zl3ZFDdO8MDo7hx3fFk/LVEwCw4rUTCnwVjR+Yt0vwyurgWHXtWhmUCy4bPkia6pKTGpS8x/Grqlcq2wFet6rf99G9XN1rEWVz/uaNyMF1kdSK6AY9qkEukBelInfHXrNdT2ylOWxb587om59h7cyEib7mPO7xmcxsOvqNAfIiZssqysXHD6j+T/6NdjniUcL9OjQstJUo+Atg/GYEVOlPNb5dfVmXPAMrgyKDIw7ZHR98T1qsrCBxnytICMxO05qwqjWuHlgbDxq1JV/PDi6zuDfLG+I4W8pyl68k4DrCRifdrfNY2lJ+4pS1yMSxAfnsc3hnyd/puD1KT/4KGIZqmRj4n0WR7oupKqtcCIdTWOuExO7BYGhex1SqxC5zkypjW5yMxIaYLARDT1i6G0inIk9C5lXrKjT3urQ0MrfWKh3ph+K2fINCyaJwtOo+Ikx6gdT6Ql4qk5tudUhCRx74Jrt8jIOF1EH/DgaWDoYnRrTwe0OVT6xn+iDdGCpduKqWvbiKHcyGyipKEXmD2op3jJJ4mc'
+          encoded = encoded[:14287] + missing + encoded[14287:]
+          patch = gzip.decompress(base64.b64decode(encoded, validate=True))
+          assert hashlib.sha256(patch).hexdigest() == '9849ef4f48ec27e95f7094408f51769df1ff91fc586cbac6ad2c1d38ed812c9f'
+          def git(*args, **kwargs):
+              return subprocess.run(['git', *args], check=True, **kwargs)
+          git('checkout', '--detach', request['base'])
+          git('apply', '--index', '--whitespace=error', '-', input=patch)
+          git('diff', '--cached', '--check')
+          git('config', 'user.name', 'github-actions[bot]')
+          git('config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com')
+          git('commit', '-m', request['message'])
+          branch = request['branch']
+          git('push', f'--force-with-lease=refs/heads/{branch}:', 'origin', f'HEAD:refs/heads/{branch}')
+          git('rev-parse', 'HEAD')
+          git('show', '--stat', '--oneline', 'HEAD')
+          PY

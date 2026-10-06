@@ -1,0 +1,41 @@
+name: Current security baseline snapshot
+on:
+  push:
+    branches: [codex/security-resume-20261006-2149]
+    paths: [.github/workflows/security-resume-snapshot.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Archive exact source and pinned dependencies
+        run: |
+          set -euo pipefail
+          git checkout --detach 6291350b30933ae1e1898d6428f9671bfd2aa486
+          test "$(git rev-parse HEAD)" = 6291350b30933ae1e1898d6428f9671bfd2aa486
+          mkdir /tmp/current
+          git archive HEAD | tar -x -C /tmp/current
+          git bundle create /tmp/current.bundle HEAD
+          cd /tmp/current
+          go mod vendor
+          tar -czf /tmp/current-source.tar.gz .
+          sha256sum /tmp/current-source.tar.gz /tmp/current.bundle > /tmp/current.sha256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: current-security-baseline
+          path: |
+            /tmp/current-source.tar.gz
+            /tmp/current.bundle
+            /tmp/current.sha256
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error

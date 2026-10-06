@@ -78,20 +78,26 @@ admission limit returns 503 when body-decoding/admission slots are exhausted.
 | `max_items` | 10,000 log records, spans or metric data points |
 | `max_response_bytes` | 1 MiB |
 | `max_wal_bytes` | 256 MiB logical WAL admission threshold |
-| `max_storage_bytes` | 0: whole-root admission check disabled |
+| `max_storage_bytes` | max(512 MiB, twice `max_wal_bytes`); zero selects this finite default |
+| `max_storage_files` | 4096 directory entries, including temporary names and headroom |
 | `storage_scan_max_entries` | 4096 per admission metadata scan; HTTP 503 on exhaustion |
 | `storage_scan_timeout` | 25ms shared between admission scans; checked between syscalls |
-| `receipt_gc` | false: accepted receipts retained |
+| `receipt_gc` | true in parsed service configuration; checkpoint-safe accepted-receipt reclamation |
 | `replay_batch` / `replay_interval` | 64 envelopes / minimum 1 second |
 
-These are not aggregate memory, decoder-allocation or filesystem quotas. Receipt
-files and recovery copies are not included in the WAL admission threshold.
-By default, accepted and quarantined envelopes retain per-destination copies.
-Opt-in `receipt_gc` reclaims accepted receipts only behind a durable released
-frontier; quarantine and uncertain evidence remain. `max_storage_bytes` adds a
-whole-root admission check, not a hard quota. Read the
-[edge storage and rollback contract](otlp-edge-storage.md) before enabling them.
-Capacity still requires separate filesystem protection and operational monitoring.
+These are not aggregate memory, decoder-allocation or filesystem quotas. The WAL
+threshold is supplemented by a finite whole-root byte/file admission policy,
+including conservative space for replay, fan-out receipts and checkpoint writes.
+Zero no longer disables whole-root accounting. Omitted `receipt_gc` now selects
+checkpoint-safe reclamation; explicit `false` preserves retention, but admission
+still stops at finite capacity. Quarantine and uncertain evidence are never
+removed merely to make space. Small budgets, many destinations, large payloads,
+or a large `max_response_bytes` may require earlier refusal even with free disk.
+
+**Upgrade:** the default GC policy can publish generation-v2 metadata. Older
+incompatible binaries refuse that state. Read the
+[edge storage and rollback contract](otlp-edge-storage.md) before upgrading.
+Dedicated filesystem/quota protection and operational monitoring remain required.
 
 ## Startup, failure and stop
 

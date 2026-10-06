@@ -177,6 +177,11 @@ func persistOTLPCheckpoint(dir string, g otlpGeneration) error {
 // Once stopAfter is exceeded, the caller already must refuse admission, so it
 // returns a lower bound without scanning the rest of a full ownership directory.
 func otlpDirectoryBytes(ctx context.Context, root string, stopAfter int64, maxEntries int) (int64, error) {
+	size, _, err := otlpDirectoryUsage(ctx, root, stopAfter, maxEntries)
+	return size, err
+}
+
+func otlpDirectoryUsage(ctx context.Context, root string, stopAfter int64, maxEntries int) (int64, int64, error) {
 	var total int64
 	seen := 0
 	full := errors.New("OTLP storage scan admission threshold exceeded")
@@ -233,7 +238,7 @@ func otlpDirectoryBytes(ctx context.Context, root string, stopAfter int64, maxEn
 		}
 	}
 	if err := walk(root); err != nil && !errors.Is(err, full) {
-		return 0, err
+		return 0, 0, err
 	}
-	return total, nil
+	return total, int64(seen), nil
 }

@@ -1,8 +1,9 @@
 # OTLP edge storage controls
 
 The OTLP owner can act as a persistent edge agent between a local application
-and a remote Collector. These controls are opt-in and do not alter the legacy
-log journal or the default OTLP receipt-retention behavior.
+and a remote Collector. OTLP itself remains opt-in. An enabled parsed service
+configuration now has finite byte/file admission defaults and checkpoint-safe
+accepted-receipt GC. These controls do not alter the legacy log journal.
 
 ## Configuration and scope
 
@@ -11,14 +12,18 @@ authentication, destinations and separate persistent journal directories:
 
 ```yaml
 max_wal_bytes: 1073741824       # 1 GiB logical WAL admission threshold
-max_storage_bytes: 2147483648   # 2 GiB whole-root admission threshold
+max_storage_bytes: 2147483648   # 2 GiB whole-root admission + reserved future work
+max_storage_files: 4096        # all directory entries + reserved future names
 storage_scan_max_entries: 4096 # metadata entries per scan; refusal on exhaustion
 storage_scan_timeout: 25ms     # combined admission scan time between syscalls
 receipt_gc: true               # upgrades generation metadata; read rollback below
 ```
 
-`max_storage_bytes` defaults to zero (disabled), must be at least
-`max_wal_bytes` when enabled, and is limited to 2^50 bytes. Admission accounts
+`max_storage_bytes: 0` or omission selects max(512 MiB, twice `max_wal_bytes`),
+capped at 2^50 bytes. Explicit values must be at least `max_wal_bytes` and at most
+2^50. Zero never disables accounting. `max_storage_files: 0` or omission selects
+4096; explicit values are 16–1048576. Files here means directory entries, including
+directories and temporary names, rather than unique inodes. Admission accounts
 regular files throughout the owned root, including WAL, receipts, recovery files
 and retained incomplete evidence. Each WAL/root scan visits at most
 `storage_scan_max_entries` entries (default 4096, range 1–1048576), including
@@ -36,8 +41,23 @@ cannot be interrupted, so the timeout is not a hard I/O latency guarantee.
 Hard links count twice conservatively; unexpected non-regular entries are not
 followed. Trusted storage paths must not be modified concurrently by operators.
 
-**This is not a filesystem quota.** Concurrent receipt creation, WAL replay and
-recovery copying can consume space after admission. Keep separate headroom and
+Every admitted but not checkpoint-released ID reserves conservative bytes and
+names for its encoded WAL/replay copy, all frozen destination receipts (including
+maximum configured response size and validated metadata), atomic publication and
+checkpoint writes. This uses a constant-size high-water bound, not a growing
+pending-ID map. Accepted IDs behind an unresolved gap retain their reservation.
+Explicit `receipt_gc: false` also retains the historical ID upper bound and can
+therefore stop admission earlier than the physical receipt size alone suggests.
+After restart with retained IDs, new admission returns retryable HTTP 503 until
+the first bounded replay snapshot recovers the reservation high-water mark;
+existing durable work continues. A fully released prefix resets the high-water
+reserve. Raising fan-out/response limits or shrinking capacity may require an
+operator to resize the policy; it never authorizes data deletion.
+
+**This is not a filesystem quota.** Reservations are conservative logical byte/
+name accounting, not allocated-block or physical-inode guarantees. Filesystem
+block rounding, external writers, pre-existing over-budget state and storage
+faults still need independent protection. Keep separate filesystem headroom and
 use a dedicated volume or filesystem quota to protect the application's disk.
 A full admission budget rejects new work rather than discarding accepted work;
 it does not poison the journal merely because a capacity threshold is reached.
@@ -49,7 +69,10 @@ application cannot together guarantee lossless telemetry.
 
 ## Safe accepted-receipt reclamation
 
-With `receipt_gc: true`, the owner freezes the ID frontier when it opens a replay
+Parsed service configuration defaults `receipt_gc` to true; explicit false is
+preserved. Programmatic `OTLPJournalConfig`/`OTLPServiceConfig` bool zero values
+still mean false, but their omitted capacity settings remain finite. With GC
+enabled, the owner freezes the ID frontier when it opens a replay
 snapshot. It tracks the smallest unresolved ID across every batch in that
 snapshot. At EOF, it writes a checksummed released-prefix checkpoint no higher
 than that unresolved gap, synchronizes the file and parent directory, and only
@@ -75,6 +98,12 @@ batch stage. Test that ownership handoff against the actual backend topology.
 
 ## Upgrade and rollback
 
+**Defaults change on upgrade:** omitted `receipt_gc` enables checkpoint-safe GC,
+and omitted/zero capacity settings no longer allow unlimited retention. An
+explicit retention-only configuration must set `receipt_gc: false` and still
+provide sufficient finite capacity. Back up the coherent ownership directory
+before upgrading and keep a compatible binary available for recovery.
+
 Generation version 1 remains readable. Once receipt GC publishes a checkpoint,
 `generation.json` becomes version 2. **Older binaries intentionally reject that
 metadata**, because replaying the directory without understanding its released
@@ -91,11 +120,18 @@ restore the whole coherent owner state, not just the WAL.
 
 The protected management `/monitor` includes `otlpStorage` with:
 
-- `admissionRejected`: process-local byte/scan-budget admission rejection count;
+- `admissionRejected`: process-local byte/file/recovery/scan-budget admission rejection count;
 - `scanBudgetRejected`: the subset caused by metadata entry/time budgets;
 - `acceptedReceiptsReclaimed`: accepted receipt files reclaimed this process;
-- `maxStorageBytes`, `storageScanMaxEntries`, `storageScanTimeout` and `receiptGC`:
+- `maxStorageBytes`, `maxStorageFiles`, `storageScanMaxEntries`,
+  `storageScanTimeout` and `receiptGC`:
   configured control values.
+
+`capacity` reports last inventoried `bytes`/`files` (possibly a lower bound on
+refusal) and `pending_upper_bound` (frontier minus durable released prefix). On
+Linux/macOS, `filesystem_available` also qualifies current available-byte and
+free-inode observations; unsupported/failed filesystem queries report false,
+not a fabricated zero-capacity disk. These observations are not admission proofs.
 
 Counters reset on restart and are not durable delivery receipts. Monitor actual
 filesystem usage/free space and existing OTLP destination outcomes too. Native
@@ -125,3 +161,9 @@ The `OTLP edge acceptance` workflow retains source, toolchain and executable
 format/restart evidence. The companion VPS workflow additionally tests the real
 Victoria/Collector pipeline, including SIGKILL after edge receipt collection.
 No production host or live credentials are used in those campaigns.
+
+The default-policy regressions also cover plain/gzip, small/large payload fan-out,
+repeated restart without identity reuse or re-export, exact byte/file headroom
+boundaries, concurrent admissions, finite quarantine retention and recovery
+before new admission. Sparse logical evidence sizes are used for byte rejection;
+no disk-fill experiment is needed.

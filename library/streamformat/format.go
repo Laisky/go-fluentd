@@ -23,6 +23,10 @@ const (
 	Batch       = "batch"
 )
 
+// MaxNDJSONLines bounds parsing work independently of the accepted-record limit.
+// Every LF-terminated line counts, including empty LF and CRLF lines.
+const MaxNDJSONLines = 65536
+
 func ValidFormat(format string) bool { return format == NDJSON || format == CloudEvents }
 
 // MediaType validates a MIME type and UTF-8 charset before format selection.
@@ -40,7 +44,8 @@ func isJSON(m string) bool { return strings.HasSuffix(m, "/json") || strings.Has
 
 // Decode validates an entire bounded request before the caller can publish any
 // record. Empty batches are allowed. NDJSON ignores empty lines, requires a final
-// newline, accepts CRLF, and restricts each record to a non-null object.
+// newline, accepts CRLF, and restricts each record to a non-null object. At most
+// MaxNDJSONLines physical lines are examined, including empty lines.
 func Decode(format, contentType string, headers http.Header, body []byte, maxRecords int) ([]map[string]interface{}, error) {
 	if maxRecords <= 0 {
 		return nil, fmt.Errorf("max records must be positive")
@@ -75,13 +80,24 @@ func Decode(format, contentType string, headers http.Header, body []byte, maxRec
 		if len(body) > 0 && body[len(body)-1] != '\n' {
 			return nil, fmt.Errorf("NDJSON must end in newline")
 		}
-		for _, line := range bytes.Split(body, []byte{'\n'}) {
+		// Walk the existing buffer without allocating a descriptor per separator.
+		// The final newline was checked above; the empty suffix is not a line.
+		for lines := 0; len(body) != 0; lines++ {
+			if lines == MaxNDJSONLines {
+				return nil, fmt.Errorf("NDJSON line count exceeds parsing-work limit")
+			}
+			i := bytes.IndexByte(body, '\n')
+			line := body[:i]
+			body = body[i+1:]
 			line = bytes.TrimSuffix(line, []byte{'\r'})
 			if len(line) == 0 {
 				continue
 			}
 			if bytes.ContainsRune(line, '\r') {
 				return nil, fmt.Errorf("embedded CR in NDJSON")
+			}
+			if len(records) == maxRecords {
+				return nil, fmt.Errorf("record count exceeds configured limit")
 			}
 			v, e := JSON(line)
 			if e != nil {

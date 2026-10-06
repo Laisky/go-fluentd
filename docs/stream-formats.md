@@ -88,6 +88,7 @@ Under `settings.acceptor.recvs.plugins.<name>`:
 | `bearer_token` | Empty disables plugin authentication |
 | `max_body_byte` | 4 MiB per request, including unknown Content-Length requests |
 | `max_records` | 1,024 per request |
+| NDJSON parsing-work ceiling | 65,536 physical lines per request, including empty LF/CRLF lines (independent of `max_records`) |
 | `ack_timeout_sec` | 30 seconds for queueing/receipts **after body parsing** |
 
 Zero numeric values select defaults; negative limits are rejected. This receiver
@@ -213,3 +214,12 @@ These are not real broker/collector deployments or physical-power-loss tests.
 Specifications: [CloudEvents HTTP binding](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/bindings/http-protocol-binding.md),
 [CloudEvents JSON format](https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/formats/json-format.md),
 and [NDJSON specification](https://github.com/ndjson/ndjson-spec).
+
+NDJSON is validated by walking the bounded input buffer, without building a
+split table proportional to the separator count. An empty body is accepted; each
+LF terminates one physical line (CRLF counts once). The final empty suffix after
+a newline is not an extra line. Requests above the parsing-work ceiling fail
+with HTTP 400 and publish no records, even when a valid record preceded the
+excess empty lines. Body-size and nonempty-record limits still apply separately.
+Deployments should also bound concurrent HTTP requests at their ingress proxy;
+the line ceiling is not a process-wide request-memory quota.

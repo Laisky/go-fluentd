@@ -163,3 +163,6 @@ free change or copy tests onto an incompatible old dependency graph.
 
 Snapshot: 2026-09-24. This work does not change the already-reviewed CloudEvents
 PR, the original README architecture diagram or the existing journal format.
+
+See [pre-materialization limits](otlp-decode-limits.md) for item, structure, depth,
+concurrency, compatibility and memory-accounting boundaries.

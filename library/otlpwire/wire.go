@@ -43,7 +43,8 @@ func (s Signal) Path() (string, error) {
 
 // Limits bounds encoded and decompressed input independently. Items counts
 // logs, spans or data points, not requests or metric descriptors. Input bounds
-// do not bound the decoder's allocations or aggregate process memory.
+// are combined with pre-materialization item/structure/depth checks. They are
+// not an exact allocation or aggregate process-memory quota.
 type Limits struct {
 	WireBytes, DecodedBytes int64
 	Items                   int
@@ -154,6 +155,9 @@ func ReadRequest(signal Signal, contentType, encoding string, body io.Reader, l 
 	}
 	b, err := readBody(body, encoding, l)
 	if err != nil {
+		return nil, err
+	}
+	if err := preflight(signal, ct, b, l.Items); err != nil {
 		return nil, err
 	}
 	var n int

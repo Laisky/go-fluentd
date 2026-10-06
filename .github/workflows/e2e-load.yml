@@ -32,7 +32,7 @@ jobs:
           cp go.mod go.sum /tmp/load-evidence/
           go mod verify > /tmp/load-evidence/module-verify.txt
           go test -mod=readonly -race -count=3 -json ./tests/loadtest > /tmp/load-evidence/oracle.jsonl
-          (cd tests/loadtest && python3 -m unittest -v test_sustained) > /tmp/load-evidence/steady-gate-tests.log 2>&1
+          (cd tests/loadtest && python3 -m unittest -v test_sustained test_compare) > /tmp/load-evidence/steady-gate-tests.log 2>&1
           go build -mod=readonly -o /tmp/load-driver ./tests/loadtest
           go build -mod=readonly -o /tmp/load-candidate .
           git worktree add --detach /tmp/load-baseline-src 828d34ab1460820cf732810d01b56985d46a4ab9
@@ -49,7 +49,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 tests/loadtest/compare.py --driver /tmp/load-driver --baseline /tmp/load-baseline --candidate /tmp/load-candidate --pairs 3 --cases tests/loadtest/cases/ci.json --out /tmp/load-evidence/paired
-          /tmp/load-driver --binary /tmp/load-candidate --out /tmp/load-evidence/open-loop --rate 100 --requests 512 --concurrency 32
+          /tmp/load-driver --binary /tmp/load-candidate --out /tmp/load-evidence/open-loop --rate 100 --requests 512 --concurrency 32 --storage-scan-timeout 1s
           /tmp/load-driver --audit-only /tmp/load-evidence/open-loop
           git diff --exit-code -- go.mod go.sum
       - name: Retain raw measurements without copying WAL or receipt stores

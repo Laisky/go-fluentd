@@ -18,12 +18,15 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
           go-version: '1.27.x'
-      - name: Prepare public source and pinned dependencies
+      - name: Prepare public source and test dependencies
         run: |
           set -euo pipefail
           mkdir -p /tmp/journal-review
           git archive HEAD | tar -x -C /tmp/journal-review
           cd /tmp/journal-review
+          cp go.mod go.mod.original
+          cp go.sum go.sum.original
+          go mod tidy
           go mod vendor
           tar -czf /tmp/journal-review.tar.gz .
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

@@ -15,6 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: 5384f555ca055996a62cc40bd13f96824c8dd26d
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
@@ -23,7 +24,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/review
-          git archive 5384f555ca055996a62cc40bd13f96824c8dd26d | tar -x -C /tmp/review
+          git archive HEAD | tar -x -C /tmp/review
           cd /tmp/review
           go mod vendor
           printf 'source=%s\n' 5384f555ca055996a62cc40bd13f96824c8dd26d > REVIEW_SOURCE.txt

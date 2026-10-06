@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"gofluentd/internal/concatstate"
 	"gofluentd/library"
 	"gofluentd/library/log"
 
@@ -26,7 +27,8 @@ const (
 
 // FluentdRecvCfg configuration of FluentdRecv
 type FluentdRecvCfg struct {
-	Ingress FluentIngressCfg
+	Ingress      FluentIngressCfg
+	ConcatBudget *concatstate.Budget
 	Name,
 	// Addr: like `127.0.0.1:24225;`
 	Addr,
@@ -60,15 +62,8 @@ type FluentdRecv struct {
 	*FluentdRecvCfg
 	logger *utils.LoggerType
 
-	concatTagCfg   map[string]*concatCfg
-	pendingMsgPool *sync.Pool
-	concators      []chan *library.FluentMsg
-}
-
-// PendingMsg is the message wait tobe concatenate
-type PendingMsg struct {
-	msg   *library.FluentMsg
-	lastT time.Time
+	concatTagCfg map[string]*concatCfg
+	concators    []chan *library.FluentMsg
 }
 
 // NewFluentdRecv create new FluentdRecv
@@ -77,13 +72,9 @@ func NewFluentdRecv(cfg *FluentdRecvCfg) (r *FluentdRecv) {
 		logger:         log.Logger.Named(cfg.Name),
 		BaseRecv:       &BaseRecv{},
 		FluentdRecvCfg: cfg,
-		pendingMsgPool: &sync.Pool{
-			New: func() interface{} {
-				return &PendingMsg{}
-			},
-		},
-		concatTagCfg: map[string]*concatCfg{},
+		concatTagCfg:   map[string]*concatCfg{},
 	}
+	r.ConcatBudget = concatstate.Default(r.ConcatBudget)
 	if err := r.valid(); err != nil {
 		log.Logger.Panic("config invalid", zap.Error(err))
 	}
@@ -421,170 +412,16 @@ func (r *FluentdRecv) startConcators(ctx context.Context) (concators []chan *lib
 	return
 }
 
-type receiverConcatKey struct{ tag, identifier string }
-
 func (r *FluentdRecv) runConcator(ctx context.Context, i int, inChan chan *library.FluentMsg) {
-	logger := r.logger.With(zap.Int("i", i))
-	defer logger.Info("fluentd concator exit")
-	var (
-		tag, identifier    string
-		key                receiverConcatKey
-		msg, oldMsg        *library.FluentMsg
-		log                []byte
-		pmsg               *PendingMsg
-		identifier2LastMsg = map[receiverConcatKey]*PendingMsg{}
-		ok                 bool
-		cfg                *concatCfg
-		cleanTicker        = time.NewTicker(r.ConcatorWait / 4)
-		ts                 time.Time
-		idenN, deletN      int
-	)
-	defer cleanTicker.Stop()
-
-NEW_MSG_LOOP:
-	for {
-		select {
-		case <-ctx.Done():
-			break NEW_MSG_LOOP
-		case msg, ok = <-inChan:
+	defer r.logger.Info("fluentd concator exit", zap.Int("i", i))
+	concatstate.Run(ctx, inChan, r.ConcatBudget, r.ConcatorWait, r.ConcatMaxLen, false,
+		func(m *library.FluentMsg) (concatstate.Rule, bool) {
+			cfg, ok := r.concatTagCfg[m.Tag]
 			if !ok {
-				break NEW_MSG_LOOP
+				return concatstate.Rule{}, false
 			}
-		case <-cleanTicker.C: // clean old msgs
-			ts = time.Now()
-			idenN = 0
-			deletN = 0
-			for key, pmsg = range identifier2LastMsg {
-				idenN++
-				if time.Now().Sub(pmsg.lastT) > r.ConcatorWait {
-					deletN++
-					if !r.sendMsg(ctx, pmsg.msg) {
-						return
-					}
-					r.pendingMsgPool.Put(pmsg)
-					delete(identifier2LastMsg, key)
-					continue
-				}
-			}
-			logger.Info("clean identifier2LastMsg",
-				zap.Int("total", idenN),
-				zap.Int("deleted", deletN),
-				zap.Duration("cost", time.Now().Sub(ts)))
-			continue
-		}
-
-		tag = msg.Tag
-		if cfg, ok = r.concatTagCfg[tag]; !ok {
-			logger.Debug("unknown tag for concator", zap.String("tag", tag))
-			if !r.sendMsg(ctx, msg) {
-				return
-			}
-			continue
-		}
-
-		switch msg.Message[cfg.msgKey].(type) {
-		case []byte:
-			log = msg.Message[cfg.msgKey].([]byte)
-		case string:
-			log = []byte(msg.Message[cfg.msgKey].(string))
-			msg.Message[cfg.msgKey] = log
-		default:
-			logger.Warn("unknown msg key or unknown type",
-				zap.String("tag", tag),
-				zap.String("msg_key", cfg.msgKey),
-				zap.String("msg", fmt.Sprint(msg.Message)))
-			if !r.sendMsg(ctx, msg) {
-				return
-			}
-			continue
-		}
-
-		switch msg.Message[cfg.identifierKey].(type) {
-		case []byte:
-			identifier = string(msg.Message[cfg.identifierKey].([]byte))
-		case string:
-			identifier = msg.Message[cfg.identifierKey].(string)
-		default:
-			logger.Warn("unknown identifier or unknown type",
-				zap.String("tag", tag),
-				zap.String("identifier_key", identifier),
-				zap.String("identifier", fmt.Sprint(msg.Message[cfg.identifierKey])))
-			if !r.sendMsg(ctx, msg) {
-				return
-			}
-			continue
-		}
-
-		key = receiverConcatKey{tag: tag, identifier: identifier}
-		if pmsg, ok = identifier2LastMsg[key]; !ok { // new identifier
-			// new line with incorrect format, skip
-			if !cfg.headRegexp.Match(log) {
-				logger.Debug("log not match head regexp and there is no identifier exists",
-					zap.String("identifier", identifier),
-					zap.String("identifier_key", cfg.identifierKey),
-					zap.ByteString("log", log))
-				if !r.sendMsg(ctx, msg) {
-					return
-				}
-				continue
-			}
-
-			// new line with correct format, set as first line
-			logger.Debug("got new identifier",
-				zap.String("indentifier", identifier),
-				zap.ByteString("log", log))
-			pmsg = r.pendingMsgPool.Get().(*PendingMsg)
-			pmsg.msg = msg
-			pmsg.lastT = time.Now()
-			identifier2LastMsg[key] = pmsg
-			continue
-		}
-
-		// replace exists msg in slot
-		if cfg.headRegexp.Match(log) || time.Now().Sub(pmsg.lastT) > r.ConcatorWait { // new line
-			logger.Debug("got new line",
-				zap.ByteString("log", log),
-				zap.String("tag", tag))
-
-			oldMsg = pmsg.msg
-			pmsg.msg = msg
-			pmsg.lastT = time.Now()
-			if !r.sendMsg(ctx, oldMsg) {
-				return
-			}
-			continue
-		}
-
-		// need to concat
-		logger.Debug("concat lines",
-			zap.String("tag", tag),
-			zap.ByteString("log", msg.Message[cfg.msgKey].([]byte)))
-		// pmsg.msg.Message[cfg.msgKey] =
-		// 	append(pmsg.msg.Message[cfg.msgKey].([]byte), '\n')
-		pmsg.msg.Message[cfg.msgKey] =
-			append(pmsg.msg.Message[cfg.msgKey].([]byte), msg.Message[cfg.msgKey].([]byte)...)
-		pmsg.lastT = time.Now()
-		msg.ExtIds = nil
-		r.msgPool.Put(msg) // recycle a receiver-owned tail
-
-		// too long to send
-		if len(pmsg.msg.Message[cfg.msgKey].([]byte)) >= r.ConcatMaxLen {
-			logger.Debug("too long to send", zap.String("msgKey", cfg.msgKey), zap.String("tag", tag))
-			msg = pmsg.msg
-			r.pendingMsgPool.Put(pmsg)
-			delete(identifier2LastMsg, key)
-			if !r.sendMsg(ctx, msg) {
-				return
-			}
-			continue
-		}
-	}
-
-	// do clean
-	for _, pmsg = range identifier2LastMsg {
-		if !r.sendMsg(ctx, pmsg.msg) {
-			return
-		}
-		r.pendingMsgPool.Put(pmsg)
-	}
+			return concatstate.Rule{MessageKey: cfg.msgKey, IdentifierKey: cfg.identifierKey, Head: cfg.headRegexp}, true
+		},
+		func(m *library.FluentMsg) bool { return r.sendMsg(ctx, m) },
+		func(m *library.FluentMsg) { r.msgPool.Put(m) })
 }

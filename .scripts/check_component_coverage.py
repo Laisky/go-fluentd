@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 FLOORS = {
     "internal/acceptorfilters": 75.0,
     "internal/controller": 45.0,
+    "internal/concatstate": 80.0,
     "internal/monitor": 95.0,
     "internal/postfilters": 90.0,
     "internal/recvs": 60.0,

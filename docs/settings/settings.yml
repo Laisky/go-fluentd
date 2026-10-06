@@ -61,6 +61,11 @@ settings:
   # Shared lifetime tag ceiling across legacy journal/dispatcher/producer.
   # Zero/omitted selects 64; valid explicit values are 1..4096.
   max_tags: 64
+  # Shared across receiver and post-journal multiline workers; zero uses defaults.
+  concat:
+    max_pending_messages: 1024
+    max_pending_bytes: 16777216
+
   # logger 配置的是我自己的 AlertPusher 插件，
   # https://github.com/Laisky/go-utils/blob/c7190c02426f233f7479eb66a94d21390653f9f1/logger.go#L301
   # 会自动通过 telegram 推送 Warn／Error 级别的日志

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gofluentd/internal/acceptorfilters"
+	"gofluentd/internal/concatstate"
 	"gofluentd/internal/monitor"
 	"gofluentd/internal/postfilters"
 	"gofluentd/internal/recvs"
@@ -25,8 +26,9 @@ import (
 
 // Controllor is an IoC that manage all roles
 type Controllor struct {
-	msgPool   *sync.Pool
-	tagBudget *TagBudget
+	msgPool      *sync.Pool
+	tagBudget    *TagBudget
+	concatBudget *concatstate.Budget
 }
 
 // NewControllor create new Controllor
@@ -80,6 +82,7 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 			switch t {
 			case "fluentd":
 				receivers = append(receivers, recvs.NewFluentdRecv(&recvs.FluentdRecvCfg{
+					ConcatBudget:           c.concatBudget,
 					Ingress:                fluentIngressConfig(name),
 					Name:                   name,
 					Addr:                   gutils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".addr"),
@@ -296,10 +299,11 @@ func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommit
 	// concatorFilter must in the front
 	if isEnableConcator {
 		fs = append([]tagfilters.TagFilterFactoryItf{tagfilters.NewConcatorFact(&tagfilters.ConcatorFactCfg{
-			NFork:   gutils.Settings.GetInt("settings.tag_filters.plugins.concator.config.nfork"),
-			LBKey:   gutils.Settings.GetString("settings.tag_filters.plugins.concator.config.lb_key"),
-			MaxLen:  gutils.Settings.GetInt("settings.tag_filters.plugins.concator.config.max_length"),
-			Plugins: tagfilters.LoadConcatorTagConfigs(env, gutils.Settings.Get("settings.tag_filters.plugins.concator.plugins").(map[string]interface{})),
+			ConcatBudget: c.concatBudget,
+			NFork:        gutils.Settings.GetInt("settings.tag_filters.plugins.concator.config.nfork"),
+			LBKey:        gutils.Settings.GetString("settings.tag_filters.plugins.concator.config.lb_key"),
+			MaxLen:       gutils.Settings.GetInt("settings.tag_filters.plugins.concator.config.max_length"),
+			Plugins:      tagfilters.LoadConcatorTagConfigs(env, gutils.Settings.Get("settings.tag_filters.plugins.concator.plugins").(map[string]interface{})),
 		})}, fs...)
 	}
 
@@ -531,6 +535,14 @@ func (c *Controllor) Run(parent context.Context) (runErr error) {
 	if err != nil {
 		return err
 	}
+	c.concatBudget, err = concatstate.NewBudget(gutils.Settings.GetInt("settings.concat.max_pending_messages"), gutils.Settings.GetInt64("settings.concat.max_pending_bytes"))
+	if err != nil {
+		return err
+	}
+	monitor.AddMetric("concatenation", func() map[string]interface{} {
+		n := c.concatBudget.Snapshot()
+		return map[string]interface{}{"pendingMessages": n.Entries, "pendingBytes": n.Bytes, "maxPendingMessages": n.MaxEntries, "maxPendingBytes": n.MaxBytes, "budgetRefusals": n.Refused}
+	})
 	cfg, err := ParseOTLPServiceConfig(gutils.Settings.Get("settings.otlp"))
 	if err != nil {
 		return err

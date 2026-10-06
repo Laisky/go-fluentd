@@ -1,0 +1,69 @@
+name: Verify PR36 review revisions
+on:
+  push:
+    branches: [codex/security-review-workspace-20261006]
+    paths: [.github/workflows/security-review-36-acceptance.yml]
+permissions:
+  contents: write
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GOTOOLCHAIN: local
+      GOMAXPROCS: '4'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify exact review patch
+        run: |
+          mkdir -p /tmp/review36
+          python3 - <<'PY'
+          from pathlib import Path
+          import gzip, base64, hashlib
+          encoded = Path('.github/review/pr36-review.b64').read_text().strip()
+          # Repair the identified three-character transport duplication only;
+          # the full decoded patch must still match the locally tested digest.
+          encoded = encoded.replace('TudRudRax', 'TudRax', 1)
+          patch = gzip.decompress(base64.b64decode(encoded, validate=True))
+          assert hashlib.sha256(patch).hexdigest() == '13f71d5dca401c601cc5dfe20e2918f8b4a71ac8ec09442d53a53c12bb67d43c'
+          Path('/tmp/review36/patch.diff').write_bytes(patch)
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 531bda03f839d09acf5208394b9b364e29045484
+          path: candidate
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: candidate/go.sum
+      - name: Apply and validate without changing the PR branch
+        working-directory: candidate
+        run: |
+          set -euo pipefail
+          git apply --check /tmp/review36/patch.diff
+          git apply /tmp/review36/patch.diff
+          git diff --check
+          go mod verify | tee /tmp/review36/modules.txt
+          go mod tidy -diff
+          python3 -m unittest discover -s tests/otlp_service -p 'test_*.py' -v
+          go test -mod=readonly -count=1 -timeout=180s -coverprofile=/tmp/review36/coverage.out ./... > /tmp/review36/tests.log 2>&1
+          python3 .scripts/check_component_coverage.py /tmp/review36/coverage.out
+          go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s ./... > /tmp/review36/race.log 2>&1
+          go build -mod=readonly -o /tmp/review36/go-fluentd .
+          python3 tests/otlp_service/run.py --binary /tmp/review36/go-fluentd --artifacts /tmp/review36/service > /tmp/review36/service.log 2>&1
+          python3 tests/combined_formats/run.py --binary /tmp/review36/go-fluentd --artifacts /tmp/review36/combined > /tmp/review36/combined.log 2>&1
+          git config user.name 'Laisky.Cai'
+          git config user.email 'github@laisky.com'
+          git add .github/workflows/otlp-service.yml docs/otlp-edge-storage.md go.mod internal/controller/otlp_capacity.go internal/controller/otlp_capacity_defaults_test.go internal/controller/otlp_journal.go internal/controller/otlp_service_test.go tests/combined_formats/run.py tests/otlp_collector/run.py tests/otlp_service/run.py tests/otlp_service/test_generation.py tests/loadtest/main.go tests/loadtest/cases/ci.json
+          git commit -m 'fix: validate finite-capacity recovery and checkpoint-aware acceptance'
+          git rev-parse HEAD | tee /tmp/review36/candidate-sha.txt
+          git push origin HEAD:refs/heads/codex/security-27-reviewed-20261006
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: pr36-reviewed-evidence
+          path: /tmp/review36
+          retention-days: 7
+          if-no-files-found: error

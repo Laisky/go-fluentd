@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 
 	"gofluentd/internal/controller"
 	"gofluentd/internal/otlphttp"
+	"gofluentd/internal/otlpstate"
 	"gofluentd/library/otlpwire"
 )
 
@@ -41,12 +43,19 @@ func TestOTLPJournalChild(t *testing.T) {
 		defer x.Close()
 		peers = append(peers, controller.OTLPDestination{ID: id, Send: x.Send})
 	}
-	p, e := controller.OpenOTLPJournal(context.Background(), controller.OTLPJournalConfig{Directory: root, Compress: os.Getenv("OTLP_LIFECYCLE_GZIP") == "true", ReplayBatch: 1}, peers)
+	p, e := controller.OpenOTLPJournal(context.Background(), lifecycleCrashJournalConfig(root, os.Getenv("OTLP_LIFECYCLE_GZIP") == "true"), peers)
 	if e != nil {
 		t.Fatal(e)
 	}
 	defer p.Close()
-	h, e := otlphttp.NewReceiver(otlphttp.ReceiverConfig{}, p.Admit)
+	h, e := otlphttp.NewReceiver(otlphttp.ReceiverConfig{}, func(ctx context.Context, request *otlpwire.Request) error {
+		err := p.Admit(ctx, request)
+		if err != nil {
+			// Synthetic test diagnostics only: no payload or credential output.
+			fmt.Fprintf(os.Stderr, "admission failed: %v; scan_refusals=%d capacity=%+v\n", err, p.ScanBudgetRejected(), p.CapacitySnapshot())
+		}
+		return err
+	})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -177,7 +186,8 @@ func TestOTLPJournalHTTPAcceptedSurvivesSIGKILL(t *testing.T) {
 					body, _ := io.ReadAll(resp.Body)
 					resp.Body.Close()
 					if resp.StatusCode != 200 || string(body) != "{}" {
-						t.Fatal("source not durably accepted", resp.StatusCode, string(body))
+						logs, _ := os.ReadFile(logPath)
+						t.Fatalf("source not durably accepted: %d %s\nchild diagnostics:\n%s", resp.StatusCode, body, logs)
 					}
 				}
 				if phase == 1 {
@@ -225,5 +235,46 @@ func TestOTLPJournalHTTPAcceptedSurvivesSIGKILL(t *testing.T) {
 				t.Fatalf("known outcomes resent after SIGKILL: A=%d B=%d C=%d", a.Load(), b.Load(), c.Load())
 			}
 		})
+	}
+}
+
+// This fixture tests the fate of a successfully accepted record after SIGKILL,
+// not the capacity of the production default 25-ms admission scan budget.
+// Do not retry/drop a refused trial or relax the durability assertions.
+func lifecycleCrashJournalConfig(root string, compressed bool) controller.OTLPJournalConfig {
+	return controller.OTLPJournalConfig{Directory: root, Compress: compressed, ReplayBatch: 1, StorageScanTimeout: time.Second}
+}
+
+func TestOTLPJournalHTTPScanRefusalIsNotDurableAcceptance(t *testing.T) {
+	cfg := lifecycleCrashJournalConfig(t.TempDir(), false)
+	if cfg.StorageScanTimeout != time.Second {
+		t.Fatal("crash fixture no longer separates admission scheduling from durability")
+	}
+	cfg.StorageScanMaxEntries = 1 // Intentionally force the independent metadata-budget refusal contract.
+	p, err := controller.OpenOTLPJournal(context.Background(), cfg, []controller.OTLPDestination{{ID: "home", Send: func(context.Context, otlpstate.Envelope) (otlpstate.Outcome, error) {
+		return otlpstate.Outcome{Kind: otlpstate.Accepted, HTTPStatus: 200}, nil
+	}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	var refusal error
+	h, err := otlphttp.NewReceiver(otlphttp.ReceiverConfig{}, func(ctx context.Context, r *otlpwire.Request) error { refusal = p.Admit(ctx, r); return refusal })
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest(http.MethodPost, "/v1/logs", strings.NewReader(`{"resourceLogs":[]}`))
+	r.Header.Set("Content-Type", otlpwire.JSON)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusServiceUnavailable || !errors.Is(refusal, controller.ErrOTLPJournalScanBudget) || p.ScanBudgetRejected() != 1 {
+		t.Fatalf("expected explicit pre-write refusal: status=%d err=%v scans=%d", w.Code, refusal, p.ScanBudgetRejected())
+	}
+	if p.CapacitySnapshot().PendingUpperBound != 0 {
+		t.Fatal("refusal allocated a journal identity")
+	}
+	report, err := p.ReplayBatch(context.Background())
+	if err != nil || report.Seen != 0 {
+		t.Fatalf("refusal admitted work: %+v %v", report, err)
 	}
 }

@@ -1,0 +1,44 @@
+name: Verify patch transport
+on:
+  push:
+    branches: [codex/security-review-workspace-20261006]
+    paths: [.github/workflows/security-review-transport-repair.yml]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - name: Verify exact reviewed bytes and publish
+        run: |
+          python3 - <<'PY'
+          import base64, gzip, hashlib, json, pathlib, subprocess
+          request = json.loads(pathlib.Path('.review/request.json').read_text())
+          assert request['base'] == 'bf914e136b8b6197da74c1d92b3fa98e34ec6eca'
+          assert request['branch'] == 'codex/security-25-diagnostics-20261006'
+          encoded = request['patch']
+          # Repair two transcription insertions, then verify the complete patch
+          # against its independently computed local SHA-256 before any write.
+          for old, new in [('WBycXdpdNmyuk', 'WBycXdpmyuk'), ('RCOVJJXvm', 'RCOVJXvm')]:
+              assert encoded.count(old) == 1
+              encoded = encoded.replace(old, new)
+          patch = gzip.decompress(base64.b64decode(encoded, validate=True))
+          assert hashlib.sha256(patch).hexdigest() == '275ab9a414ff92e6807e749ade01ef981b50d224580e5428bf9b76cf05c42c98'
+          def git(*args, **kwargs):
+              return subprocess.run(['git', *args], check=True, **kwargs)
+          git('checkout', '--detach', request['base'])
+          git('apply', '--index', '--whitespace=error', '-', input=patch)
+          git('diff', '--cached', '--check')
+          git('config', 'user.name', 'github-actions[bot]')
+          git('config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com')
+          git('commit', '-m', request['message'])
+          branch = request['branch']
+          git('push', f'--force-with-lease=refs/heads/{branch}:', 'origin', f'HEAD:refs/heads/{branch}')
+          git('rev-parse', 'HEAD')
+          git('rev-parse', 'HEAD^{tree}')
+          git('show', '--stat', '--oneline', 'HEAD')
+          PY

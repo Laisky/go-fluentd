@@ -20,6 +20,23 @@ def metric(sample, name):
     return float(value)
 
 
+def driver_args(case, label):
+    """Retain identical offered work; allow one explicit new capacity setting.
+
+    The frozen baseline predates this setting. Never silently change the old
+    binary, retry failures, or erase refused requests from capacity evidence.
+    """
+    if label not in ('baseline', 'candidate'):
+        raise ValueError('unknown trial label')
+    args = list(case['args'])
+    scan_timeout = case.get('candidate_storage_scan_timeout')
+    if label == 'candidate' and scan_timeout is not None:
+        if not isinstance(scan_timeout, str) or not scan_timeout:
+            raise ValueError('candidate scan timeout must be a duration string')
+        args.extend(['--storage-scan-timeout', scan_timeout])
+    return args
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--driver', type=Path, required=True)
@@ -42,7 +59,7 @@ def main():
                 for label in order:
                     target = a.out / f'{case["name"]}-{pair}-{label}'
                     cmd = [str(a.driver.resolve()), '--binary', str(getattr(a, label).resolve()),
-                           '--out', str(target), *case['args']]
+                           '--out', str(target), *driver_args(case, label)]
                     with (a.out / (target.name + '.log')).open('w') as log:
                         result = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, timeout=240)
                     row = {'case': case['name'], 'pair': pair, 'label': label,

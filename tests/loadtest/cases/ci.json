@@ -9,7 +9,8 @@
       "--concurrency",
       "64",
       "--delivery-window"
-    ]
+    ],
+    "candidate_storage_scan_timeout": "1s"
   },
   {
     "name": "mixed",
@@ -21,7 +22,8 @@
       "--concurrency",
       "32",
       "--delivery-window"
-    ]
+    ],
+    "candidate_storage_scan_timeout": "1s"
   },
   {
     "name": "gzip",
@@ -37,6 +39,7 @@
       "--wire-gzip",
       "--wal-gzip",
       "--delivery-window"
-    ]
+    ],
+    "candidate_storage_scan_timeout": "1s"
   }
 ]

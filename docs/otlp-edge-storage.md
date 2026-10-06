@@ -177,3 +177,12 @@ to older ACK-window burst measurements: default finite admission intentionally
 refuses an unbounded backlog. Capacity-refusal and scan-time-limit regressions
 remain separate; functional listener/interoperability fixtures use a one-second
 scan budget to avoid qualifying host scheduling latency under race instrumentation.
+
+The CI delivery campaign sets the candidate's `storage_scan_timeout` to `1s`
+explicitly. Its frozen historical baseline predates that setting and receives
+no unknown configuration key. Both revisions still receive identical payloads,
+concurrency and delivery-window pacing. The campaign manifest, command and
+configuration record this policy difference: results are **not** zero-refusal
+capacity claims for the production `25ms` default on shared runners. No failed
+trial is retried, dropped or accepted as a capacity sample; refusal/deadline
+behavior remains covered by the storage budget contract tests.

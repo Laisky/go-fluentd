@@ -15,6 +15,7 @@ import (
 )
 
 type DispatcherCfg struct {
+	TagBudget          *TagBudget
 	InChan             chan *library.FluentMsg
 	TagPipeline        tagfilters.TagPipelineItf
 	NFork, OutChanSize int
@@ -52,6 +53,7 @@ func NewDispatcher(cfg *DispatcherCfg) *Dispatcher {
 }
 
 func (d *Dispatcher) valid() error {
+	d.TagBudget = defaultTagBudget(d.TagBudget)
 	if d.NFork <= 0 {
 		d.NFork = 4
 		log.Logger.Info("reset n_fork", zap.Int("n_fork", d.NFork))
@@ -95,6 +97,11 @@ func (d *Dispatcher) Run(ctx context.Context) {
 					}
 				}
 
+				if err := d.TagBudget.Admit(msg.Tag); err != nil {
+					// Durable records remain in their original journal for replay.
+					msg.CompleteAcceptance(err)
+					continue
+				}
 				d.counter.Count()
 				if inChanForEachTagi, ok = d.tag2Concator.Load(msg.Tag); !ok {
 					// create new inChanForEachTag
@@ -154,7 +161,9 @@ func (d *Dispatcher) Run(ctx context.Context) {
 
 func (d *Dispatcher) registerMonitor() {
 	monitor.AddMetric("dispatcher", func() map[string]interface{} {
+		reserved, limit, rejected := d.TagBudget.Snapshot()
 		metrics := map[string]interface{}{
+			"reservedTags": reserved, "maxTags": limit, "tagAdmissionRejected": rejected,
 			"msgPerSec": d.counter.GetSpeed(),
 			"msgTotal":  d.counter.Get(),
 			"config": map[string]interface{}{

@@ -24,6 +24,7 @@ type senderCache struct {
 }
 
 type ProducerCfg struct {
+	TagBudget              *TagBudget
 	DistributeKey          string
 	InChan                 chan *library.FluentMsg
 	MsgPool                *sync.Pool
@@ -105,6 +106,7 @@ func NewProducer(cfg *ProducerCfg, senders ...senders.SenderItf) (*Producer, err
 }
 
 func (p *Producer) valid() error {
+	p.TagBudget = defaultTagBudget(p.TagBudget)
 	if p.NFork <= 0 {
 		p.NFork = 4
 		log.Logger.Info("reset nfork", zap.Int("nfork", 1))
@@ -121,7 +123,9 @@ func (p *Producer) valid() error {
 // registerMonitor bind monitor for producer
 func (p *Producer) registerMonitor() {
 	monitor.AddMetric("producer", func() map[string]interface{} {
+		reserved, limit, rejected := p.TagBudget.Snapshot()
 		metrics := map[string]interface{}{
+			"reservedTags": reserved, "maxTags": limit, "tagAdmissionRejected": rejected,
 			"config": map[string]interface{}{
 				"nfork":             p.NFork,
 				"discard_chan_size": p.DiscardChanSize,
@@ -250,6 +254,13 @@ func (p *Producer) Run(ctx context.Context) {
 				}
 
 				// log.Logger.Info(fmt.Sprintf("send msg %p", msg))
+				if err := p.TagBudget.Admit(msg.Tag); err != nil {
+					msg.CompleteAcceptance(err)
+					// No sender owns it yet. Recycle only the in-memory wrapper;
+					// do not route to success/commit, even for unsupported tags.
+					p.MsgPool.Put(msg)
+					continue
+				}
 				p.counter.Count()
 				if _, ok = p.unSupportedTags.Load(msg.Tag); ok {
 					log.Logger.Warn("do not produce since of unsupported tag", zap.String("tag", msg.Tag))

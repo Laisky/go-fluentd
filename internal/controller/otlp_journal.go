@@ -87,8 +87,8 @@ type OTLPJournal struct {
 	receiptsReclaimed                  atomic.Uint64
 	lastStorageBytes, lastStorageFiles atomic.Int64
 	reservedRecords                    atomic.Int64
-	capacityKnown                      bool  // walGate: recovered the first retained snapshot before admitting more
-	maxRecordReserve, maxRecordFiles   int64 // walGate: conservative high-water reserve until the prefix is released
+	capacityKnown                      atomic.Bool // recovered the first retained snapshot before admitting more
+	maxRecordReserve, maxRecordFiles   int64       // walGate: conservative high-water reserve until the prefix is released
 	// Narrow instance seams supplement real filesystem/crash behavior tests.
 	syncWAL  func() error
 	writeWAL func(*journal.Data) error
@@ -183,7 +183,7 @@ func OpenOTLPJournal(ctx context.Context, cfg OTLPJournalConfig, peers []OTLPDes
 	if p.generation.Version == 2 {
 		p.frontier = max(p.frontier, p.generation.ReleasedThrough)
 	}
-	p.capacityKnown = p.frontier == p.generation.ReleasedThrough
+	p.capacityKnown.Store(p.frontier == p.generation.ReleasedThrough)
 	p.reservedRecords.Store(p.frontier - p.generation.ReleasedThrough)
 	p.syncWAL, p.writeWAL = p.wal.Sync, p.wal.WriteData
 	p.scanWAL = p.storageBytes
@@ -312,7 +312,7 @@ func (p *OTLPJournal) Admit(ctx context.Context, request *otlpwire.Request) erro
 		return err
 	}
 	defer func() { <-p.walGate }()
-	if !p.capacityKnown {
+	if !p.capacityKnown.Load() {
 		p.storageRejected.Add(1)
 		return ErrOTLPJournalCapacity
 	}
@@ -430,7 +430,7 @@ func (p *OTLPJournal) ReplayBatch(ctx context.Context) (report OTLPBatchReport, 
 			}
 			gcErr := p.checkpointAndPrune(callCtx, cutoff)
 			if gcErr == nil {
-				p.capacityKnown = true
+				p.capacityKnown.Store(true)
 				p.reservedRecords.Store(p.frontier - p.generation.ReleasedThrough)
 				if p.frontier == p.generation.ReleasedThrough {
 					p.maxRecordReserve, p.maxRecordFiles = 0, 0

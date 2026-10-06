@@ -23,7 +23,8 @@ import urllib.error
 import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'otlp_service'))
-from run import Process, config, dump, payload, port, request, until
+from run import (Process, config, dump, payload, port, request, until,
+                 read_generation, assert_generation_progress, wait_capacity_ready)
 
 SIGNALS = ('logs', 'metrics', 'traces')
 CONTENT_TYPES = ('application/json', 'application/x-protobuf')
@@ -85,7 +86,8 @@ def audit(root: Path) -> dict:
         (1, 'start'), (1, 'stop'), (2, 'start'), (2, 'stop'), (3, 'start'), (3, 'stop')
     ], 'missing process lifecycle receipt'
     starts, stops = lifecycle[::2], lifecycle[1::2]
-    assert len({r['generation_sha256'] for r in starts}) == 1, 'generation changed across restart'
+    for before, after in zip(starts, starts[1:]):
+        assert_generation_progress(before['generation'], after['generation'])
     assert [r['exit_code'] for r in stops] == [-signal.SIGKILL, -signal.SIGKILL, 0], 'crash or graceful exit not observed'
     assert all(a['pid'] == b['pid'] for a, b in zip(starts, stops)), 'process receipt mismatch'
     submitted = records(root / 'source.jsonl')
@@ -270,8 +272,9 @@ def run_case(binary: Path, collector: Path, root: Path, sig: str, ct: str, wal_g
             applications.append(process)
             until(lambda: request(mgmt + '/health')[0] == 200, 'application not ready')
             assert process.p.poll() is None, 'application exited during startup'
+            wait_capacity_ready(mgmt)
             dump(root / 'lifecycle.jsonl', {'phase': number, 'event': 'start', 'pid': process.p.pid,
-                                            'generation_sha256': digest((root / 'state/generation.json').read_bytes())})
+                                            'generation': read_generation(root / 'state/generation.json')})
             return process
 
         def stop(process, number, kill=False):
@@ -306,17 +309,17 @@ def run_case(binary: Path, collector: Path, root: Path, sig: str, ct: str, wal_g
 
         send(1)
         until(lambda: any(r['hop'] == 'egress' and r['status'] == 503 for r in records(root / 'wire.jsonl')), 'no retry attempt')
-        generation = (root / 'state/generation.json').read_bytes()
+        generation = read_generation(root / 'state/generation.json')
         stop(app, 1, kill=True)
         gate.set()
         app = start(2)
         until(lambda: counters()['acceptedEnvelopes'] == 1, 'replay did not reach real Collector')
-        assert (root / 'state/generation.json').read_bytes() == generation, 'namespace changed'
+        assert_generation_progress(generation, read_generation(root / 'state/generation.json'))
         stop(app, 2, kill=True)
         app = start(3)
         send(2)
         until(lambda: counters()['acceptedEnvelopes'] == 1, 'new request did not reach real Collector')
-        assert (root / 'state/generation.json').read_bytes() == generation, 'namespace changed'
+        assert_generation_progress(generation, read_generation(root / 'state/generation.json'))
         stop(app, 3)
         for proc in reversed(collectors):
             proc.stop()

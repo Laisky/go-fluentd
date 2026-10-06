@@ -58,7 +58,7 @@ def audit(root):
         assert row['status'] == (200 if isinstance(want[row['key']], tuple) else 204), 'false source acceptance'
     lifecycle = json.loads((root / 'lifecycle.json').read_text())
     assert lifecycle['exits'] == [-signal.SIGKILL, 0], 'crash and shutdown not observed'
-    assert lifecycle['generations'][0] == lifecycle['generations'][1], 'OTLP generation changed'
+    otlp.assert_generation_progress(*lifecycle['generations'])
     seen, attempts = set(), set()
     rows = [json.loads(s) for s in (root / 'wire.jsonl').read_text().splitlines()]
     for row in rows:
@@ -152,7 +152,7 @@ def run_case(binary, root, compressed):
         settings['otlp'] = {
             'enabled': True, 'listen_addr': f'127.0.0.1:{listen}', 'storage_dir': str(root / 'otlp'),
             'bearer_token_env': 'COMBINED_OTLP_TOKEN', 'journal_gzip': compressed,
-            'replay_interval': '50ms', 'replay_batch': 16, 'destinations': [{
+            'storage_scan_timeout': '1s', 'replay_interval': '50ms', 'replay_batch': 16, 'destinations': [{
                 'id': 'isolated-otlp', **{s + '_endpoint': target + '/v1/' + s for s in SIGNALS},
                 'bearer_token_env': 'COMBINED_OTLP_TOKEN', 'gzip': True, 'max_attempts': 1, 'timeout': '2s'}]}
 
@@ -197,7 +197,8 @@ def run_case(binary, root, compressed):
 
     try:
         app.start()
-        generations.append(hashlib.sha256((root / 'otlp/generation.json').read_bytes()).hexdigest())
+        otlp.wait_capacity_ready(f'http://127.0.0.1:{app.port}')
+        generations.append(otlp.read_generation(root / 'otlp/generation.json'))
         with ThreadPoolExecutor(max_workers=10) as workers:
             list(workers.map(send, [k for k in expected() if k.endswith('-1')]))
         events.wait_for(lambda: observed(1, successful=False),
@@ -207,7 +208,8 @@ def run_case(binary, root, compressed):
         exits.append(process.returncode)
         gate.set()
         app.start()
-        generations.append(hashlib.sha256((root / 'otlp/generation.json').read_bytes()).hexdigest())
+        otlp.wait_capacity_ready(f'http://127.0.0.1:{app.port}')
+        generations.append(otlp.read_generation(root / 'otlp/generation.json'))
         events.wait_for(lambda: observed(1), 'combined WAL recovery did not progress')
         with ThreadPoolExecutor(max_workers=10) as workers:
             list(workers.map(send, [k for k in expected() if k.endswith('-2')]))

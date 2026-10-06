@@ -211,7 +211,9 @@ func (t *trial) config() map[string]any {
 		"journal":          map[string]any{"buf_dir_path": filepath.Join(t.root, "wal"), "buf_file_bytes": 64 << 20, "is_compress": o.Gzip, "committed_id_sec": 3600, "journal_out_chan_len": q, "child_data_chan_len": q, "child_id_chan_len": q, "commit_id_chan_len": q, "gc_inteval_sec": 3600, "group_commit_max_messages": o.Group},
 		"acceptor":         map[string]any{"async_out_chan_size": q, "sync_out_chan_size": q, "recvs": map[string]any{"plugins": recv}},
 		"acceptor_filters": map[string]any{"fork": 4, "out_buf_len": q}, "tag_filters": map[string]any{"internal_chan_size": q}, "dispatcher": map[string]any{"nfork": 4, "out_chan_size": q}, "post_filters": map[string]any{"fork": 4, "out_chan_size": q, "plugins": map[string]any{}}, "producer": map[string]any{"forks": 4, "discard_chan_size": q, "sender_inchan_size": q, "plugins": send},
-		"otlp": map[string]any{"max_concurrent": 128, "max_connections": 256, "enabled": true, "listen_addr": strings.TrimPrefix(t.ingest, "http://"), "storage_dir": filepath.Join(t.root, "otlp"), "bearer_token_env": "LOADTEST_TOKEN", "journal_gzip": o.Gzip, "replay_interval": o.Replay, "replay_batch": 64, "max_wal_bytes": 256 << 20, "destinations": dest},
+		// The local peer returns only a tiny status response. Reserve its actual
+		// configured response bound, not the generic 1 MiB production ceiling.
+		"otlp": map[string]any{"max_response_bytes": 256, "max_concurrent": 128, "max_connections": 256, "enabled": true, "listen_addr": strings.TrimPrefix(t.ingest, "http://"), "storage_dir": filepath.Join(t.root, "otlp"), "bearer_token_env": "LOADTEST_TOKEN", "journal_gzip": o.Gzip, "replay_interval": o.Replay, "replay_batch": 64, "max_wal_bytes": 256 << 20, "destinations": dest},
 	}}
 }
 func (t *trial) sink(w http.ResponseWriter, r *http.Request) {

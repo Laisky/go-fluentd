@@ -128,7 +128,9 @@ The protected management `/monitor` includes `otlpStorage` with:
   configured control values.
 
 `capacity` reports last inventoried `bytes`/`files` (possibly a lower bound on
-refusal) and `pending_upper_bound` (frontier minus durable released prefix). On
+refusal), `pending_upper_bound` (frontier minus durable released prefix), and
+`recovery_ready` (the initial retained-WAL reservation snapshot has completed).
+A ready recovery observation does not promise free admission capacity. On
 Linux/macOS, `filesystem_available` also qualifies current available-byte and
 free-inode observations; unsupported/failed filesystem queries report false,
 not a fabricated zero-capacity disk. These observations are not admission proofs.
@@ -167,3 +169,11 @@ repeated restart without identity reuse or re-export, exact byte/file headroom
 boundaries, concurrent admissions, finite quarantine retention and recovery
 before new admission. Sparse logical evidence sizes are used for byte rejection;
 no disk-fill experiment is needed.
+
+The paired CI delivery campaigns now use a bounded end-to-end delivery window
+and a 256-byte response cap matching their synthetic peers. Both baseline and
+candidate receive the same settings. Their results are not directly comparable
+to older ACK-window burst measurements: default finite admission intentionally
+refuses an unbounded backlog. Capacity-refusal and scan-time-limit regressions
+remain separate; functional listener/interoperability fixtures use a one-second
+scan budget to avoid qualifying host scheduling latency under race instrumentation.

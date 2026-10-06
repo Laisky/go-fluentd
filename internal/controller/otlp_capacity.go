@@ -14,7 +14,7 @@ func defaultOTLPStorageBytes(wal int64) int64 {
 	return max(512<<20, 2*wal)
 }
 
-// CapacitySnapshot is observational, not a filesystem/quota guarantee. Bytes and
+// OTLPCapacitySnapshot is observational, not a filesystem/quota guarantee. Bytes and
 // Files are the last admission inventory (possibly a lower bound on rejection).
 // PendingUpperBound includes accepted IDs behind an unresolved prefix. This
 // deliberately trades available capacity for avoiding a per-envelope RAM map.
@@ -22,6 +22,7 @@ type OTLPCapacitySnapshot struct {
 	Bytes                    int64  `json:"bytes"`
 	Files                    int64  `json:"files"`
 	PendingUpperBound        int64  `json:"pending_upper_bound"`
+	RecoveryReady            bool   `json:"recovery_ready"`
 	FilesystemAvailableBytes uint64 `json:"filesystem_available_bytes"`
 	FilesystemFreeInodes     uint64 `json:"filesystem_free_inodes"`
 	FilesystemAvailable      bool   `json:"filesystem_available"`
@@ -29,7 +30,11 @@ type OTLPCapacitySnapshot struct {
 
 func (p *OTLPJournal) CapacitySnapshot() OTLPCapacitySnapshot {
 	bytes, inodes, ok := otlpFilesystemCapacity(p.cfg.Directory)
-	return OTLPCapacitySnapshot{p.lastStorageBytes.Load(), p.lastStorageFiles.Load(), p.reservedRecords.Load(), bytes, inodes, ok}
+	return OTLPCapacitySnapshot{
+		Bytes: p.lastStorageBytes.Load(), Files: p.lastStorageFiles.Load(),
+		PendingUpperBound: p.reservedRecords.Load(), RecoveryReady: p.capacityKnown.Load(),
+		FilesystemAvailableBytes: bytes, FilesystemFreeInodes: inodes, FilesystemAvailable: ok,
+	}
 }
 
 // Reserve every not-checkpointed ID for a replay copy and all frozen destination

@@ -37,7 +37,10 @@ import (
 func serviceConfig(t *testing.T, endpoint string) controller.OTLPServiceConfig {
 	t.Helper()
 	t.Setenv("TEST_OTLP_INGRESS_TOKEN", "private-test-ingress")
-	return controller.OTLPServiceConfig{Enabled: true, ListenAddress: "127.0.0.1:0", StorageDirectory: t.TempDir(), BearerTokenEnv: "TEST_OTLP_INGRESS_TOKEN", ReplayInterval: 10 * time.Millisecond, Destinations: []controller.OTLPServiceDestination{{ID: "archive", LogsEndpoint: endpoint + "/v1/logs", MetricsEndpoint: endpoint + "/v1/metrics", TracesEndpoint: endpoint + "/v1/traces", MaxAttempts: 1}}}
+	// This suite checks listener/durability semantics, not a hosted runner's
+	// ability to finish a metadata scan in 25 ms under race instrumentation.
+	// Dedicated scan-budget tests exercise refusal with the production limits.
+	return controller.OTLPServiceConfig{StorageScanTimeout: time.Second, Enabled: true, ListenAddress: "127.0.0.1:0", StorageDirectory: t.TempDir(), BearerTokenEnv: "TEST_OTLP_INGRESS_TOKEN", ReplayInterval: 10 * time.Millisecond, Destinations: []controller.OTLPServiceDestination{{ID: "archive", LogsEndpoint: endpoint + "/v1/logs", MetricsEndpoint: endpoint + "/v1/metrics", TracesEndpoint: endpoint + "/v1/traces", MaxAttempts: 1}}}
 }
 func serviceStart(t *testing.T, c controller.OTLPServiceConfig) *controller.OTLPService {
 	t.Helper()

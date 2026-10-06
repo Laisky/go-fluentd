@@ -297,6 +297,9 @@ func TestRegressionOTLPCapacityRecoveryPrecedesNewAdmission(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer q.Close()
+	if q.CapacitySnapshot().RecoveryReady {
+		t.Fatal("retained state reported ready before reservation recovery")
+	}
 	for i := 0; i < 3; i++ {
 		if e := q.Admit(context.Background(), req); !errors.Is(e, ErrOTLPJournalCapacity) || q.frontier != 3 || q.Err() != nil {
 			t.Fatal("unrecovered reservation admitted new work", e)
@@ -306,6 +309,9 @@ func TestRegressionOTLPCapacityRecoveryPrecedesNewAdmission(t *testing.T) {
 		}
 	}
 	capacityDrain(t, q)
+	if !q.CapacitySnapshot().RecoveryReady {
+		t.Fatal("completed reservation recovery did not become ready")
+	}
 	if err = q.Admit(context.Background(), req); err != nil {
 		t.Fatal("recovered admission refused", err)
 	}

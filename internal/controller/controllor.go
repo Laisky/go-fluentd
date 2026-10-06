@@ -442,6 +442,7 @@ func (c *Controllor) initSenders(env string) []senders.SenderItf {
 			case "es":
 				ss = append(ss, senders.NewElasticSearchSender(&senders.ElasticSearchSenderCfg{
 					Name:                 name,
+					MaxResponseBytes:     gutils.Settings.GetInt64("settings.producer.plugins." + name + ".max_response_byte"),
 					BatchSize:            gutils.Settings.GetInt("settings.producer.plugins." + name + ".msg_batch_size"),
 					Addr:                 gutils.Settings.GetString("settings.producer.plugins." + name + ".addr"),
 					MaxWait:              gutils.Settings.GetDuration("settings.producer.plugins."+name+".max_wait_sec") * time.Second,

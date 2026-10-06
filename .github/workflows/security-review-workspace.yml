@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 5384f555ca055996a62cc40bd13f96824c8dd26d
+          ref: 531bda03f839d09acf5208394b9b364e29045484
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
@@ -27,16 +27,18 @@ jobs:
           git archive HEAD | tar -x -C /tmp/review
           cd /tmp/review
           go mod vendor
-          printf 'source=%s\n' 5384f555ca055996a62cc40bd13f96824c8dd26d > REVIEW_SOURCE.txt
+          printf 'source=%s\n' 531bda03f839d09acf5208394b9b364e29045484 > REVIEW_SOURCE.txt
           go version >> REVIEW_SOURCE.txt
           tar -czf /tmp/review-source.tar.gz .
-          tar -czf /tmp/review-toolchain.tar.gz -C "$(go env GOROOT)" .
+          cd "$GITHUB_WORKSPACE"
+          git fetch origin e174aa4741826290c600a415c931fb7130b46d32 --depth=1
+          git archive e174aa4741826290c600a415c931fb7130b46d32 > /tmp/review-baseline.tar
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: offline-security-review
+          name: offline-security-review-recovered
           path: |
             /tmp/review-source.tar.gz
-            /tmp/review-toolchain.tar.gz
-          retention-days: 1
+            /tmp/review-baseline.tar
+          retention-days: 2
           compression-level: 0
           if-no-files-found: error

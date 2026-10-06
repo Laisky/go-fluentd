@@ -1,0 +1,90 @@
+name: Verify and publish OTLP preflight
+on:
+  push:
+    branches: [codex/security-review-workspace-20261006]
+    paths: [.github/workflows/security-review-28-publish.yml]
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GOMAXPROCS: '2'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Recover and verify source transport
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/issue28-evidence
+          gh api repos/Laisky/go-fluentd/git/blobs/340c539dcce9f8111680a7f7df017efd978f0c26 > /tmp/transport.json
+          python3 - <<'PY'
+          import base64, hashlib, json, pathlib, zlib
+          obj = json.loads(pathlib.Path('/tmp/transport.json').read_text())
+          wire = ''.join(obj['content'].split())
+          # Correct two identified transport transcription errors. No source is
+          # applied unless the entire decompressed patch matches its local hash.
+          for old, new in [('L+MxfORJJSMc', 'L+MxfORJSMc'), ('A5qDcflRsm', 'A5qDcflrRsm')]:
+              assert wire.count(old) == 1, 'unexpected transport'
+              wire = wire.replace(old, new)
+          data = zlib.decompress(base64.b64decode(wire, validate=True))
+          assert hashlib.sha256(data).hexdigest() == '77e1ed670d918ff8b7ce1407294ff5b71b22848e5e6d22305d36c5a934572d30'
+          pathlib.Path('/tmp/issue28-evidence/source.patch').write_bytes(data)
+          PY
+          git fetch --no-tags origin 01051874665cef0dddf06b358e3a9bd02821ce1c
+          git checkout --detach 01051874665cef0dddf06b358e3a9bd02821ce1c
+          git apply --check /tmp/issue28-evidence/source.patch
+          git apply /tmp/issue28-evidence/source.patch
+          git add .scripts docs internal library
+          test "$(git write-tree)" = ccfb41a2515b82162eddea8c0168f53e77b69393
+          git worktree add --detach /tmp/issue28-base 01051874665cef0dddf06b358e3a9bd02821ce1c
+          cp library/otlpwire/preflight_regression_test.go /tmp/issue28-base/library/otlpwire/
+      - name: Reproduce six allocation assertions on frozen baseline
+        run: |
+          set -euo pipefail
+          cd /tmp/issue28-base
+          go test -mod=readonly -count=1 -timeout=180s -run '^TestRegressionOTLPItemBoundaryPayloadOwnership$' ./library/otlpwire > /tmp/issue28-evidence/baseline-positive.log 2>&1
+          set +e
+          go test -mod=readonly -count=1 -timeout=180s -run '^TestRegressionOTLPRejectsBeforeMaterialization$' -v ./library/otlpwire > /tmp/issue28-evidence/red.log 2>&1
+          rc=$?
+          set -e
+          test "$rc" -eq 1
+          test "$(grep -c OTLP_PREDECODE_REGRESSION /tmp/issue28-evidence/red.log)" -eq 6
+          test "$(grep -c -- '--- FAIL: TestRegressionOTLPRejectsBeforeMaterialization/' /tmp/issue28-evidence/red.log)" -eq 6
+          cat /tmp/issue28-evidence/red.log
+      - name: Accept unchanged candidate and preserve regression evidence
+        run: |
+          set -euo pipefail
+          go mod verify
+          go mod download go.opentelemetry.io/collector/pdata
+          python3 .scripts/generate_otlp_preflight_schema.py --check | tee /tmp/issue28-evidence/schema.log
+          go test -mod=readonly -count=1 -timeout=180s -coverprofile=/tmp/issue28-evidence/coverage.out ./... | tee /tmp/issue28-evidence/green.log
+          python3 .scripts/check_component_coverage.py /tmp/issue28-evidence/coverage.out | tee /tmp/issue28-evidence/coverage.log
+          go vet -mod=readonly ./...
+          go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s ./library/otlpwire ./internal/otlphttp ./internal/controller | tee /tmp/issue28-evidence/race.log
+          go test -mod=readonly -run '^$' -fuzz '^FuzzOTLPPreflight$' -fuzztime=20s -parallel=2 ./library/otlpwire | tee /tmp/issue28-evidence/fuzz.log
+          go test -mod=readonly -run '^$' -bench '^BenchmarkOTLPPreflightReject$' -benchtime=100x -benchmem ./library/otlpwire | tee /tmp/issue28-evidence/bench.log
+          git diff --exit-code
+          test "$(git write-tree)" = ccfb41a2515b82162eddea8c0168f53e77b69393
+      - name: Publish new review branch only after successful acceptance
+        run: |
+          set -euo pipefail
+          git config user.name 'Laisky.Cai'
+          git config user.email 'github@laisky.com'
+          git commit -m 'fix: preflight OTLP cardinality and structure before allocation'
+          git rev-parse HEAD | tee /tmp/issue28-evidence/commit.txt
+          git rev-parse HEAD^{tree} > /tmp/issue28-evidence/tree.txt
+          test -z "$(git ls-remote --heads origin codex/security-28-preflight-20261006)"
+          git push origin HEAD:refs/heads/codex/security-28-preflight-20261006
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: issue28-red-green-evidence
+          path: /tmp/issue28-evidence
+          retention-days: 14
+          if-no-files-found: error

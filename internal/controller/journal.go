@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -29,6 +29,7 @@ const (
 )
 
 type JournalCfg struct {
+	TagBudget *TagBudget
 	// GroupCommitMaxMessages bounds reliable groups; 0 or 1 keeps per-record Sync.
 	GroupCommitMaxMessages int
 	BufDirPath             string
@@ -85,10 +86,15 @@ func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 	j.commitChan = make(chan *library.FluentMsg, cfg.CommitIDChanLen)
 	j.outChan = make(chan *library.FluentMsg, cfg.JournalOutChanLen)
 
-	j.initLegacyJJ(ctx)
+	ownedCtx, cancel := context.WithCancel(ctx)
+	if err := j.initLegacyJJ(ownedCtx); err != nil {
+		cancel()
+		j.closeJournalDirectories(ownedCtx)
+		log.Logger.Panic("open retained journals", zap.Error(err))
+	}
 	j.registerMonitor()
-	j.startCommitRunner(ctx)
-	go j.closeJournalDirectories(ctx)
+	j.startCommitRunner(ownedCtx)
+	go func() { defer cancel(); j.closeJournalDirectories(ownedCtx) }()
 
 	log.Logger.Info("new journal",
 		zap.String("buf_dir_path", j.BufDirPath),
@@ -103,6 +109,7 @@ func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 }
 
 func (j *Journal) valid() error {
+	j.TagBudget = defaultTagBudget(j.TagBudget)
 	if j.GroupCommitMaxMessages < 0 || j.GroupCommitMaxMessages > maximumGroupCommitMaxMessages {
 		return fmt.Errorf("group_commit_max_messages must be between 0 and %d", maximumGroupCommitMaxMessages)
 	}
@@ -187,22 +194,38 @@ func (j *Journal) CloseTag(tag string) error {
 }
 
 // initLegacyJJ process existed legacy data and ids
-func (j *Journal) initLegacyJJ(ctx context.Context) {
-	files, err := ioutil.ReadDir(j.BufDirPath)
+func (j *Journal) initLegacyJJ(ctx context.Context) error {
+	dir, err := os.Open(j.BufDirPath)
 	if err != nil {
-		log.Logger.Error("try to read dir of journal",
-			zap.String("directory", j.BufDirPath),
-			zap.Error(err))
-		return
+		return err
 	}
-
-	for _, dir := range files {
-		if dir.IsDir() {
-			if err := j.createJournalRunner(ctx, dir.Name()); err != nil {
-				log.Logger.Panic("open retained journal", zap.Error(err))
-			}
+	defer dir.Close()
+	// Bound names and scan work before allocating any per-tag backend. The root
+	// entry ceiling includes non-directories; do not scan arbitrary junk forever.
+	entries, err := dir.ReadDir(j.TagBudget.limit + 1)
+	if err != nil && err != io.EOF {
+		return err
+	}
+	if len(entries) > j.TagBudget.limit {
+		j.TagBudget.rejected.Add(1)
+		return ErrLegacyTagLimit
+	}
+	tags := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			tags = append(tags, entry.Name())
 		}
 	}
+	sort.Strings(tags)
+	if err := j.TagBudget.admitRetained(tags); err != nil {
+		return err
+	}
+	for _, tag := range tags {
+		if err := j.createJournalRunner(ctx, tag); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // LoadMaxID load the max committed id from journal
@@ -342,6 +365,9 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) error {
 	}
 
 	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := j.TagBudget.Admit(tag); err != nil {
 		return err
 	}
 	directory, path, err := openJournalDirectory(j.BufDirPath, tag)
@@ -502,7 +528,16 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 					return
 				}
 
-				j.outChan <- msg
+				if err := j.TagBudget.Admit(msg.Tag); err != nil {
+					msg.CompleteAcceptance(err)
+					j.MsgPool.Put(msg)
+					continue
+				}
+				select {
+				case j.outChan <- msg:
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
 	}()
@@ -529,7 +564,9 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 			log.Logger.Debug("try to dump msg", zap.String("tag", msg.Tag))
 			if jji, ok = j.tag2JJInchanMap.Load(msg.Tag); !ok {
 				if err := j.createJournalRunner(ctx, msg.Tag); err != nil {
-					log.Logger.Error("create message journal", zap.Error(err))
+					if !errors.Is(err, ErrLegacyTagLimit) && !errors.Is(err, ErrLegacyTagInvalid) {
+						log.Logger.Error("create message journal", zap.Error(err))
+					}
 					msg.CompleteAcceptance(err)
 					j.MsgPool.Put(msg)
 					continue
@@ -634,7 +671,9 @@ func (j *Journal) startCommitRunner(ctx context.Context) {
 
 func (j *Journal) registerMonitor() {
 	monitor.AddMetric("journal", func() map[string]interface{} {
+		reserved, limit, rejected := j.TagBudget.Snapshot()
 		result := map[string]interface{}{
+			"reservedTags": reserved, "maxTags": limit, "tagAdmissionRejected": rejected,
 			"config": map[string]interface{}{
 				"compress":             j.IsCompress,
 				"buf_dir_path":         j.BufDirPath,

@@ -25,7 +25,8 @@ import (
 
 // Controllor is an IoC that manage all roles
 type Controllor struct {
-	msgPool *sync.Pool
+	msgPool   *sync.Pool
+	tagBudget *TagBudget
 }
 
 // NewControllor create new Controllor
@@ -48,6 +49,7 @@ func NewControllor() (c *Controllor) {
 
 func (c *Controllor) initJournal(ctx context.Context) *Journal {
 	return NewJournal(ctx, &JournalCfg{
+		TagBudget:                 c.tagBudget,
 		GroupCommitMaxMessages:    gutils.Settings.GetInt("settings.journal.group_commit_max_messages"),
 		MsgPool:                   c.msgPool,
 		BufDirPath:                gutils.Settings.GetString("settings.journal.buf_dir_path"),
@@ -312,6 +314,7 @@ func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommit
 
 func (c *Controllor) initDispatcher(ctx context.Context, waitDispatchChan chan *library.FluentMsg, tagPipeline *tagfilters.TagPipeline) *Dispatcher {
 	dispatcher := NewDispatcher(&DispatcherCfg{
+		TagBudget:   c.tagBudget,
 		InChan:      waitDispatchChan,
 		TagPipeline: tagPipeline,
 		NFork:       gutils.Settings.GetInt("settings.dispatcher.nfork"),
@@ -485,6 +488,7 @@ func (c *Controllor) initProducer(env string, waitProduceChan chan *library.Flue
 	hasher := xxhash.New()
 	p, err := NewProducer(
 		&ProducerCfg{
+			TagBudget:       c.tagBudget,
 			DistributeKey:   hex.EncodeToString(hasher.Sum([]byte((gutils.Settings.GetString("host") + "-" + gutils.Settings.GetString("env"))))),
 			InChan:          waitProduceChan,
 			MsgPool:         c.msgPool,
@@ -522,6 +526,11 @@ func (c *Controllor) runHeartBeat(ctx context.Context) {
 func (c *Controllor) Run(parent context.Context) (runErr error) {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
+	var err error
+	c.tagBudget, err = NewTagBudget(gutils.Settings.GetInt("settings.max_tags"))
+	if err != nil {
+		return err
+	}
 	cfg, err := ParseOTLPServiceConfig(gutils.Settings.Get("settings.otlp"))
 	if err != nil {
 		return err

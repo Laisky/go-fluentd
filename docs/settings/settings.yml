@@ -58,6 +58,9 @@ consts:
 # ⚠️: For the same field that appears in different places, it will only be commented once,
 #     so if you encounter an uncommented field, you can search up to see the comments in other places
 settings:
+  # Shared lifetime tag ceiling across legacy journal/dispatcher/producer.
+  # Zero/omitted selects 64; valid explicit values are 1..4096.
+  max_tags: 64
   # logger 配置的是我自己的 AlertPusher 插件，
   # https://github.com/Laisky/go-utils/blob/c7190c02426f233f7479eb66a94d21390653f9f1/logger.go#L301
   # 会自动通过 telegram 推送 Warn／Error 级别的日志

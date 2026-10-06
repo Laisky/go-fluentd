@@ -32,7 +32,7 @@ effective tags complete the existing acceptance receipt with an error and are
 not forwarded or acknowledged as durable. Symlink entries are left untouched;
 they are not followed as retained child journals.
 
-Pending issues remain separate: this change does not cap tag cardinality (#31),
-alter existing-directory/segment permission policy (#32), or change OTLP and
-multiline budgets. Each admitted child retains one additional directory handle;
+The shared lifetime tag ceiling is documented in [legacy tag limits](legacy-tag-limits.md).
+Existing-directory/segment permission policy (#32), OTLP and multiline budgets
+remain separate. Each admitted child retains one additional directory handle;
 the shared journal shutdown worker releases handles after backend shutdown.

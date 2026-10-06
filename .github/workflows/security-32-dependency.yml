@@ -1,0 +1,59 @@
+name: Resolve private journal dependency
+on:
+  push:
+    branches: [codex/security-resume-20261006-2149]
+    paths: [.github/workflows/security-32-dependency.yml]
+permissions:
+  contents: read
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Resolve immutable reviewed commit without unrelated upgrades
+        run: |
+          set -euo pipefail
+          mkdir /tmp/journal32-dependency
+          git checkout --detach 16821af0e0101f41500edff389ba5111a7a779e7
+          go list -mod=readonly -m -json all > /tmp/journal32-dependency/before.json
+          go list -m -json github.com/Laisky/go-journal@a7f7377c4a3dfe3e76244412c082e1e76e121b44 > /tmp/journal32-dependency/selected.json
+          version=$(python -c 'import json;print(json.load(open("/tmp/journal32-dependency/selected.json"))["Version"])')
+          go mod edit -require=github.com/Laisky/go-journal@"$version"
+          go mod tidy
+          go list -mod=readonly -m -json all > /tmp/journal32-dependency/after.json
+          python - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('/tmp/journal32-dependency')
+          def graph(name):
+              d=json.JSONDecoder();s=(p/name).read_text();out={}
+              while s.strip():
+                  m,n=d.raw_decode(s.lstrip());s=s.lstrip()[n:]
+                  assert not m.get('Replace') and not m.get('Error')
+                  out[m['Path']]=m.get('Version','')
+              return out
+          a,b=graph('before.json'),graph('after.json')
+          assert a.keys()==b.keys()
+          assert [k for k in a if a[k]!=b[k]]==['github.com/Laisky/go-journal']
+          PY
+          go mod verify
+          go mod tidy -diff
+          cp go.mod go.sum /tmp/journal32-dependency/
+          git diff -- go.mod go.sum > /tmp/journal32-dependency/manifests.patch
+          go mod vendor
+          tar -czf /tmp/journal32-dependency/vendor.tar.gz vendor
+          sha256sum /tmp/journal32-dependency/vendor.tar.gz > /tmp/journal32-dependency/vendor.sha256
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: private-journal-immutable-dependency
+          path: /tmp/journal32-dependency
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: error

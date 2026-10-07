@@ -24,8 +24,6 @@ jobs:
       - name: Exact source and original stress gate
         env:
           REVISION: ${{ matrix.revision }}
-          GOGC: '10'
-          GOMAXPROCS: '2'
         run: |
           set -euo pipefail
           git checkout --detach "$REVISION"
@@ -33,9 +31,9 @@ jobs:
           mkdir -p /tmp/gc-evidence
           git rev-parse HEAD > /tmp/gc-evidence/source.txt
           go version >> /tmp/gc-evidence/source.txt
-          sha256sum library/*regression_test.go .scripts/run_msgp_gc_regression.py > /tmp/gc-evidence/source.sha256
+          sha256sum internal/senders/*gc*test.go .scripts/run_msgpack_gc.py > /tmp/gc-evidence/source.sha256
           go mod verify
-          python3 .scripts/run_msgp_gc_regression.py /tmp/gc-evidence/test.json 2>&1 | tee /tmp/gc-evidence/gate.log
+          python3 .scripts/run_msgpack_gc.py /tmp/gc-evidence/test.jsonl 2>&1 | tee /tmp/gc-evidence/gate.log
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:

@@ -1,0 +1,138 @@
+diff --git a/README.md b/README.md
+index 69e7ec0..7892a85 100644
+--- a/README.md
++++ b/README.md
+@@ -93 +93 @@ Run this in the repository root and leave it running:
+-mkdir -p var/go-fluentd/journal
++mkdir -p -m 700 var/go-fluentd/journal
+@@ -104 +104,4 @@ working directory's `var/go-fluentd/journal`. It uses a public **demo-only** sal
+-Do not run two processes against the same journal directory.
++Do not run two processes against the same journal directory. Existing state must
++already satisfy the [private storage policy](docs/legacy-journal-permissions.md):
++service-owned `0700` directories and `0600` regular, single-link files. `mkdir -p`
++does not migrate existing permissions; stop writers and review old state first.
+@@ -170 +173 @@ docker build -f .docker/Dockerfile -t go-fluentd:local .
+-mkdir -p var/go-fluentd/journal
++mkdir -p -m 700 var/go-fluentd/journal
+@@ -185,2 +188,2 @@ Reuse the send/check commands above, then stop with `docker stop go-fluentd-demo
+-The host `var` directory survives container removal. The UID/GID must be able to
+-write it; avoid making it world-writable. The image already has an entrypoint, so
++The host `var` directory survives container removal. The effective service UID must own the `0700` journal root and tag directories;
++segment and lock files must be `0600`. Do not make state group/world-accessible. The image already has an entrypoint, so
+@@ -202 +205 @@ Those larger configurations are references, not safe production defaults.
+-| `journal.buf_dir_path` | Durable state directory. Assign one writable persistent directory per process; protect it from cleanup jobs and concurrent writers. |
++| `journal.buf_dir_path` | Durable state directory. Use a service-owned `0700` root; tag directories are `0700`, files `0600`. Existing unsafe state is refused; see [migration](docs/legacy-journal-permissions.md). Protect it from cleanup jobs and concurrent writers. |
+diff --git a/docs/legacy-journal-containment.md b/docs/legacy-journal-containment.md
+index 73cfb47..ecf19b0 100644
+--- a/docs/legacy-journal-containment.md
++++ b/docs/legacy-journal-containment.md
+@@ -36,2 +36,3 @@ The shared lifetime tag ceiling is documented in [legacy tag limits](legacy-tag-
+-Existing-directory/segment permission policy (#32), OTLP and multiline budgets
+-remain separate. Each admitted child retains one additional directory handle;
++The [private storage policy](legacy-journal-permissions.md) also checks root/child
++ownership, directory modes and retained file types/modes before opening the backend.
++OTLP and multiline budgets remain separate. Each admitted child retains one additional directory handle;
+diff --git a/docs/quickstart.md b/docs/quickstart.md
+index 0be17b2..6303f04 100644
+--- a/docs/quickstart.md
++++ b/docs/quickstart.md
+@@ -36 +36 @@ tag and active environment when adding a destination.
+-| Docker permission error | Create the host `var/go-fluentd/journal` directory as the user named by `--user`; check bind-mount ownership. Do not use world-writable state as a workaround. |
++| Docker permission error | Create the host `var/go-fluentd/journal` directory with `mkdir -p -m 700` as the user named by `--user`; existing directories/files need the explicit [private storage migration](legacy-journal-permissions.md). Do not use group/world-writable state as a workaround. |
+diff --git a/docs/settings/quickstart.yml b/docs/settings/quickstart.yml
+index eda1701..49851c5 100644
+--- a/docs/settings/quickstart.yml
++++ b/docs/settings/quickstart.yml
+@@ -4,0 +5 @@ settings:
++    # Existing state must be owned by the service UID: directories 0700, files 0600.
+diff --git a/docs/settings/settings.yml b/docs/settings/settings.yml
+index a974473..f60dad3 100644
+--- a/docs/settings/settings.yml
++++ b/docs/settings/settings.yml
+@@ -595 +595,2 @@ settings:
+-    # 文件夹地址
++    # Service-owned private root/tag directories (0700), regular single-link files (0600).
++    # Existing unsafe state is refused, not chmodded/deleted; see docs/legacy-journal-permissions.md.
+diff --git a/go.mod b/go.mod
+index 3390231..2b1a92f 100644
+--- a/go.mod
++++ b/go.mod
+@@ -7 +7 @@ require (
+-	github.com/Laisky/go-journal v1.1.7-0.20260928201541-ad049272dbea
++	github.com/Laisky/go-journal v1.1.7-0.20261006223601-a7f7377c4a3d
+diff --git a/go.sum b/go.sum
+index 60f765b..e21cdb3 100644
+--- a/go.sum
++++ b/go.sum
+@@ -9,2 +9,2 @@ github.com/Laisky/go-chaining v0.0.0-20180507092046-43dcdc5a21be/go.mod h1:1mdza
+-github.com/Laisky/go-journal v1.1.7-0.20260928201541-ad049272dbea h1:Ozl/B/Z6UKz+pwKjOFmmi1Npvg7/XsVoP3p8BrViqJA=
+-github.com/Laisky/go-journal v1.1.7-0.20260928201541-ad049272dbea/go.mod h1:8wjz86nBGSDCpnS/zpdNY/jkz48qUz24/UDszLbbUsY=
++github.com/Laisky/go-journal v1.1.7-0.20261006223601-a7f7377c4a3d h1:ZtyqGt0Jy2jvTNAQ0jY0KKIvzRO9aX/N9T0d62oZdao=
++github.com/Laisky/go-journal v1.1.7-0.20261006223601-a7f7377c4a3d/go.mod h1:8wjz86nBGSDCpnS/zpdNY/jkz48qUz24/UDszLbbUsY=
+diff --git a/internal/controller/journal.go b/internal/controller/journal.go
+index 2b0f330..53704fd 100644
+--- a/internal/controller/journal.go
++++ b/internal/controller/journal.go
+@@ -152 +152 @@ func (j *Journal) valid() error {
+-	if err := os.MkdirAll(j.BufDirPath, os.ModePerm); err != nil {
++	if err := prepareLegacyJournalRoot(j.BufDirPath); err != nil {
+diff --git a/internal/controller/journal_components_test.go b/internal/controller/journal_components_test.go
+index be9b7b0..948d3a4 100644
+--- a/internal/controller/journal_components_test.go
++++ b/internal/controller/journal_components_test.go
+@@ -14,0 +15,11 @@ import (
++// Generic t.TempDir numbered children are not required to be 0700. Journal
++// behavior fixtures explicitly opt into the production private-root policy.
++func privateJournalTestDir(t *testing.T) string {
++	t.Helper()
++	dir, err := os.MkdirTemp(t.TempDir(), "private-journal-")
++	if err != nil {
++		t.Fatal(err)
++	}
++	return dir
++}
++
+@@ -41 +52 @@ func TestComponentJournalAcknowledgesOriginalTagAfterRetag(t *testing.T) {
+-				dir := t.TempDir()
++				dir := privateJournalTestDir(t)
+@@ -116 +127 @@ func TestComponentJournalFlowPersistsOrExplicitlyBypasses(t *testing.T) {
+-	dir := t.TempDir()
++	dir := privateJournalTestDir(t)
+diff --git a/internal/controller/journal_directory_linux.go b/internal/controller/journal_directory_linux.go
+index ea0de7a..ceb0414 100644
+--- a/internal/controller/journal_directory_linux.go
++++ b/internal/controller/journal_directory_linux.go
+@@ -25,0 +26,7 @@ func openJournalDirectory(root, tag string) (*os.File, string, error) {
++	info, err := parent.Stat()
++	if err != nil {
++		return nil, "", err
++	}
++	if err := checkLegacyJournalInfo(info, true); err != nil {
++		return nil, "", err
++	}
+@@ -46,0 +54,4 @@ func openJournalDirectory(root, tag string) (*os.File, string, error) {
++	if err := checkLegacyJournalFiles(directory, path); err != nil {
++		directory.Close()
++		return nil, "", err
++	}
+diff --git a/internal/controller/journal_writer_test.go b/internal/controller/journal_writer_test.go
+index 812e770..0934960 100644
+--- a/internal/controller/journal_writer_test.go
++++ b/internal/controller/journal_writer_test.go
+@@ -509 +509 @@ func TestJournalGroupConfigBounds(t *testing.T) {
+-	j.BufDirPath = t.TempDir()
++	j.BufDirPath = privateJournalTestDir(t)
+diff --git a/internal/controller/lifecycle_components_test.go b/internal/controller/lifecycle_components_test.go
+index 01a531e..425c24a 100644
+--- a/internal/controller/lifecycle_components_test.go
++++ b/internal/controller/lifecycle_components_test.go
+@@ -121 +121 @@ func TestComponentJournalDefaultChannelCapacities(t *testing.T) {
+-	j := NewJournal(ctx, &JournalCfg{BufDirPath: t.TempDir(), MsgPool: &sync.Pool{}, BufSizeBytes: 8192})
++	j := NewJournal(ctx, &JournalCfg{BufDirPath: privateJournalTestDir(t), MsgPool: &sync.Pool{}, BufSizeBytes: 8192})
+diff --git a/internal/controller/tag_budget_test.go b/internal/controller/tag_budget_test.go
+index 8a23c3e..739e159 100644
+--- a/internal/controller/tag_budget_test.go
++++ b/internal/controller/tag_budget_test.go
+@@ -161 +161 @@ func TestLegacyTagBudgetStartupInventoryBeforeAnyOpen(t *testing.T) {
+-			root := t.TempDir()
++			root := privateJournalTestDir(t)

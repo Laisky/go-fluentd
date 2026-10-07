@@ -1,0 +1,40 @@
+name: Resolve private journal dependency
+on:
+  push:
+    branches: [codex/security-final-review-20261006]
+    paths: [.github/workflows/security32-resolve-journal.yml]
+permissions:
+  contents: read
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Resolve merged upstream without publishing
+        run: |
+          set -euo pipefail
+          git checkout --detach 16821af0e0101f41500edff389ba5111a7a779e7
+          mkdir /tmp/journal32
+          go get github.com/Laisky/go-journal@a7f7377c4a3dfe3e76244412c082e1e76e121b44
+          go mod tidy
+          go mod verify
+          go mod download -json github.com/Laisky/go-journal > /tmp/journal32/module.json
+          git diff -- go.mod go.sum > /tmp/journal32/dependency.patch
+          cp go.mod go.sum /tmp/journal32/
+          go mod vendor
+          tar -czf /tmp/journal32/journal.tar.gz -C vendor/github.com/Laisky/go-journal .
+          cd /tmp/journal32
+          sha256sum module.json dependency.patch go.mod go.sum journal.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: resolved-private-journal
+          path: /tmp/journal32/
+          retention-days: 7
+          if-no-files-found: error

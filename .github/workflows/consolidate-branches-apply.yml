@@ -1,0 +1,216 @@
+name: Archive and consolidate completed branches
+on:
+  push:
+    branches: [chore/consolidate-branches-20261007]
+    paths: [.github/workflows/consolidate-branches-apply.yml]
+permissions:
+  contents: write
+  actions: read
+  pull-requests: read
+  issues: read
+concurrency:
+  group: consolidate-go-fluentd-20261007
+  cancel-in-progress: false
+jobs:
+  consolidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Recover the independently reviewed branch inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run download 37567873266 --repo Laisky/go-fluentd --name go-fluentd-branch-consolidation-plan --dir "$RUNNER_TEMP/reviewed-plan"
+          cd "$RUNNER_TEMP/reviewed-plan"
+          echo 'a12689c30a93a8b9d0e7cad519d7cb58dfa74f452657b4d1a271cce7f87430c5  before.json' | sha256sum --check --strict
+          echo '52621c7fe2bef742d0f28e78728dd724b283e98027e282f1235b1b7fab58060c  go-fluentd-before-cleanup.bundle' | sha256sum --check --strict
+      - name: Publish a recovery-only archive tag and verify every original tip
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/consolidate.py" <<'PY'
+          import base64, datetime, hashlib, json, os, pathlib, subprocess, sys, urllib.error, urllib.request
+          REPO = 'Laisky/go-fluentd'
+          MAINT = 'chore/consolidate-branches-20261007'
+          ARCHIVE = 'archive/development-20261007'
+          TEMP = pathlib.Path(os.environ['RUNNER_TEMP'])
+          OUT = TEMP / 'consolidation-evidence'
+          DB = TEMP / 'archive-source.git'
+          OUT.mkdir(exist_ok=True)
+          def api(path, payload=None):
+              url = ('https://api.github.com/repos/' + REPO + '/' + path).rstrip('/')
+              request = urllib.request.Request(url,
+                  data=None if payload is None else json.dumps(payload).encode(),
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28'},
+                  method='GET' if payload is None else 'POST')
+              with urllib.request.urlopen(request, timeout=60) as response:
+                  return json.load(response)
+          def pages(path, key=None):
+              result = []
+              for page in range(1, 101):
+                  data = api(path + ('&' if '?' in path else '?') + f'per_page=100&page={page}')
+                  batch = data if key is None else data[key]
+                  result.extend(batch)
+                  if len(batch) < 100:
+                      return result
+              raise RuntimeError('incomplete paginated inventory')
+          def git(*args, cwd=DB):
+              return subprocess.check_output(['git', '-C', str(cwd), *args], text=True).strip()
+          def current_heads():
+              rows = pages('branches')
+              return {r['name']: r['commit']['sha'] for r in rows}, {r['name']: r['protected'] for r in rows}
+          def quiet_and_unchanged(expected):
+              if api('')['default_branch'] != 'master':
+                  raise RuntimeError('default branch changed')
+              heads, protected = current_heads()
+              if heads != expected:
+                  raise RuntimeError('branch inventory changed: no deletion authorized')
+              if any(protected[n] for n in heads if n not in ('master', 'develop')):
+                  raise RuntimeError('protected candidate found; do not bypass protection')
+              if pages('pulls?state=open') or pages('issues?state=open'):
+                  raise RuntimeError('open work found; do not delete its branches')
+              for status in ('in_progress', 'queued', 'waiting', 'pending'):
+                  runs = pages('actions/runs?status=' + status, 'workflow_runs')
+                  active = [r['id'] for r in runs if r['head_branch'] in expected and r['head_branch'] not in ('master', 'develop', MAINT)]
+                  if active:
+                      raise RuntimeError('candidate branches have active work: ' + str(active))
+          def refs():
+              return dict(line.split(' ', 1) for line in git('for-each-ref', '--format=%(refname:strip=2) %(objectname)', 'refs/heads').splitlines())
+          if sys.argv[1] == 'prepare':
+              raw = (TEMP / 'reviewed-plan/before.json').read_bytes()
+              if hashlib.sha256(raw).hexdigest() != 'a12689c30a93a8b9d0e7cad519d7cb58dfa74f452657b4d1a271cce7f87430c5':
+                  raise RuntimeError('reviewed manifest checksum mismatch')
+              plan = json.loads(raw)
+              if plan['repository'] != REPO or plan['maintenance_branch'] != MAINT or len(plan['branches']) != 56:
+                  raise RuntimeError('unexpected deletion scope')
+              heads = {r['name']: r['sha'] for r in plan['branches']}
+              if {r['name'] for r in plan['branches'] if r['preserve']} != {'master', 'develop'}:
+                  raise RuntimeError('unexpected preservation policy')
+              commit = api('git/commits/' + os.environ['GITHUB_SHA'])
+              if [p['sha'] for p in commit['parents']] != [plan['maintenance_sha']]:
+                  raise RuntimeError('cleanup carrier changed unexpectedly')
+              heads[MAINT] = os.environ['GITHUB_SHA']
+              quiet_and_unchanged(heads)
+              try:
+                  api('git/ref/tags/' + ARCHIVE)
+              except urllib.error.HTTPError as error:
+                  if error.code != 404:
+                      raise
+              else:
+                  raise RuntimeError('archive already exists; never overwrite recovery')
+              manifest = {'repository': REPO, 'purpose': 'Recovery only, not a production merge',
+                  'created_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                  'reviewed_plan_sha256': hashlib.sha256(raw).hexdigest(),
+                  'master_unchanged': heads['master'], 'keep': {n: heads[n] for n in ('master', 'develop')},
+                  'retired_branches': {n: sha for n, sha in heads.items() if n not in ('master', 'develop')},
+                  'original_inventory': plan}
+              manifest_text = json.dumps(manifest, indent=2) + '\n'
+              readme = '# Archived development branches\n\nRecovery metadata only. DO NOT MERGE this archive commit into master or develop.\nEvery original branch tip is retained through an explicit parent of this archive commit.\nBRANCHES.json maps each retired branch name to its exact SHA. No experimental source was merged.\n\nRestore one branch in a clone:\n```sh\ngit fetch origin refs/tags/' + ARCHIVE + ':refs/tags/' + ARCHIVE + '\ngit show ' + ARCHIVE + ':BRANCHES.json\n# Select the exact SHA from the manifest; never guess it.\ngit branch recovered-branch-name <manifest-SHA>\n```\n\nAn independently verified, self-contained Git bundle is retained in the cleanup artifacts.\nOriginal release tags, master and develop are unchanged. User-host worktrees are outside this cloud runner.\n'
+              tree = api('git/trees', {'tree': [
+                  {'path': 'BRANCHES.json', 'mode': '100644', 'type': 'blob', 'content': manifest_text},
+                  {'path': 'README.md', 'mode': '100644', 'type': 'blob', 'content': readme}]})
+              parents = list(dict.fromkeys([heads['master'], *heads.values()]))
+              archived = api('git/commits', {'message': 'Archive completed development tips for recovery only; never merge into production', 'tree': tree['sha'], 'parents': parents})
+              archive_sha = archived['sha']
+              api('git/refs', {'ref': 'refs/tags/' + ARCHIVE, 'sha': archive_sha})
+              if api('git/ref/tags/' + ARCHIVE)['object']['sha'] != archive_sha:
+                  raise RuntimeError('remote archive reference mismatch')
+              subprocess.run(['git', 'init', '--bare', str(DB)], check=True)
+              git('remote', 'add', 'origin', 'https://github.com/' + REPO + '.git')
+              git('fetch', '--tags', 'origin', '+refs/heads/*:refs/heads/*')
+              if refs() != heads or git('rev-parse', 'refs/tags/' + ARCHIVE) != archive_sha:
+                  raise RuntimeError('fetched recovery snapshot does not match')
+              if json.loads(git('show', archive_sha + ':BRANCHES.json')) != manifest:
+                  raise RuntimeError('remote archive manifest mismatch')
+              for sha in heads.values():
+                  git('merge-base', '--is-ancestor', sha, archive_sha)
+              git('fsck', '--full', '--no-reflogs')
+              bundle = OUT / 'go-fluentd-archived-development.bundle'
+              git('bundle', 'create', str(bundle), '--branches', '--tags')
+              empty = TEMP / 'verify-self-contained.git'
+              subprocess.run(['git', 'init', '--bare', str(empty)], check=True)
+              git('bundle', 'verify', str(bundle), cwd=empty)
+              state = {'repository': REPO, 'heads': heads, 'keep': manifest['keep'], 'delete': manifest['retired_branches'],
+                  'archive_tag': ARCHIVE, 'archive_commit': archive_sha, 'archive_tree': tree['sha'],
+                  'bundle_sha256': hashlib.sha256(bundle.read_bytes()).hexdigest(), 'original_tags': plan['existing_tags'],
+                  'archive_recovery_verified': True}
+              (OUT / 'BRANCHES.json').write_text(manifest_text)
+              (OUT / 'README.md').write_text(readme)
+              (OUT / 'state.json').write_text(json.dumps(state, indent=2) + '\n')
+              (OUT / 'before.json').write_bytes(raw)
+              checksums = [OUT / name for name in ('BRANCHES.json', 'README.md', 'state.json', 'before.json', bundle.name)]
+              (OUT / 'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n' for p in checksums))
+              print(json.dumps({'stage': 'archived-not-deleted', 'archive_tag': ARCHIVE, 'archive_commit': archive_sha, 'verified_tips': len(heads), 'delete_candidates': len(state['delete'])}, indent=2))
+          elif sys.argv[1] == 'delete':
+              state = json.loads((OUT / 'state.json').read_text())
+              if state['repository'] != REPO or not state['archive_recovery_verified'] or len(state['delete']) != 54:
+                  raise RuntimeError('unverified or unexpected deletion state')
+              if hashlib.sha256((OUT / 'go-fluentd-archived-development.bundle').read_bytes()).hexdigest() != state['bundle_sha256']:
+                  raise RuntimeError('recovery bundle changed')
+              quiet_and_unchanged(state['heads'])
+              if api('git/ref/tags/' + ARCHIVE)['object']['sha'] != state['archive_commit']:
+                  raise RuntimeError('archive changed before deletion')
+              leases = [f'--force-with-lease=refs/heads/{name}:{sha}' for name, sha in state['delete'].items()]
+              refspecs = [':refs/heads/' + name for name in state['delete']]
+              env = dict(os.environ)
+              env.update({'GIT_CONFIG_COUNT': '1', 'GIT_CONFIG_KEY_0': 'http.https://github.com/.extraheader',
+                  'GIT_CONFIG_VALUE_0': 'AUTHORIZATION: basic ' + base64.b64encode(('x-access-token:' + os.environ['GH_TOKEN']).encode()).decode()})
+              command = ['git', '-C', str(DB), 'push', '--atomic', '--porcelain', *leases, 'origin', *refspecs]
+              result = subprocess.run(command, env=env, capture_output=True, text=True)
+              (OUT / 'deletion.log').write_text(result.stdout + result.stderr)
+              print(result.stdout + result.stderr)
+              if result.returncode:
+                  raise RuntimeError('atomic deletion rejected; no unsafe fallback is permitted')
+              after, protected = current_heads()
+              if after != state['keep']:
+                  raise RuntimeError('post-deletion branch inventory differs; do not alter concurrent work')
+              tag_rows = git('ls-remote', '--refs', '--tags', 'origin').splitlines()
+              remote_tags = {line.split()[1]: line.split()[0] for line in tag_rows}
+              for row in state['original_tags']:
+                  name, sha = row.split(' ', 1)
+                  if remote_tags.get(name) != sha:
+                      raise RuntimeError('an existing tag changed')
+              if remote_tags.get('refs/tags/' + ARCHIVE) != state['archive_commit']:
+                  raise RuntimeError('archive tag missing after cleanup')
+              issues, pulls = pages('issues?state=open'), pages('pulls?state=open')
+              report = {'repository': REPO, 'completed_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                  'deleted_original_development_branches': len(state['delete']) - 1,
+                  'deleted_cleanup_carrier': MAINT, 'deleted_exact_refs': state['delete'],
+                  'remaining_branches': after, 'master_and_develop_unchanged': True,
+                  'existing_release_tags_unchanged': True, 'archive_tag': ARCHIVE,
+                  'archive_commit': state['archive_commit'], 'archive_tree': state['archive_tree'],
+                  'atomic_expected_sha_deletion': True, 'open_issue_count': len([i for i in issues if 'pull_request' not in i]),
+                  'open_pr_count': len(pulls), 'user_host_worktrees_accessed': False}
+              (OUT / 'after.json').write_text(json.dumps(report, indent=2) + '\n')
+              print(json.dumps({k: v for k, v in report.items() if k != 'deleted_exact_refs'}, indent=2))
+          else:
+              raise RuntimeError('unsupported stage')
+          PY
+          python3 "$RUNNER_TEMP/consolidate.py" prepare
+      - name: Preserve complete recovery evidence before any deletion
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: go-fluentd-development-archive-before-deletion
+          path: ${{ runner.temp }}/consolidation-evidence/
+          retention-days: 30
+          compression-level: 0
+          if-no-files-found: error
+      - name: Delete only exact reviewed branch refs with an atomic lease transaction
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 "$RUNNER_TEMP/consolidate.py" delete
+      - name: Retain final cleanup result and recovery bundle
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: go-fluentd-development-consolidation-final
+          path: ${{ runner.temp }}/consolidation-evidence/
+          retention-days: 30
+          compression-level: 0
+          if-no-files-found: error

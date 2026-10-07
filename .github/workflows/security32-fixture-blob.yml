@@ -24,5 +24,44 @@ jobs:
           mkdir -p /tmp/fixture-evidence
           python3 - <<'PY'
           import base64, hashlib, pathlib, zlib
-          encoded = 'eNrNVm1vozgQ/p5fMcqHCyiEkvQlp1ZIW93ufjqdVro93YeqQgaG1ipg1jZpo6r//cbG5AXa7Wp1Oh2RIGbePDPPMybnRQGLxR3XwE40Kq1Ociz5BuXWLpN+FTZbSN/TmPA6xydIC8R0dRGG0emyOF8vYRlFF2dnk8Vi8X6UyXw+/4FIHz7AYnlxGqxh3j3oRVYypeC6aS4nYK4cC0gSXnOdJJ7CsghACqEDULx+UAFkomokKoV5/JmVCgP41mKL8TJanQWQt5KlJcZfZUuSgpeYlLziOv5D1Oi7EOYynkPn2Py13iE+jDVQfmSlk8MJTGk1nSyGCmH1kHPp4ROnzMWD3YY/mb+hVokc40isoyiAgclx6LqtUpQUPRoIGikyem2SG0j2ZXIJ2iq5/65KZHmo5jSc0DbrNDoNLmBuHudnplumO9RNXmyTitW8oA5Ttg1m2niQmCE1Oz8stGRcIVxTCKm5qD9JKaRXTCuuqMhGL8TJanQW'
+          encoded = 'eNrNVm1vozgQ/p5fMcqHCyiEkvQlp1ZIW93ufjqdVro93YeqQgaG1ipg1jZpo6r//cbG5AXa7Wp1Oh2RIGbePDPPMybnRQGLxR3XwE40Kq1Ociz5BuXWLpN+FTZbSN/TmPA6xydIC8R0dRGG0emyOF8vYRlFF2dnk8Vi8X6UyXw+/4FIHz7AYnlxGqxh3j3oRVYypeC6aS4nYK4cC0gSXnOdJJ7CsghACqEDULx+UAFkomokKoV5/JmVCgP41mKL8TJanQWQt5KlJcZfZUuSgpeYlLziOv5D1Oi7EOYynkPn2Py13iE+jDVQfmSlk8MJTGk1nSyGCmH1kHPp4ROnzMWD3YY/mb+hVokc40isoyiAgclx6LqtUpQUPRoIGikyem2SG0j2ZXIJ2iq5/65KZHmo5jSc0DbrNDoNLmBuHudnplumO9RNXmyTitW8oA5Ttg1m2niQmCE1Oz8stGRcIVxTCKm5qD9JKaRXTCuuqMh38Fxi7bmF/3LSLZ1n/wVwg7VWl/CshKQQO82by+Xq9mVKhaLffIehz/xJtxK/Ghx6LWHIQDA0y9+YMv23rZhOp18k3zCNkElkZlvAFbWgKXnG9RXlIRqszfZq2oAkONC2dLmFit9JMiPdDc+xzjAkX5N559bUxkKeOpz0jhOukqYLlrRENJlQySt631ZMPSiL8H5f5uJVQ5mC2qr9O+oyha2oXd7+pU3EaQsVkMEVFFJU0DB9X/K09/SFllcwHRiSemgUQ16bxniRcRAyebe5Wd76ztMRf3t/VOWxO6FCm4/Ha+3tPJ3eBr/65Iw1TUxmntnKXrq69YMbE2vozNKCbCxTlGba8+mRmNfwCxBf1uuxEbMAA6sUx+BYVcyKDhHw9/XvnfDZ3C/Fi6Fch1sg1dmBvwPCFkKCyQt4Dd4smgUwW63Mfb2eHXbNXI9c37tZ0qYGcp4tSWxufkDFrBozjwiNppBMbj9y4osWcuv5wBTk/XLg15IIVVtqAgC5Npwnxoayrb2xprluTI3xCbNWGybTdhd/mk0vMro7MNEk0LLrSJLYOZn4hAhJOKfN7vYS2PRvg9cDZawxxU1Eq5tWu6Gr8Wn3l1dIMprN/tiBLVXXtk/fWlZ6XZKhRPJZZ9SlAKLApU4AyMkTzA/WKKU/4p6do8Tc5JEIaplIBKyFTgi+lt0lTa6OxfmIfLaFP90oezTElnDeTmeQ+NEhMqPVbCQfHQ5jF2F2T2KPpOfnA2k/mCiKiUVBqJ6M15iHaVvMXlcOHyWn+ZRuqYReOjMnAsoNwj3VUkiekaNedTaIlyJxxEVzZD1WMMTvDlUi+7GIFdqeam+ZjhBiDYazIIDX6jCy3RvnuAlgt+K1IMB7XR478X5p5O/53tWRhn7uykhO36/kALz9QWFgK7FVmPQOVGKMNNfbhNV9iP8evjSVSeU7LT2An5vgPwlBrHNz/vZfKrQdIfM3wXd8Wgzysoc5jfn4R7DYa4f/AihH1P2fgPLN2tLPfY9/dKf+219Su491hfqvpsfi8XYMFqmm34MkAZyO6Hjaf2Ys6JvuH+no8nU='
+          patch = zlib.decompress(base64.b64decode(encoded))
+          if hashlib.sha256(patch).hexdigest() != '9b93c79c89de2a4de9cd0ce55e4476b825aceb82fbf52c25600175be3585fa89':
+              raise SystemExit('fixture transport checksum mismatch')
+          pathlib.Path('/tmp/fixture-evidence/fixture.patch').write_bytes(patch)
           PY
+          git apply /tmp/fixture-evidence/fixture.patch
+          test "$(git hash-object tests/delivery/test_delivery.py)" = 031f571a786d5bbec86299fae035823e2c1cfb4e
+          git diff --check
+      - name: Fixture behavior and real process recovery
+        run: |
+          set -euo pipefail
+          PYTHONPATH=tests/delivery python3 -m unittest test_delivery.AppFixtureTests -v 2>&1 | tee /tmp/fixture-evidence/fixture.log
+          go build -mod=readonly -race -o /tmp/fixture-app .
+          python3 tests/combined_formats/run.py --binary /tmp/fixture-app --artifacts /tmp/fixture-evidence/combined 2>&1 | tee /tmp/fixture-evidence/combined.log
+          python3 tests/combined_formats/run.py --audit-only --artifacts /tmp/fixture-evidence/combined
+      - name: Store the verified content blob without changing any branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, pathlib
+          payload = {'content': pathlib.Path('tests/delivery/test_delivery.py').read_text(), 'encoding': 'utf-8'}
+          pathlib.Path('/tmp/fixture-payload.json').write_text(json.dumps(payload))
+          PY
+          gh api --method POST repos/Laisky/go-fluentd/git/blobs --input /tmp/fixture-payload.json > /tmp/fixture-evidence/blob.json
+          python3 - <<'PY'
+          import json, pathlib
+          blob = json.loads(pathlib.Path('/tmp/fixture-evidence/blob.json').read_text())
+          if blob['sha'] != '031f571a786d5bbec86299fae035823e2c1cfb4e':
+              raise SystemExit('published blob does not match reviewed source')
+          print(blob['sha'])
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: private-delivery-fixture-evidence
+          path: /tmp/fixture-evidence/
+          retention-days: 14
+          if-no-files-found: error

@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/IBM/sarama v1.61.1
-	github.com/Laisky/go-journal v1.1.7-0.20260928201541-ad049272dbea
+	github.com/Laisky/go-journal v1.1.7-0.20261006223601-a7f7377c4a3d
 	github.com/Laisky/go-syslog v2.3.3+incompatible
 	// Journal logger compatibility: v1.17 changes *LoggerType to LoggerItf.
 	github.com/Laisky/go-utils v1.16.0

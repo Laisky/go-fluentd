@@ -17,7 +17,7 @@ JOURNAL = 'github.com/Laisky/go-journal'
 OLD = 'v1.1.7-0.20260924003054-612f5354f538'
 MERGED_BAD = '8758f84c23d9ae29bf800f9e84d2ec64125008aa'
 # The candidate identity must move with the reviewed go.mod pin; controls stay fixed.
-CORRECTED = 'v1.1.7-0.20260928201541-ad049272dbea'
+CORRECTED = 'v1.1.7-0.20261006223601-a7f7377c4a3d'
 CORRECTED_SOURCE = 'ffed6114214ee9d9f9f6b7c9bfd35cbd6bef8bcf'
 TEST_NAME = 'TestRegressionSelectiveReplaySequenceCompatibility'
 PATTERN = '^'+TEST_NAME+'$'

@@ -23,6 +23,13 @@ func openJournalDirectory(root, tag string) (*os.File, string, error) {
 		return nil, "", err
 	}
 	defer parent.Close()
+	info, err := parent.Stat()
+	if err != nil {
+		return nil, "", err
+	}
+	if err := checkLegacyJournalInfo(info, true); err != nil {
+		return nil, "", err
+	}
 	if err := unix.Mkdirat(int(parent.Fd()), tag, 0700); err != nil && err != unix.EEXIST {
 		return nil, "", err
 	}
@@ -43,6 +50,10 @@ func openJournalDirectory(root, tag string) (*os.File, string, error) {
 	if err != nil {
 		directory.Close()
 		return nil, "", fmt.Errorf("secure journal descriptor path unavailable: %w", err)
+	}
+	if err := checkLegacyJournalFiles(directory, path); err != nil {
+		directory.Close()
+		return nil, "", err
 	}
 	return directory, path, nil
 }

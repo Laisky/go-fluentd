@@ -6,8 +6,8 @@ github.com/Laisky/fast-skiplist v0.0.0-20210907063351-e00546c800a6 h1:V3MNilKNjN
 github.com/Laisky/fast-skiplist v0.0.0-20210907063351-e00546c800a6/go.mod h1:BdpS7FU5kzp0QV/dtCWheAV5rIOQu+Jb+uoVuVWZOvU=
 github.com/Laisky/go-chaining v0.0.0-20180507092046-43dcdc5a21be h1:7Rxhm6IjOtDAyj8eScOFntevwzkWhx94zi48lxo4m4w=
 github.com/Laisky/go-chaining v0.0.0-20180507092046-43dcdc5a21be/go.mod h1:1mdzaETo0kjvCQICPSePsoaatJN4l7JvEA1200lyevo=
-github.com/Laisky/go-journal v1.1.7-0.20260928201541-ad049272dbea h1:Ozl/B/Z6UKz+pwKjOFmmi1Npvg7/XsVoP3p8BrViqJA=
-github.com/Laisky/go-journal v1.1.7-0.20260928201541-ad049272dbea/go.mod h1:8wjz86nBGSDCpnS/zpdNY/jkz48qUz24/UDszLbbUsY=
+github.com/Laisky/go-journal v1.1.7-0.20261006223601-a7f7377c4a3d h1:ZtyqGt0Jy2jvTNAQ0jY0KKIvzRO9aX/N9T0d62oZdao=
+github.com/Laisky/go-journal v1.1.7-0.20261006223601-a7f7377c4a3d/go.mod h1:8wjz86nBGSDCpnS/zpdNY/jkz48qUz24/UDszLbbUsY=
 github.com/Laisky/go-syslog v2.3.3+incompatible h1:TSHhP3iadAPDzC5efyYLPnGkv2pvUtuUInm7poVRkFA=
 github.com/Laisky/go-syslog v2.3.3+incompatible/go.mod h1:PPmESkLU3DEbJ3fRXam2hqJTNQVFMggsDXBnOtu2ITk=
 github.com/Laisky/go-utils v1.16.0 h1:0K/laNRT7EXcY8nKkp6RPFA5StJCJ1GRFuJZPcb2hBw=

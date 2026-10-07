@@ -33,6 +33,7 @@ not forwarded or acknowledged as durable. Symlink entries are left untouched;
 they are not followed as retained child journals.
 
 The shared lifetime tag ceiling is documented in [legacy tag limits](legacy-tag-limits.md).
-Existing-directory/segment permission policy (#32), OTLP and multiline budgets
-remain separate. Each admitted child retains one additional directory handle;
+The [private storage policy](legacy-journal-permissions.md) also checks root/child
+ownership, directory modes and retained file types/modes before opening the backend.
+OTLP and multiline budgets remain separate. Each admitted child retains one additional directory handle;
 the shared journal shutdown worker releases handles after backend shutdown.

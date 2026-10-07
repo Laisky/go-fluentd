@@ -163,7 +163,7 @@ class App:
     def __init__(self, root, sinks, compressed=False, queue=1024, durable=True, file_limit=None):
         self.root, self.sinks = root, sinks
         self.wal = root / "wal"
-        self.wal.mkdir(exist_ok=True)
+        self.wal.mkdir(mode=0o700, exist_ok=True)
         self.number = 0
         self.proc = None
         self.compressed, self.queue, self.durable = compressed, queue, durable
@@ -301,6 +301,54 @@ def verify_manifest(expected, received):
         missing.discard(key)
     if missing:
         raise AssertionError(f"missing {len(missing)}/{len(manifest)} events: {sorted(missing)[:12]}")
+
+
+class AppFixtureTests(unittest.TestCase):
+    """Private creation is explicit; reopening never silently migrates evidence."""
+
+    def test_wal_creation_is_private_under_common_umasks(self):
+        import sys
+        program = (
+            "import os,sys; from pathlib import Path; "
+            "sys.path.insert(0,sys.argv[1]); from test_delivery import App; "
+            "os.umask(int(sys.argv[3],8)); app=App(Path(sys.argv[2]),[]); "
+            "mode=app.wal.stat().st_mode & 0o777; "
+            "assert mode == 0o700, f'fixture WAL mode {mode:o}, expected 700'"
+        )
+        for mask in ('0', '22', '77'):
+            with self.subTest(umask=mask), tempfile.TemporaryDirectory() as directory:
+                result = subprocess.run(
+                    [sys.executable, '-S', '-c', program, str(Path(__file__).parent), directory, mask],
+                    capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_existing_wide_wal_is_not_implicitly_migrated(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wal = root / 'wal'
+            wal.mkdir(mode=0o700)
+            wal.chmod(0o755)
+            evidence = wal / 'retained.buf'
+            evidence.write_bytes(b'preserve historical evidence')
+            before = wal.stat()
+            App(root, [])
+            after = wal.stat()
+            self.assertEqual(after.st_mode & 0o777, 0o755)
+            self.assertEqual((after.st_dev, after.st_ino), (before.st_dev, before.st_ino))
+            self.assertEqual(evidence.read_bytes(), b'preserve historical evidence')
+
+    def test_private_wal_reuse_preserves_identity_and_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = App(root, [])
+            evidence = app.wal / 'retained.buf'
+            evidence.write_bytes(b'pending durable record')
+            before = app.wal.stat()
+            reopened = App(root, [])
+            after = reopened.wal.stat()
+            self.assertEqual(after.st_mode & 0o777, 0o700)
+            self.assertEqual((after.st_dev, after.st_ino), (before.st_dev, before.st_ino))
+            self.assertEqual(evidence.read_bytes(), b'pending durable record')
 
 
 class DeliveryTests(unittest.TestCase):

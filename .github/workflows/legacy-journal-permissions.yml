@@ -58,6 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           go mod verify
+          PYTHONPATH=tests/delivery python3 -m unittest test_delivery.AppFixtureTests -v
           go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s -v -run 'Test(RegressionLegacyPrivate|LegacyPrivate|LegacyJournalSecurity)' ./internal/controller 2>&1 | tee "$RUNNER_TEMP/private-journal-evidence/green.log"
       - name: Execute actual UID and ownership isolation without skipped tests
         shell: bash

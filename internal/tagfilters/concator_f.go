@@ -3,9 +3,9 @@ package tagfilters
 import (
 	"context"
 	"regexp"
-	"sync"
 	"time"
 
+	"gofluentd/internal/concatstate"
 	"gofluentd/library"
 	"gofluentd/library/log"
 
@@ -33,132 +33,26 @@ func LoadConcatorTagConfigs(env string, plugins map[string]interface{}) (concato
 	return concatorcfgs
 }
 
-// PendingMsg is the message wait tobe concatenate
-type PendingMsg struct {
-	msg   *library.FluentMsg
-	lastT time.Time
-}
-
-// StartNewConcator starting Concator to concatenate messages,
-// you should not run concator directly,
-// it's better to create and run Concator by ConcatorFactory
-//
-// TODO: concator for each tag now,
-//
-//	maybe set one concator for each identifier in the future for better performance
+// StartNewConcator runs a worker with process-shared finite reservations.
 func (cf *ConcatorFactory) StartNewConcator(ctx context.Context, cfg *ConcatorCfg, outChan chan<- *library.FluentMsg, inChan <-chan *library.FluentMsg) {
 	defer log.Logger.Info("concator exit")
-	// A factory is shared by tags and workers, but pending records must not be.
-	slot := make(map[string]*PendingMsg)
-	ticker := time.NewTicker(40 * time.Millisecond)
-	defer ticker.Stop()
-	emit := func(msg *library.FluentMsg) bool {
-		select {
-		case outChan <- msg:
-			return true
-		case <-ctx.Done():
-			return false
-		}
-	}
-	release := func(key string, pending *PendingMsg) {
-		delete(slot, key)
-		pending.msg = nil
-		cf.pMsgPool.Put(pending)
-	}
-	defer func() {
-		for key, pending := range slot {
-			release(key, pending)
-		}
-	}()
-	for {
-		select {
-		case <-ctx.Done():
-			// Do not acknowledge unfinished records: their journal copies must replay.
-			return
-		case now := <-ticker.C:
-			for key, pending := range slot {
-				if now.Sub(pending.lastT) >= 5*time.Second {
-					if !emit(pending.msg) {
-						return
-					}
-					release(key, pending)
-				}
+	concatstate.Run(ctx, inChan, cf.ConcatBudget, 5*time.Second, cf.MaxLen, true,
+		func(*library.FluentMsg) (concatstate.Rule, bool) {
+			return concatstate.Rule{MessageKey: cfg.MsgKey, IdentifierKey: cfg.Identifier, Head: cfg.Regexp}, true
+		},
+		func(m *library.FluentMsg) bool {
+			select {
+			case outChan <- m:
+				return true
+			case <-ctx.Done():
+				return false
 			}
-		case msg, ok := <-inChan:
-			if !ok {
-				for key, pending := range slot {
-					if !emit(pending.msg) {
-						return
-					}
-					release(key, pending)
-				}
-				return
-			}
-			var identifier string
-			switch value := msg.Message[cfg.Identifier].(type) {
-			case string:
-				identifier = value
-			case []byte:
-				identifier = string(value)
-			default:
-				if !emit(msg) {
-					return
-				}
-				continue
-			}
-			var text []byte
-			switch value := msg.Message[cfg.MsgKey].(type) {
-			case string:
-				text = []byte(value)
-				msg.Message[cfg.MsgKey] = text
-			case []byte:
-				text = value
-			default:
-				if !emit(msg) {
-					return
-				}
-				continue
-			}
-			pending, exists := slot[identifier]
-			isHead := cfg.Regexp.Match(text)
-			if !exists {
-				if !isHead {
-					if !emit(msg) {
-						return
-					}
-					continue
-				}
-				pending = cf.pMsgPool.Get().(*PendingMsg)
-				pending.msg, pending.lastT = msg, time.Now()
-				slot[identifier] = pending
-				continue
-			}
-			if isHead {
-				if !emit(pending.msg) {
-					return
-				}
-				pending.msg, pending.lastT = msg, time.Now()
-				continue
-			}
-			pending.msg.Message[cfg.MsgKey] = append(pending.msg.Message[cfg.MsgKey].([]byte), text...)
-			pending.msg.ExtIds = append(pending.msg.ExtIds, msg.ID)
-			pending.msg.ExtIds = append(pending.msg.ExtIds, msg.ExtIds...)
-			pending.lastT = time.Now()
-			// Transfer acknowledgement ownership to the head. Recycling a wrapper is
-			// not a successful delivery and must never publish an ACK for the tail.
-			msg.ExtIds = nil
-			cf.msgPool.Put(msg)
-			if len(pending.msg.Message[cfg.MsgKey].([]byte)) >= cf.MaxLen {
-				if !emit(pending.msg) {
-					return
-				}
-				release(identifier, pending)
-			}
-		}
-	}
+		},
+		func(m *library.FluentMsg) { cf.msgPool.Put(m) })
 }
 
 type ConcatorFactCfg struct {
+	ConcatBudget  *concatstate.Budget
 	NFork, MaxLen int
 	LBKey         string
 	Plugins       map[string]*ConcatorCfg
@@ -168,8 +62,6 @@ type ConcatorFactCfg struct {
 type ConcatorFactory struct {
 	*BaseTagFilterFactory
 	*ConcatorFactCfg
-
-	pMsgPool *sync.Pool
 }
 
 // NewConcatorFact create new ConcatorFactory
@@ -189,12 +81,8 @@ func NewConcatorFact(cfg *ConcatorFactCfg) *ConcatorFactory {
 	cf := &ConcatorFactory{
 		BaseTagFilterFactory: &BaseTagFilterFactory{},
 		ConcatorFactCfg:      cfg,
-		pMsgPool: &sync.Pool{
-			New: func() interface{} {
-				return &PendingMsg{}
-			},
-		},
 	}
+	cf.ConcatBudget = concatstate.Default(cf.ConcatBudget)
 	return cf
 }
 

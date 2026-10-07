@@ -386,3 +386,6 @@ contributor history are visible in the repository and pull requests.
 ## License
 
 [MIT](LICENSE). Third-party dependencies retain their respective licenses.
+
+Multiline pending-state limits and saturation/replay behavior are documented in
+[concatenation limits](docs/concatenation-limits.md).

@@ -6,6 +6,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  issues: read
 jobs:
   inventory:
     runs-on: ubuntu-latest
@@ -28,7 +29,7 @@ jobs:
           out = pathlib.Path(os.environ['RUNNER_TEMP']) / 'branch-consolidation'
           out.mkdir()
           def api(path):
-              req = urllib.request.Request('https://api.github.com/repos/' + repo + '/' + path,
+              req = urllib.request.Request(('https://api.github.com/repos/' + repo + '/' + path).rstrip('/'),
                   headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'})
               with urllib.request.urlopen(req, timeout=60) as response:
                   return json.load(response)

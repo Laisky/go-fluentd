@@ -12,6 +12,17 @@ import (
 	"time"
 )
 
+// Generic t.TempDir numbered children are not required to be 0700. Journal
+// behavior fixtures explicitly opt into the production private-root policy.
+func privateJournalTestDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp(t.TempDir(), "private-journal-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 func componentIDOnDisk(dir string, id int64) bool {
 	names, _ := filepath.Glob(filepath.Join(dir, "*.ids*"))
 	for _, name := range names {
@@ -38,7 +49,7 @@ func TestComponentJournalAcknowledgesOriginalTagAfterRetag(t *testing.T) {
 			name := map[bool]string{false: "plain", true: "gzip"}[compress] + "/" + map[bool]string{false: "same_tag", true: "rewritten_tag"}[retag]
 			t.Run(name, func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
-				dir := t.TempDir()
+				dir := privateJournalTestDir(t)
 				j := NewJournal(ctx, &JournalCfg{BufDirPath: dir, BufSizeBytes: 8192, JournalOutChanLen: 8, CommitIDChanLen: 8, ChildJournalDataInchanLen: 8, ChildJournalIDInchanLen: 8, IsCompress: compress, CommittedIDTTL: time.Minute, MsgPool: &sync.Pool{New: func() interface{} { return &library.FluentMsg{} }}})
 				defer func() {
 					cancel()
@@ -113,7 +124,7 @@ func TestComponentJournalReplayRestoresAcknowledgementOwner(t *testing.T) {
 
 func TestComponentJournalFlowPersistsOrExplicitlyBypasses(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	dir := t.TempDir()
+	dir := privateJournalTestDir(t)
 	pool := &sync.Pool{New: func() interface{} { return &library.FluentMsg{} }}
 	j := NewJournal(ctx, &JournalCfg{BufDirPath: dir, BufSizeBytes: 8192, JournalOutChanLen: 8, CommitIDChanLen: 8, ChildJournalDataInchanLen: 8, ChildJournalIDInchanLen: 8, MsgPool: pool, CommittedIDTTL: time.Minute})
 	defer func() {

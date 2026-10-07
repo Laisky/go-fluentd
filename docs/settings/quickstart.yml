@@ -2,6 +2,7 @@
 # The public salt and console destination are not a production security/storage setup.
 settings:
   journal:
+    # Existing state must be owned by the service UID: directories 0700, files 0600.
     buf_dir_path: ./var/go-fluentd/journal
     buf_file_bytes: 1048576
     is_compress: false

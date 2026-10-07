@@ -149,7 +149,7 @@ func (j *Journal) valid() error {
 		log.Logger.Info("reset child_id_chan_len", zap.Int("child_id_chan_len", j.ChildJournalIDInchanLen))
 	}
 
-	if err := os.MkdirAll(j.BufDirPath, os.ModePerm); err != nil {
+	if err := prepareLegacyJournalRoot(j.BufDirPath); err != nil {
 		return errors.Wrapf(err, "create directory `%s` for buf", j.BufDirPath)
 	}
 

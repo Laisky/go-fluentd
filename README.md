@@ -90,7 +90,7 @@ Run this in the repository root and leave it running:
 
 <!-- readme-check:run -->
 ```sh
-mkdir -p var/go-fluentd/journal
+mkdir -p -m 700 var/go-fluentd/journal
 ./build/go-fluentd \
   --config=docs/settings/quickstart.yml \
   --env=sit \
@@ -101,7 +101,10 @@ mkdir -p var/go-fluentd/journal
 The [demo configuration](docs/settings/quickstart.yml) enables durable HTTP
 acceptance, uses per-record synchronization, and keeps its journal under the
 working directory's `var/go-fluentd/journal`. It uses a public **demo-only** salt.
-Do not run two processes against the same journal directory.
+Do not run two processes against the same journal directory. Existing state must
+already satisfy the [private storage policy](docs/legacy-journal-permissions.md):
+service-owned `0700` directories and `0600` regular, single-link files. `mkdir -p`
+does not migrate existing permissions; stop writers and review old state first.
 
 ### Send and observe an event
 
@@ -167,7 +170,7 @@ docker build -f .docker/Dockerfile -t go-fluentd:local .
 
 <!-- readme-check:docker-run -->
 ```sh
-mkdir -p var/go-fluentd/journal
+mkdir -p -m 700 var/go-fluentd/journal
 docker run --rm --name go-fluentd-demo \
   --user "$(id -u):$(id -g)" \
   --read-only --cap-drop=ALL --security-opt=no-new-privileges \
@@ -182,8 +185,8 @@ docker run --rm --name go-fluentd-demo \
 ```
 
 Reuse the send/check commands above, then stop with `docker stop go-fluentd-demo`.
-The host `var` directory survives container removal. The UID/GID must be able to
-write it; avoid making it world-writable. The image already has an entrypoint, so
+The host `var` directory survives container removal. The effective service UID must own the `0700` journal root and tag directories;
+segment and lock files must be `0600`. Do not make state group/world-accessible. The image already has an entrypoint, so
 do not append `./go-fluentd` before its flags. MooseFS/forward image recipes under
 `.docker/` are legacy deployment-specific paths, not this self-contained demo.
 
@@ -199,7 +202,7 @@ Those larger configurations are references, not safe production defaults.
 | `--config`, `--env`, `--addr` | Configuration path, plugin environment, and management/HTTP-input listener. Other receivers have their own `addr`. Use `--help` for actual flags. |
 | Plugin `active_env` | The receiver/sender is enabled only when its list includes `--env`. A valid-looking configuration can still activate no matching destination. |
 | Tags | Naming rules differ by plugin: some append the environment; some replace `{env}`; some use the tag verbatim. Match the effective tag, not only the example's label. |
-| `journal.buf_dir_path` | Durable state directory. Assign one writable persistent directory per process; protect it from cleanup jobs and concurrent writers. |
+| `journal.buf_dir_path` | Durable state directory. Use a service-owned `0700` root; tag directories are `0700`, files `0600`. Existing unsafe state is refused; see [migration](docs/legacy-journal-permissions.md). Protect it from cleanup jobs and concurrent writers. |
 | `journal.buf_file_bytes` | Segment sizing/rotation parameter, **not** a total-disk quota. Plan for sustained downstream outages and monitor free space. |
 | HTTP `require_durable_ack` | Defaults to `false`. Set `true` to wait for local journal synchronization before HTTP success. |
 | `journal.group_commit_max_messages` | Omitted, `0`, or `1`: per-record Sync. Opt in with `64` after measuring your workload; maximum `1024`. Ready messages share a barrier; no batching timer waits for more. |

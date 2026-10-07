@@ -506,7 +506,7 @@ func TestJournalGroupConfigBounds(t *testing.T) {
 		}
 	}
 	j, _, _ := testWriter(t)
-	j.BufDirPath = t.TempDir()
+	j.BufDirPath = privateJournalTestDir(t)
 	j.GroupCommitMaxMessages = 0
 	if err := j.valid(); err != nil {
 		t.Fatal(err)

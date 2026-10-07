@@ -158,7 +158,7 @@ func TestLegacyTagBudgetCloseDoesNotRecycleIdentity(t *testing.T) {
 func TestLegacyTagBudgetStartupInventoryBeforeAnyOpen(t *testing.T) {
 	for _, kind := range []string{"directories", "files"} {
 		t.Run(kind, func(t *testing.T) {
-			root := t.TempDir()
+			root := privateJournalTestDir(t)
 			for i := 0; i < 3; i++ {
 				p := filepath.Join(root, fmt.Sprint(i))
 				if kind == "directories" {

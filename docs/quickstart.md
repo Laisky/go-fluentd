@@ -33,7 +33,7 @@ tag and active environment when adding a destination.
 | HTTP `503` | Check journal permissions, disk availability and pre-persistence filtering. Never treat a rejected/failed response as successful acceptance. |
 | Timeout or connection loss | Acceptance may already have happened. Retry with awareness that duplicates are possible; do not delete journal state. |
 | `200`, but no `consume msg` line | Wait for downstream processing, then verify `--log-level=info`, console `log_level: info`, `active_env`, and exact output tags. The HTTP response is a local acceptance receipt. |
-| Docker permission error | Create the host `var/go-fluentd/journal` directory as the user named by `--user`; check bind-mount ownership. Do not use world-writable state as a workaround. |
+| Docker permission error | Create the host `var/go-fluentd/journal` directory with `mkdir -p -m 700` as the user named by `--user`; existing directories/files need the explicit [private storage migration](legacy-journal-permissions.md). Do not use group/world-writable state as a workaround. |
 | `/health` succeeds during a downstream outage | Expected: this endpoint checks the listener only. Inspect `/monitor`, errors and destination health separately. |
 
 ## State and cleanup

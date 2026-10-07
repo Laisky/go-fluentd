@@ -118,7 +118,7 @@ func TestComponentHTTPServerCancellationDrainsRequests(t *testing.T) {
 func TestComponentJournalDefaultChannelCapacities(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	j := NewJournal(ctx, &JournalCfg{BufDirPath: t.TempDir(), MsgPool: &sync.Pool{}, BufSizeBytes: 8192})
+	j := NewJournal(ctx, &JournalCfg{BufDirPath: privateJournalTestDir(t), MsgPool: &sync.Pool{}, BufSizeBytes: 8192})
 	if cap(j.outChan) != j.JournalOutChanLen || cap(j.commitChan) != j.CommitIDChanLen {
 		t.Fatalf("journal channel capacity mismatch: %d/%d", cap(j.outChan), cap(j.commitChan))
 	}

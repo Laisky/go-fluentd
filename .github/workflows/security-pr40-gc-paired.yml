@@ -1,0 +1,45 @@
+name: PR40 paired GC diagnosis
+on:
+  push:
+    branches: [codex/security-final-review-20261006]
+    paths: [.github/workflows/security-pr40-gc-paired.yml]
+permissions:
+  contents: read
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        revision: [a61f532bf36a4503aba5fe8548c814745550b7c6, 16821af0e0101f41500edff389ba5111a7a779e7]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Exact source and original stress gate
+        env:
+          REVISION: ${{ matrix.revision }}
+          GOGC: '10'
+          GOMAXPROCS: '2'
+        run: |
+          set -euo pipefail
+          git checkout --detach "$REVISION"
+          test "$(git rev-parse HEAD)" = "$REVISION"
+          mkdir -p /tmp/gc-evidence
+          git rev-parse HEAD > /tmp/gc-evidence/source.txt
+          go version >> /tmp/gc-evidence/source.txt
+          sha256sum library/*regression_test.go .scripts/run_msgp_gc_regression.py > /tmp/gc-evidence/source.sha256
+          go mod verify
+          python3 .scripts/run_msgp_gc_regression.py /tmp/gc-evidence/test.json 2>&1 | tee /tmp/gc-evidence/gate.log
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: gc-${{ matrix.revision }}
+          path: /tmp/gc-evidence/
+          retention-days: 7
+          if-no-files-found: error

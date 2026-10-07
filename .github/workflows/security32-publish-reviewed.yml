@@ -1,0 +1,61 @@
+name: Validate and publish private journal integration
+on:
+  push:
+    branches: [codex/security-final-review-20261006]
+    paths: [.github/workflows/security32-publish-reviewed.yml]
+permissions:
+  contents: write
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Apply checksum-verified integration to exact candidate source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/security32-evidence
+          cp .security32-existing.patch /tmp/security32-evidence/integration.patch
+          echo 'addb6ba63dc4d653ea1a50f54ab42a05db8332840eaf6108fe43657b4b117b8d  /tmp/security32-evidence/integration.patch' | sha256sum -c -
+          git checkout --detach d1f35e7cc6ab41b727d9ba4d888f96c8f74c469f
+          git apply --unidiff-zero /tmp/security32-evidence/integration.patch
+          git add README.md docs go.mod go.sum internal/controller
+          test "$(git write-tree)" = 31f47df3f4542aae80dafdb1eeb952bf9e7f869c
+          git diff --cached --check
+          git config user.name 'Laisky.Cai'
+          git config user.email 'github@laisky.com'
+          git commit -m 'fix: enforce private retained journal storage and reuse merged file-mode correction'
+          git rev-parse HEAD HEAD^{tree} > /tmp/security32-evidence/source.txt
+          git diff 7f06b5bb68f373995b712db4f7882f9bb2d72867 HEAD --binary > /tmp/security32-evidence/source.patch
+          git archive HEAD | gzip > /tmp/security32-evidence/source.tar.gz
+      - name: Independent full acceptance on normal pinned modules
+        shell: bash
+        run: |
+          set -euo pipefail
+          go mod verify
+          go mod tidy -diff
+          go build -mod=readonly ./...
+          go vet -mod=readonly ./...
+          go test -mod=readonly -count=1 -timeout=180s -coverprofile=/tmp/security32-evidence/coverage.out ./... 2>&1 | tee /tmp/security32-evidence/tests.log
+          python3 .scripts/check_component_coverage.py /tmp/security32-evidence/coverage.out | tee /tmp/security32-evidence/coverage.log
+          go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s ./... 2>&1 | tee /tmp/security32-evidence/race.log
+          git diff --exit-code -- go.mod go.sum
+      - name: Publish only the verified candidate branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^{tree})" = 31f47df3f4542aae80dafdb1eeb952bf9e7f869c
+          git push origin HEAD:refs/heads/codex/security-32-private-storage-20261007
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: security32-reviewed-integration
+          path: /tmp/security32-evidence/
+          retention-days: 14
+          if-no-files-found: error

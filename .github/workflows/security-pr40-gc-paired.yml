@@ -31,7 +31,7 @@ jobs:
           mkdir -p /tmp/gc-evidence
           git rev-parse HEAD > /tmp/gc-evidence/source.txt
           go version >> /tmp/gc-evidence/source.txt
-          sha256sum internal/senders/*gc*test.go .scripts/run_msgpack_gc.py > /tmp/gc-evidence/source.sha256
+          sha256sum internal/senders/fluentd_reliability_test.go .scripts/run_msgpack_gc.py > /tmp/gc-evidence/source.sha256
           go mod verify
           python3 .scripts/run_msgpack_gc.py /tmp/gc-evidence/test.jsonl 2>&1 | tee /tmp/gc-evidence/gate.log
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

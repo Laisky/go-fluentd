@@ -1,0 +1,116 @@
+name: Inventory completed development branches
+on:
+  push:
+    branches: [chore/consolidate-branches-20261007]
+    paths: [.github/workflows/consolidate-branches-plan.yml]
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Freeze branch inventory and verify a self-contained recovery bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import datetime, hashlib, json, os, pathlib, subprocess, urllib.request
+          repo = 'Laisky/go-fluentd'
+          maintenance = 'chore/consolidate-branches-20261007'
+          expected_master = '149eed3c0ca8e6c0c1ca01ea8aeee28cc88182ea'
+          out = pathlib.Path(os.environ['RUNNER_TEMP']) / 'branch-consolidation'
+          out.mkdir()
+          def api(path):
+              req = urllib.request.Request('https://api.github.com/repos/' + repo + '/' + path,
+                  headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28'})
+              with urllib.request.urlopen(req, timeout=60) as response:
+                  return json.load(response)
+          def pages(path):
+              items = []
+              for page in range(1, 101):
+                  batch = api(path + ('&' if '?' in path else '?') + f'per_page=100&page={page}')
+                  items.extend(batch)
+                  if len(batch) < 100:
+                      return items
+              raise RuntimeError('pagination limit reached; refuse incomplete inventory')
+          info = api('')
+          if info['default_branch'] != 'master':
+              raise RuntimeError('default branch changed')
+          branches = pages('branches')
+          if pages('pulls?state=open') or pages('issues?state=open'):
+              raise RuntimeError('open work exists; inspect it before consolidation')
+          prs = pages('pulls?state=closed')
+          heads = {b['name']: b['commit']['sha'] for b in branches}
+          if heads.get('master') != expected_master or heads.get(maintenance) != os.environ['GITHUB_SHA']:
+              raise RuntimeError('source changed during planning')
+          mirror = out / 'source.git'
+          subprocess.run(['git', 'clone', '--mirror', 'https://github.com/' + repo + '.git', str(mirror)], check=True)
+          def git(*args):
+              return subprocess.check_output(['git', '-C', str(mirror), *args], text=True).strip()
+          def ancestor(a, b):
+              result = subprocess.run(['git', '-C', str(mirror), 'merge-base', '--is-ancestor', a, b])
+              if result.returncode not in (0, 1):
+                  raise RuntimeError('ancestry check failed')
+              return result.returncode == 0
+          actual = dict(line.split(' ', 1) for line in git('for-each-ref', '--format=%(refname:strip=2) %(objectname)', 'refs/heads').splitlines())
+          if actual != heads:
+              raise RuntimeError('branch refs changed while cloning')
+          records = []
+          for branch in branches:
+              name, sha = branch['name'], branch['commit']['sha']
+              related = [p for p in prs if p['head']['repo'] and p['head']['repo']['full_name'] == repo and p['head']['ref'] == name]
+              merged = [p for p in related if p['merged_at'] and p['head']['sha'] == sha]
+              contained = []
+              if not merged and not ancestor(sha, expected_master):
+                  for p in prs:
+                      if p['merged_at'] and subprocess.run(['git', '-C', str(mirror), 'cat-file', '-e', p['head']['sha'] + '^{commit}'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0 and ancestor(sha, p['head']['sha']):
+                          contained.append(p['number'])
+              preserve = name in ('master', 'develop') or branch['protected']
+              classification = ('keep-long-lived-or-protected' if preserve else 'temporary-cleanup-carrier' if name == maintenance else 'ancestor-of-master' if ancestor(sha, expected_master) else 'exact-merged-pr-head' if merged else 'predecessor-of-merged-pr-head' if contained else 'archive-only-superseded-or-experimental')
+              records.append({'name': name, 'sha': sha, 'protected': branch['protected'], 'preserve': preserve, 'classification': classification,
+                  'related_prs': [{'number': p['number'], 'merged_at': p['merged_at'], 'head_sha': p['head']['sha'], 'merge_commit_sha': p['merge_commit_sha'], 'title': p['title']} for p in related],
+                  'predecessor_of_prs': contained,
+                  'tip': git('show', '-s', '--format=%cI %s', sha),
+                  'tree': git('rev-parse', sha + '^{tree}'),
+                  'difference_from_master': git('diff', '--shortstat', expected_master, sha)})
+          tags = git('for-each-ref', '--format=%(refname) %(objectname)', 'refs/tags').splitlines()
+          manifest = {'repository': repo, 'created_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+              'master': expected_master, 'maintenance_branch': maintenance, 'maintenance_sha': os.environ['GITHUB_SHA'],
+              'branches': sorted(records, key=lambda row: row['name']), 'existing_tags': tags,
+              'closed_pr_count': len(prs), 'open_pr_count': 0, 'open_issue_count': 0,
+              'policy': 'Preserve master/develop/protected branches. Archive all other branch tips without merging experimental source. Delete only reviewed exact refs after durable recovery verification.'}
+          manifest_path = out / 'before.json'
+          manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
+          bundle = out / 'go-fluentd-before-cleanup.bundle'
+          subprocess.run(['git', '-C', str(mirror), 'bundle', 'create', str(bundle), '--branches', '--tags'], check=True)
+          verify = pathlib.Path(os.environ['RUNNER_TEMP']) / 'verify-empty.git'
+          subprocess.run(['git', 'init', '--bare', str(verify)], check=True)
+          subprocess.run(['git', '-C', str(verify), 'bundle', 'verify', str(bundle)], check=True)
+          subprocess.run(['git', '-C', str(verify), 'fetch', str(bundle), '+refs/heads/*:refs/heads/*', '+refs/tags/*:refs/tags/*'], check=True)
+          subprocess.run(['git', '-C', str(verify), 'fsck', '--full', '--no-reflogs'], check=True)
+          text = subprocess.check_output(['git', '-C', str(verify), 'for-each-ref', '--format=%(refname:strip=2) %(objectname)', 'refs/heads'], text=True)
+          if dict(line.split(' ', 1) for line in text.splitlines()) != heads:
+              raise RuntimeError('recovery branch mismatch')
+          (out / 'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n' for p in [manifest_path, bundle]))
+          summary = {'total_branches': len(records), 'preserve': [r['name'] for r in records if r['preserve']], 'candidate_count': sum(not r['preserve'] for r in records), 'recovery_bundle_verified': True}
+          (out / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+          print(json.dumps(summary, indent=2))
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: go-fluentd-branch-consolidation-plan
+          path: |
+            ${{ runner.temp }}/branch-consolidation/before.json
+            ${{ runner.temp }}/branch-consolidation/summary.json
+            ${{ runner.temp }}/branch-consolidation/SHA256SUMS
+            ${{ runner.temp }}/branch-consolidation/go-fluentd-before-cleanup.bundle
+          retention-days: 30
+          if-no-files-found: error
+          compression-level: 0

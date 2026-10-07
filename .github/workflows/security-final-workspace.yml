@@ -1,0 +1,50 @@
+name: Final security review workspace
+on:
+  push:
+    branches: [codex/security-final-review-20261006]
+    paths: [.github/workflows/security-final-workspace.yml]
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Preserve exact source and offline dependencies
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/final-review /tmp/app-source
+          git fetch --no-tags origin 16821af0e0101f41500edff389ba5111a7a779e7
+          git checkout --detach 16821af0e0101f41500edff389ba5111a7a779e7
+          test "$(git rev-parse HEAD)" = 16821af0e0101f41500edff389ba5111a7a779e7
+          git branch review-snapshot HEAD
+          git bundle create /tmp/final-review/app.bundle review-snapshot
+          git archive HEAD | tar -x -C /tmp/app-source
+          cd /tmp/app-source
+          go mod verify
+          go mod vendor
+          tar -czf /tmp/final-review/app-source.tar.gz .
+          go version > /tmp/final-review/toolchain.txt
+          go list -mod=vendor -m github.com/Laisky/go-journal >> /tmp/final-review/toolchain.txt
+          git clone https://github.com/Laisky/go-journal.git /tmp/journal-source
+          cd /tmp/journal-source
+          git checkout --detach ad049272dbeafca55f2e0a987942504ab127d3c0
+          git branch review-pinned HEAD
+          git bundle create /tmp/final-review/journal.bundle review-pinned
+          git archive HEAD | gzip > /tmp/final-review/journal-source.tar.gz
+          cd /tmp/final-review
+          sha256sum *.bundle *.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: final-security-review-source
+          path: /tmp/final-review/
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error

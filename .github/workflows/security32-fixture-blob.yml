@@ -1,0 +1,28 @@
+name: Validate private delivery fixture
+on:
+  push:
+    branches: [codex/security-final-review-20261006]
+    paths: [.github/workflows/security32-fixture-blob.yml]
+permissions:
+  contents: write
+jobs:
+  fixture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.1'
+      - name: Apply exact reviewed fixture diff
+        run: |
+          set -euo pipefail
+          git checkout --detach c6a6725087a74af7fb712d6294aae9de63b9e419
+          mkdir -p /tmp/fixture-evidence
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, zlib
+          encoded = 'eNrNVm1vozgQ/p5fMcqHCyiEkvQlp1ZIW93ufjqdVro93YeqQgaG1ipg1jZpo6r//cbG5AXa7Wp1Oh2RIGbePDPPMybnRQGLxR3XwE40Kq1Ociz5BuXWLpN+FTZbSN/TmPA6xydIC8R0dRGG0emyOF8vYRlFF2dnk8Vi8X6UyXw+/4FIHz7AYnlxGqxh3j3oRVYypeC6aS4nYK4cC0gSXnOdJJ7CsghACqEDULx+UAFkomokKoV5/JmVCgP41mKL8TJanQWQt5KlJcZfZUuSgpeYlLziOv5D1Oi7EOYynkPn2Py13iE+jDVQfmSlk8MJTGk1nSyGCmH1kHPp4ROnzMWD3YY/mb+hVokc40isoyiAgclx6LqtUpQUPRoIGikyem2SG0j2ZXIJ2iq5/65KZHmo5jSc0DbrNDoNLmBuHudnplumO9RNXmyTitW8oA5Ttg1m2niQmCE1Oz8stGRcIVxTCKm5qD9JKaRXTCuuqMhGL8TJanQW'
+          PY

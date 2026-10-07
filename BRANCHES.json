@@ -1,0 +1,1028 @@
+{
+  "repository": "Laisky/go-fluentd",
+  "purpose": "Recovery only, not a production merge",
+  "created_at": "2026-10-07T03:44:21.969444+00:00",
+  "reviewed_plan_sha256": "a12689c30a93a8b9d0e7cad519d7cb58dfa74f452657b4d1a271cce7f87430c5",
+  "master_unchanged": "149eed3c0ca8e6c0c1ca01ea8aeee28cc88182ea",
+  "keep": {
+    "master": "149eed3c0ca8e6c0c1ca01ea8aeee28cc88182ea",
+    "develop": "2da6637965b04a071c25cccafb49c3043a13722d"
+  },
+  "retired_branches": {
+    "build/update-go-journal-20260924": "b0903bd5d113754d8f220210a66f6eb69991d47c",
+    "chore/consolidate-branches-20261007": "ff32634802c909ff167b640889c2107a87d89509",
+    "chore/dependencies-20260928": "aa50855162b717e5139ed118bf013aa99d08e057",
+    "chore/group-review-workspace-20260923": "b56d48cc2554e7dfef8d30828432971fdd037103",
+    "chore/journal-dependency-preflight-20260924": "a150a9e859b2ef78a237554eeefe99315a5d825e",
+    "chore/modern-formats-preflight-20260924": "42ba864e1c588781645ef616a7a331d00cc2b719",
+    "ci/event-stage-1-20260924": "d0af0930a2d3abb09fb85efe1b12e39693bfd9de",
+    "ci/event-stage-2-20260924": "c2eda9ce8a996759f7b16975cb0fd4d6d8951a2a",
+    "ci/event-stage-3-20260924": "5125a082068186edd786e268b3c937f06501c3f3",
+    "ci/msgp-fix-validated-20260924": "7cf9f9074782b3bbf947c9686176d74231d2b733",
+    "ci/otlp-collector-candidate-20260925": "c608b41c6952d8f2a34e84df02a69c4a182dff50",
+    "ci/otlp-config-workspace-20260924": "bc36d36a2e272eea07f74840d87bd40895ad37e2",
+    "ci/otlp-foundation-publish-20260924": "d14049b8fba7bc53a83345507cd426b7e3142264",
+    "ci/otlp-gc-interop-20260925": "ffcdceb2ed97d42ebfdf502d1fdc128769a0f386",
+    "ci/otlp-journal-validated-20260924": "2990a76bb74d9b5a835ec45f87ec2e76a6258f20",
+    "ci/otlp-lifecycle-workspace-20260924": "58d4b860e123fb80c976469e7ed89c0667604b59",
+    "ci/otlp-native-20260924": "ac63c294093144e95dfa73655e5487f564ec377b",
+    "ci/otlp-routing-source-20260924": "d679aef901c7f401851f757664b960b3dbfd9f07",
+    "ci/otlp-service-publish-20260925": "5d124fb755b16787cc3169b685e7262f84afd07a",
+    "ci/otlp-service-validated-20260925": "b82994453f0b601c9c121eb10868fc1490fb4d09",
+    "ci/otlp-state-validated-20260924": "2db2b4330a6c84af67a2859b4a080e27fde3ce3d",
+    "ci/publish-stream-formats-20260924": "d02c2d6bdc8c6f35558603237b3239a646993cb1",
+    "codex/fix-30-journal-containment-20261006": "5cbf00f7ff26848867ec6a2a45609329c15c48c9",
+    "codex/fix-fluent-ingress-budgets": "538c36aef7d9a145f7bce8760120aa511c407d74",
+    "codex/pr23-gc-diagnosis": "60ac568d8ca7ea1848f8655e1e06062693bba55d",
+    "codex/security-24-concat-budget-20261006": "16821af0e0101f41500edff389ba5111a7a779e7",
+    "codex/security-25-diagnostics-20261006": "77314b68f4d8ca25d87722aa9d6e9e269f1ece2f",
+    "codex/security-26-es-response-20261006": "72a8e51d06969d9f98b0b7a1ec31b7b8a88f8ef4",
+    "codex/security-27-load-reviewed-20261006": "428173a4e222cc17eede94ce051c1d6b2d107c00",
+    "codex/security-27-otlp-capacity-20261006": "05424feae8a06a3f241579edc5058cba9e03444e",
+    "codex/security-27-reviewed-20261006": "c0873b18b6b6be468ce56ee77dccab7d57e14309",
+    "codex/security-28-preflight-20261006": "7b282e7ae5d50bff690ce473ac04ced3f2f14ef3",
+    "codex/security-29-ndjson-20261006": "e7909ba3dbc9cf9c8e1af7c2b4d78f8e1956b291",
+    "codex/security-31-tag-budget-20261006": "03b7751d33ffbeb8c0efe53bec17230b4f8553b4",
+    "codex/security-32-private-storage-20261007": "3e9d7d153cbd9e395e186951c6983843f90284d2",
+    "codex/security-final-review-20261006": "1734b80a3eb0515c2efd89a3550a833e3d91d304",
+    "codex/security-resume-20261006-2149": "d1f5dfd3210c85436533e262fc6ecfeb8879933b",
+    "codex/security-review-workspace-20261006": "8fb05d04a8c8abea4a0de9d0de4228a5e10f998e",
+    "docs/readme-quickstart-20260923": "bb888969d66848ff321d289debbfedbe540170e5",
+    "docs/restore-original-architecture-diagram": "3cbf0880558e2b9fdccc3ed47141f28d0cfe99c2",
+    "feat/http-event-formats-20260924": "5125a082068186edd786e268b3c937f06501c3f3",
+    "feat/otlp-edge-storage-20260930": "695612a71a9aa2934f0f21b2f012bf802b94b25a",
+    "feat/otlp-http-foundation-20260924": "2be250663090ede5a514ba880990f1a871e7fef4",
+    "fix/go127-reliability": "aa4128f53e51b0ed68f60ed755b9018621c06b56",
+    "observability/bounded-admission-20260930": "ecf24b6fc992ea92e8272bb14d231b8ea77d1111",
+    "perf/durable-group-commit-20260923": "8078525f92151dcf2d584ef89adbc17f07110044",
+    "perf/e2e-load-20260925": "72d55bd1d1cd5be8320031a7aa2f89ca8d0e4cba",
+    "perf/group-commit-validation-snapshot-20260923": "5e920dd7743a317ceee756e83c1fbbb99d3542cf",
+    "perf/measured-journal-20260923": "86622a72aedfe7806280912b7668bdfd08399f8f",
+    "perf/measured-pipeline-20260923": "e33aa9bda7f768a28082ef7e8e28bd95581d18cf",
+    "test/component-behavior-20260922": "cc1d4cffe9e5f96237a978169251fef17b1a9f81",
+    "test/component-behavior-coverage": "8e93b3be99429e861530c2fb2f4107f0b1cb3845",
+    "test/e2e-delivery-20260922": "2ba4c786e19a72c13ae26d74b98a3ddebe6d1b92",
+    "test/end-to-end-delivery-20260922": "5af24a88b173e7e60071e7c37e5060db614cdcea"
+  },
+  "original_inventory": {
+    "repository": "Laisky/go-fluentd",
+    "created_at": "2026-10-07T03:41:05.797768+00:00",
+    "master": "149eed3c0ca8e6c0c1ca01ea8aeee28cc88182ea",
+    "maintenance_branch": "chore/consolidate-branches-20261007",
+    "maintenance_sha": "2c62ee90a70b4634af65dbcfbf9ed0778ebe5f4f",
+    "branches": [
+      {
+        "name": "build/update-go-journal-20260924",
+        "sha": "b0903bd5d113754d8f220210a66f6eb69991d47c",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [
+          {
+            "number": 15,
+            "merged_at": "2026-09-24T00:57:05Z",
+            "head_sha": "b0903bd5d113754d8f220210a66f6eb69991d47c",
+            "merge_commit_sha": "f053ffb43cc92c81d7d28f586b1825d15b324d23",
+            "title": "build(deps): update go-journal with verified recovery and append safety"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-24T00:42:39Z test(journal): retain consumer receipt and recovery regression contracts",
+        "tree": "a2495e37032e41612ee613499a61ac3832607f4e",
+        "difference_from_master": "249 files changed, 928 insertions(+), 31476 deletions(-)"
+      },
+      {
+        "name": "chore/consolidate-branches-20261007",
+        "sha": "2c62ee90a70b4634af65dbcfbf9ed0778ebe5f4f",
+        "protected": false,
+        "preserve": false,
+        "classification": "temporary-cleanup-carrier",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-10-06T23:40:51-04:00 fix: normalize repository metadata URL in read-only archive inventory",
+        "tree": "d1d42c64707d3bbab6a5f840cc39687326d358d9",
+        "difference_from_master": "1 file changed, 117 insertions(+)"
+      },
+      {
+        "name": "chore/dependencies-20260928",
+        "sha": "aa50855162b717e5139ed118bf013aa99d08e057",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [
+          {
+            "number": 19,
+            "merged_at": "2026-09-29T00:04:05Z",
+            "head_sha": "aa50855162b717e5139ed118bf013aa99d08e057",
+            "merge_commit_sha": "3b44e3e7b1360fa1f0554a4ad33cbe41fa4d4a41",
+            "title": "chore(deps): upgrade go-journal and dependencies; fix Kafka and configuration compatibility"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-28T19:38:29-04:00 docs(security): record verified dependency scans and unresolved Snyk mapping",
+        "tree": "059cd5a00e963a1d08e4b845507dceed2fc92409",
+        "difference_from_master": "114 files changed, 627 insertions(+), 10303 deletions(-)"
+      },
+      {
+        "name": "chore/group-review-workspace-20260923",
+        "sha": "b56d48cc2554e7dfef8d30828432971fdd037103",
+        "protected": false,
+        "preserve": false,
+        "classification": "archive-only-superseded-or-experimental",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-23T14:23:18-04:00 chore: remove completed evidence publication workflow",
+        "tree": "6af861219fbc301a9cf6361378372e3ec7339658",
+        "difference_from_master": "265 files changed, 1241 insertions(+), 32993 deletions(-)"
+      },
+      {
+        "name": "chore/journal-dependency-preflight-20260924",
+        "sha": "a150a9e859b2ef78a237554eeefe99315a5d825e",
+        "protected": false,
+        "preserve": false,
+        "classification": "archive-only-superseded-or-experimental",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-23T20:46:19-04:00 ci: remove completed temporary journal dependency publisher",
+        "tree": "0c4a8b2a25cf885d4e7f397b311690af28ff0adf",
+        "difference_from_master": "250 files changed, 945 insertions(+), 31475 deletions(-)"
+      },
+      {
+        "name": "chore/modern-formats-preflight-20260924",
+        "sha": "42ba864e1c588781645ef616a7a331d00cc2b719",
+        "protected": false,
+        "preserve": false,
+        "classification": "archive-only-superseded-or-experimental",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-23T21:50:38-04:00 chore: stage verified format integration patches part two",
+        "tree": "49a2689ec242382b584ce4ec95d630dc7963aa61",
+        "difference_from_master": "252 files changed, 966 insertions(+), 31476 deletions(-)"
+      },
+      {
+        "name": "ci/event-stage-1-20260924",
+        "sha": "d0af0930a2d3abb09fb85efe1b12e39693bfd9de",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-24T15:13:33Z feat(controller): wire HTTP event receivers and preserve envelopes across journal replay",
+        "tree": "ca2ffcccef4d87b4e7c087fc2dd20fbba10ea763",
+        "difference_from_master": "245 files changed, 938 insertions(+), 30006 deletions(-)"
+      },
+      {
+        "name": "ci/event-stage-2-20260924",
+        "sha": "c2eda9ce8a996759f7b16975cb0fd4d6d8951a2a",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-24T15:27:21Z feat(senders): add bounded HTTP event delivery with retry and acknowledgement contracts",
+        "tree": "fc61d759a2a89772f9ea44c3b3630efd6e11cc5a",
+        "difference_from_master": "242 files changed, 938 insertions(+), 29335 deletions(-)"
+      },
+      {
+        "name": "ci/event-stage-3-20260924",
+        "sha": "5125a082068186edd786e268b3c937f06501c3f3",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-24T15:47:57Z docs(readme): expose HTTP event formats without changing the legacy quickstart",
+        "tree": "bf32f05bfc842aa5aa3dff9d1b8f49bd14cad833",
+        "difference_from_master": "235 files changed, 932 insertions(+), 28492 deletions(-)"
+      },
+      {
+        "name": "ci/msgp-fix-validated-20260924",
+        "sha": "7cf9f9074782b3bbf947c9686176d74231d2b733",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-25T01:36:51Z fix(deps): update MessagePack to retain decoded strings safely across GC",
+        "tree": "3d02b4178e02a09162fee782bce831de0a61d5b0",
+        "difference_from_master": "215 files changed, 1128 insertions(+), 22377 deletions(-)"
+      },
+      {
+        "name": "ci/otlp-collector-candidate-20260925",
+        "sha": "c608b41c6952d8f2a34e84df02a69c4a182dff50",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-24T22:16:37-04:00 test(otlp): verify real Collector interoperability and crash recovery",
+        "tree": "251b6ae806a06c07cf7b40465b27ab0ebf4fb3e0",
+        "difference_from_master": "212 files changed, 1139 insertions(+), 21576 deletions(-)"
+      },
+      {
+        "name": "ci/otlp-config-workspace-20260924",
+        "sha": "bc36d36a2e272eea07f74840d87bd40895ad37e2",
+        "protected": false,
+        "preserve": false,
+        "classification": "archive-only-superseded-or-experimental",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-24T20:41:24-04:00 ci: correct OTLP service timeout fixture before native tests",
+        "tree": "5092a7c53f1fe1a53c681132732be82ca1bbecaf",
+        "difference_from_master": "227 files changed, 1267 insertions(+), 23961 deletions(-)"
+      },
+      {
+        "name": "ci/otlp-foundation-publish-20260924",
+        "sha": "d14049b8fba7bc53a83345507cd426b7e3142264",
+        "protected": false,
+        "preserve": false,
+        "classification": "archive-only-superseded-or-experimental",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-24T17:57:52-04:00 ci: remove completed terminal-state staging workflow and transfer files",
+        "tree": "b66ad61637286bf799357d9989a61a3c121c893c",
+        "difference_from_master": "253 files changed, 1018 insertions(+), 31476 deletions(-)"
+      },
+      {
+        "name": "ci/otlp-gc-interop-20260925",
+        "sha": "ffcdceb2ed97d42ebfdf502d1fdc128769a0f386",
+        "protected": false,
+        "preserve": false,
+        "classification": "archive-only-superseded-or-experimental",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-24T22:23:07-04:00 ci: retire completed Collector preparation workflows and transfer files",
+        "tree": "adb034a065e5586f371338925709b27cf21285b7",
+        "difference_from_master": "215 files changed, 1130 insertions(+), 22348 deletions(-)"
+      },
+      {
+        "name": "ci/otlp-journal-validated-20260924",
+        "sha": "2990a76bb74d9b5a835ec45f87ec2e76a6258f20",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-24T23:47:16Z feat(controller): own OTLP WAL admission and bounded crash-safe replay",
+        "tree": "d2d721d77b22bb1e8607661de9c11987d95dbddd",
+        "difference_from_master": "220 files changed, 1110 insertions(+), 24173 deletions(-)"
+      },
+      {
+        "name": "ci/otlp-lifecycle-workspace-20260924",
+        "sha": "58d4b860e123fb80c976469e7ed89c0667604b59",
+        "protected": false,
+        "preserve": false,
+        "classification": "archive-only-superseded-or-experimental",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-24T19:58:30-04:00 ci: remove completed lifecycle staging workflow and transfer artifact",
+        "tree": "4341c92e9cd1353f771d4273220d9def7354d377",
+        "difference_from_master": "223 files changed, 976 insertions(+), 25574 deletions(-)"
+      },
+      {
+        "name": "ci/otlp-native-20260924",
+        "sha": "ac63c294093144e95dfa73655e5487f564ec377b",
+        "protected": false,
+        "preserve": false,
+        "classification": "archive-only-superseded-or-experimental",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-24T19:08:43-04:00 ci: remove completed read-only OTLP dependency cache export",
+        "tree": "55071a1178206b172882a2b4af2dd2e7aad490ee",
+        "difference_from_master": "236 files changed, 995 insertions(+), 28492 deletions(-)"
+      },
+      {
+        "name": "ci/otlp-routing-source-20260924",
+        "sha": "d679aef901c7f401851f757664b960b3dbfd9f07",
+        "protected": false,
+        "preserve": false,
+        "classification": "archive-only-superseded-or-experimental",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-24T21:43:18-04:00 ci: remove temporary MessagePack diagnostic and staging workflows",
+        "tree": "46f890828a56e6ec0797104954a0afe751d751f3",
+        "difference_from_master": "216 files changed, 1130 insertions(+), 22419 deletions(-)"
+      },
+      {
+        "name": "ci/otlp-service-publish-20260925",
+        "sha": "5d124fb755b16787cc3169b685e7262f84afd07a",
+        "protected": false,
+        "preserve": false,
+        "classification": "archive-only-superseded-or-experimental",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-24T23:24:24-04:00 ci: remove completed read-only consolidation snapshot workflow",
+        "tree": "66e35e05269c1f6549ba5bfced3ff46fd29b370b",
+        "difference_from_master": "218 files changed, 1113 insertions(+), 23961 deletions(-)"
+      },
+      {
+        "name": "ci/otlp-service-validated-20260925",
+        "sha": "b82994453f0b601c9c121eb10868fc1490fb4d09",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-25T00:54:41Z feat(controller): wire configured OTLP service and verify executable crash recovery",
+        "tree": "f25b81750be7728e1fce0c1c2997d48035b9672d",
+        "difference_from_master": "216 files changed, 1130 insertions(+), 22497 deletions(-)"
+      },
+      {
+        "name": "ci/otlp-state-validated-20260924",
+        "sha": "2db2b4330a6c84af67a2859b4a080e27fde3ce3d",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-24T21:54:53Z feat(otlp): persist terminal destination outcomes and guard replay with fault tests",
+        "tree": "e28fffca80fe35433c289531c92af564581e8948",
+        "difference_from_master": "238 files changed, 967 insertions(+), 28684 deletions(-)"
+      },
+      {
+        "name": "ci/publish-stream-formats-20260924",
+        "sha": "d02c2d6bdc8c6f35558603237b3239a646993cb1",
+        "protected": false,
+        "preserve": false,
+        "classification": "archive-only-superseded-or-experimental",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-24T11:52:28-04:00 ci: retire completed event-format publication workflow and transfer artifacts",
+        "tree": "6c18c14217a538742bed9a1b02a820cbbc14aa07",
+        "difference_from_master": "254 files changed, 990 insertions(+), 31476 deletions(-)"
+      },
+      {
+        "name": "codex/fix-30-journal-containment-20261006",
+        "sha": "5cbf00f7ff26848867ec6a2a45609329c15c48c9",
+        "protected": false,
+        "preserve": false,
+        "classification": "exact-merged-pr-head",
+        "related_prs": [
+          {
+            "number": 38,
+            "merged_at": "2026-10-06T20:53:36Z",
+            "head_sha": "5cbf00f7ff26848867ec6a2a45609329c15c48c9",
+            "merge_commit_sha": "6291350b30933ae1e1898d6428f9671bfd2aa486",
+            "title": "fix: contain legacy journal tag paths and symlink redirection"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-10-06T16:32:30-04:00 Declare existing etcd module as direct for lock contract test",
+        "tree": "8d070082d7a5a65c6e980f74653ecdf8a4cec4d3",
+        "difference_from_master": "36 files changed, 351 insertions(+), 2418 deletions(-)"
+      },
+      {
+        "name": "codex/fix-fluent-ingress-budgets",
+        "sha": "538c36aef7d9a145f7bce8760120aa511c407d74",
+        "protected": false,
+        "preserve": false,
+        "classification": "exact-merged-pr-head",
+        "related_prs": [
+          {
+            "number": 23,
+            "merged_at": "2026-10-03T01:37:55Z",
+            "head_sha": "538c36aef7d9a145f7bce8760120aa511c407d74",
+            "merge_commit_sha": "065c41d855e31cd3081b845e8222244fded5c136",
+            "title": "fix: bound Fluent ingress allocations, connections, and stalled reads"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-10-02T21:16:34-04:00 ci: surface GC stress failures and verify complete regression execution",
+        "tree": "261d62853f4c32f53e1133e58d877a64df4f36a3",
+        "difference_from_master": "97 files changed, 516 insertions(+), 6929 deletions(-)"
+      },
+      {
+        "name": "codex/pr23-gc-diagnosis",
+        "sha": "60ac568d8ca7ea1848f8655e1e06062693bba55d",
+        "protected": false,
+        "preserve": false,
+        "classification": "archive-only-superseded-or-experimental",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-10-02T21:11:39-04:00 ci: capture unchanged base/head GC stress failure diagnostics for PR 23",
+        "tree": "7c57733febdee36323c3978ea10e35c3d00f8716",
+        "difference_from_master": "101 files changed, 590 insertions(+), 7154 deletions(-)"
+      },
+      {
+        "name": "codex/security-24-concat-budget-20261006",
+        "sha": "16821af0e0101f41500edff389ba5111a7a779e7",
+        "protected": false,
+        "preserve": false,
+        "classification": "exact-merged-pr-head",
+        "related_prs": [
+          {
+            "number": 40,
+            "merged_at": "2026-10-07T01:19:58Z",
+            "head_sha": "16821af0e0101f41500edff389ba5111a7a779e7",
+            "merge_commit_sha": "7f06b5bb68f373995b712db4f7882f9bb2d72867",
+            "title": "fix: share bounded multiline pending state without false acknowledgements"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-10-06T22:30:18Z fix: share bounded multiline pending state without false acknowledgements",
+        "tree": "b0407f7dc262f27142cb5eef36b9c10075da7ec6",
+        "difference_from_master": "20 files changed, 21 insertions(+), 722 deletions(-)"
+      },
+      {
+        "name": "codex/security-25-diagnostics-20261006",
+        "sha": "77314b68f4d8ca25d87722aa9d6e9e269f1ece2f",
+        "protected": false,
+        "preserve": false,
+        "classification": "exact-merged-pr-head",
+        "related_prs": [
+          {
+            "number": 34,
+            "merged_at": "2026-10-06T03:18:13Z",
+            "head_sha": "77314b68f4d8ca25d87722aa9d6e9e269f1ece2f",
+            "merge_commit_sha": "23b52ed64a1afd4b885976e883c30794f78d53ce",
+            "title": "fix: prevent configuration and HTTP credential disclosure in diagnostics"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-10-06T03:10:07Z fix: keep configuration and HTTP credentials out of diagnostics",
+        "tree": "e39aecff7e1b27f64485405c887281510a78dbb8",
+        "difference_from_master": "79 files changed, 501 insertions(+), 5361 deletions(-)"
+      },
+      {
+        "name": "codex/security-26-es-response-20261006",
+        "sha": "72a8e51d06969d9f98b0b7a1ec31b7b8a88f8ef4",
+        "protected": false,
+        "preserve": false,
+        "classification": "exact-merged-pr-head",
+        "related_prs": [
+          {
+            "number": 35,
+            "merged_at": "2026-10-06T03:33:53Z",
+            "head_sha": "72a8e51d06969d9f98b0b7a1ec31b7b8a88f8ef4",
+            "merge_commit_sha": "e174aa4741826290c600a415c931fb7130b46d32",
+            "title": "fix: bound Elasticsearch response reads and failure diagnostics"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-10-06T03:20:44Z fix: bound Elasticsearch response reads and failure diagnostics",
+        "tree": "bf43701d9a4c382a9f785e45a0e39b58bd366b3d",
+        "difference_from_master": "75 files changed, 474 insertions(+), 5021 deletions(-)"
+      },
+      {
+        "name": "codex/security-27-load-reviewed-20261006",
+        "sha": "428173a4e222cc17eede94ce051c1d6b2d107c00",
+        "protected": false,
+        "preserve": false,
+        "classification": "predecessor-of-merged-pr-head",
+        "related_prs": [],
+        "predecessor_of_prs": [
+          36
+        ],
+        "tip": "2026-10-06T08:22:29-04:00 test: run explicit shared-runner load policy without altering production defaults",
+        "tree": "9e3b9da8fcefc8960b37c1b6541329b0321a4516",
+        "difference_from_master": "51 files changed, 378 insertions(+), 4101 deletions(-)"
+      },
+      {
+        "name": "codex/security-27-otlp-capacity-20261006",
+        "sha": "05424feae8a06a3f241579edc5058cba9e03444e",
+        "protected": false,
+        "preserve": false,
+        "classification": "exact-merged-pr-head",
+        "related_prs": [
+          {
+            "number": 36,
+            "merged_at": "2026-10-06T12:39:48Z",
+            "head_sha": "05424feae8a06a3f241579edc5058cba9e03444e",
+            "merge_commit_sha": "01051874665cef0dddf06b358e3a9bd02821ce1c",
+            "title": "fix: enforce finite OTLP storage capacity by default"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-10-06T08:29:53-04:00 docs: align shipped OTLP configuration with finite storage defaults",
+        "tree": "fd69b2c1d4ea5137e830dfeb874e2ef53c6f90f5",
+        "difference_from_master": "50 files changed, 374 insertions(+), 4095 deletions(-)"
+      },
+      {
+        "name": "codex/security-27-reviewed-20261006",
+        "sha": "c0873b18b6b6be468ce56ee77dccab7d57e14309",
+        "protected": false,
+        "preserve": false,
+        "classification": "predecessor-of-merged-pr-head",
+        "related_prs": [],
+        "predecessor_of_prs": [
+          36
+        ],
+        "tip": "2026-10-06T08:04:03-04:00 test: enforce checkpoint oracle regressions in configured service CI",
+        "tree": "431fb7e56db324c090947aa71de3e8b89524221d",
+        "difference_from_master": "58 files changed, 385 insertions(+), 4189 deletions(-)"
+      },
+      {
+        "name": "codex/security-28-preflight-20261006",
+        "sha": "7b282e7ae5d50bff690ce473ac04ced3f2f14ef3",
+        "protected": false,
+        "preserve": false,
+        "classification": "exact-merged-pr-head",
+        "related_prs": [
+          {
+            "number": 37,
+            "merged_at": "2026-10-06T19:57:32Z",
+            "head_sha": "7b282e7ae5d50bff690ce473ac04ced3f2f14ef3",
+            "merge_commit_sha": "4ef4475b03980963bf207c593e967daba440fa8c",
+            "title": "fix: preflight OTLP cardinality and structure before pdata allocation"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-10-06T12:55:23-04:00 test: separate SIGKILL durability from admission scan scheduling and retain failure diagnostics",
+        "tree": "4d4545f1aa634f107d6809a94e2795f8618022e7",
+        "difference_from_master": "39 files changed, 370 insertions(+), 2905 deletions(-)"
+      },
+      {
+        "name": "codex/security-29-ndjson-20261006",
+        "sha": "e7909ba3dbc9cf9c8e1af7c2b4d78f8e1956b291",
+        "protected": false,
+        "preserve": false,
+        "classification": "exact-merged-pr-head",
+        "related_prs": [
+          {
+            "number": 33,
+            "merged_at": "2026-10-06T03:05:19Z",
+            "head_sha": "e7909ba3dbc9cf9c8e1af7c2b4d78f8e1956b291",
+            "merge_commit_sha": "bf914e136b8b6197da74c1d92b3fa98e34ec6eca",
+            "title": "fix: bound NDJSON parsing work before separator-driven allocations"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-10-06T02:57:16Z fix: bound NDJSON parsing work without split allocations",
+        "tree": "4ef5db99fd47a8ec504cd154627875002388616e",
+        "difference_from_master": "88 files changed, 514 insertions(+), 5838 deletions(-)"
+      },
+      {
+        "name": "codex/security-31-tag-budget-20261006",
+        "sha": "03b7751d33ffbeb8c0efe53bec17230b4f8553b4",
+        "protected": false,
+        "preserve": false,
+        "classification": "exact-merged-pr-head",
+        "related_prs": [
+          {
+            "number": 39,
+            "merged_at": "2026-10-06T22:17:51Z",
+            "head_sha": "03b7751d33ffbeb8c0efe53bec17230b4f8553b4",
+            "merge_commit_sha": "a61f532bf36a4503aba5fe8548c814745550b7c6",
+            "title": "fix: bound legacy routing identities across persistence and routing"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-10-06T22:06:31Z fix: bound legacy routing identities across persistence and routing",
+        "tree": "1b8b2250b59d0f450802364239a6c5475df21ea8",
+        "difference_from_master": "31 files changed, 334 insertions(+), 1827 deletions(-)"
+      },
+      {
+        "name": "codex/security-32-private-storage-20261007",
+        "sha": "3e9d7d153cbd9e395e186951c6983843f90284d2",
+        "protected": false,
+        "preserve": false,
+        "classification": "exact-merged-pr-head",
+        "related_prs": [
+          {
+            "number": 41,
+            "merged_at": "2026-10-07T02:43:07Z",
+            "head_sha": "3e9d7d153cbd9e395e186951c6983843f90284d2",
+            "merge_commit_sha": "149eed3c0ca8e6c0c1ca01ea8aeee28cc88182ea",
+            "title": "fix: enforce private legacy journal storage and reject unsafe retained trees"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-10-06T21:47:15-04:00 test: create private delivery WAL fixtures without altering retained state",
+        "tree": "8f6026fc1ca686cba909c268d113fdb81e4b7f07",
+        "difference_from_master": ""
+      },
+      {
+        "name": "codex/security-final-review-20261006",
+        "sha": "1734b80a3eb0515c2efd89a3550a833e3d91d304",
+        "protected": false,
+        "preserve": false,
+        "classification": "archive-only-superseded-or-experimental",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-10-06T21:45:46-04:00 test: verify exact fixture patch, execute real recovery contracts and publish only the content blob",
+        "tree": "448b636af8ab30d5e721e78f9732dad4809478a5",
+        "difference_from_master": "37 files changed, 733 insertions(+), 1827 deletions(-)"
+      },
+      {
+        "name": "codex/security-resume-20261006-2149",
+        "sha": "d1f5dfd3210c85436533e262fc6ecfeb8879933b",
+        "protected": false,
+        "preserve": false,
+        "classification": "archive-only-superseded-or-experimental",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-10-06T18:37:03-04:00 chore: resolve only the reviewed private journal dependency for final integration",
+        "tree": "8291ca97332f3ef90e318cdd21087c03e26cac9f",
+        "difference_from_master": "47 files changed, 834 insertions(+), 2418 deletions(-)"
+      },
+      {
+        "name": "codex/security-review-workspace-20261006",
+        "sha": "8fb05d04a8c8abea4a0de9d0de4228a5e10f998e",
+        "protected": false,
+        "preserve": false,
+        "classification": "archive-only-superseded-or-experimental",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-10-06T12:16:35-04:00 test: verify issue 28 red-green evidence and publish exact reviewed source",
+        "tree": "4f66eef656d4ca4a414a97d8e7482526021f5c50",
+        "difference_from_master": "106 files changed, 1151 insertions(+), 5985 deletions(-)"
+      },
+      {
+        "name": "develop",
+        "sha": "2da6637965b04a071c25cccafb49c3043a13722d",
+        "protected": false,
+        "preserve": true,
+        "classification": "keep-long-lived-or-protected",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2021-12-24T05:37:37Z test: fix",
+        "tree": "ac3c3bf6c70339f1edfe2979b6f3b994e4a5aed8",
+        "difference_from_master": "345 files changed, 2386 insertions(+), 44849 deletions(-)"
+      },
+      {
+        "name": "docs/readme-quickstart-20260923",
+        "sha": "bb888969d66848ff321d289debbfedbe540170e5",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [
+          {
+            "number": 13,
+            "merged_at": "2026-09-23T22:57:43Z",
+            "head_sha": "bb888969d66848ff321d289debbfedbe540170e5",
+            "merge_commit_sha": "afee9ebbba90d2d5b5eadf42c28dea525d96b135",
+            "title": "docs: modernize README with executable quickstart and reliability boundaries"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-23T18:25:35-04:00 docs: replace legacy README with tested setup and explicit reliability contracts",
+        "tree": "bf0a6037b9e6c8c123a4d5ce8e0560675b8cc312",
+        "difference_from_master": "250 files changed, 944 insertions(+), 31656 deletions(-)"
+      },
+      {
+        "name": "docs/restore-original-architecture-diagram",
+        "sha": "3cbf0880558e2b9fdccc3ed47141f28d0cfe99c2",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [
+          {
+            "number": 14,
+            "merged_at": "2026-09-23T23:02:56Z",
+            "head_sha": "3cbf0880558e2b9fdccc3ed47141f28d0cfe99c2",
+            "merge_commit_sha": "b22cd5479fb1cc67b7d551d8129e24d583967c55",
+            "title": "docs: restore the original architecture diagram in README"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-23T19:02:00-04:00 docs: restore original architecture diagram in README",
+        "tree": "6d4601d724e33364206bc9af87b858785f9490cf",
+        "difference_from_master": "250 files changed, 944 insertions(+), 31652 deletions(-)"
+      },
+      {
+        "name": "feat/http-event-formats-20260924",
+        "sha": "5125a082068186edd786e268b3c937f06501c3f3",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [
+          {
+            "number": 16,
+            "merged_at": "2026-09-25T03:10:11Z",
+            "head_sha": "5125a082068186edd786e268b3c937f06501c3f3",
+            "merge_commit_sha": "195de0e3490317123722cbd6cbab19796c859169",
+            "title": "feat: add reliable HTTP CloudEvents and NDJSON receivers and senders"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-24T15:47:57Z docs(readme): expose HTTP event formats without changing the legacy quickstart",
+        "tree": "bf32f05bfc842aa5aa3dff9d1b8f49bd14cad833",
+        "difference_from_master": "235 files changed, 932 insertions(+), 28492 deletions(-)"
+      },
+      {
+        "name": "feat/otlp-edge-storage-20260930",
+        "sha": "695612a71a9aa2934f0f21b2f012bf802b94b25a",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [
+          {
+            "number": 20,
+            "merged_at": "2026-09-30T19:00:05Z",
+            "head_sha": "695612a71a9aa2934f0f21b2f012bf802b94b25a",
+            "merge_commit_sha": "ab69e835797372b491a924e8bd1982396a67f04a",
+            "title": "feat(otlp): checkpoint-safe receipt GC and edge storage admission guard"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-30T12:21:17-04:00 docs: preserve executable UTC quickstart in storage documentation update",
+        "tree": "48bd1ebb2f22d1585a4e7f61cd255c4d2ec8ff57",
+        "difference_from_master": "111 files changed, 579 insertions(+), 9369 deletions(-)"
+      },
+      {
+        "name": "feat/otlp-http-foundation-20260924",
+        "sha": "2be250663090ede5a514ba880990f1a871e7fef4",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [
+          {
+            "number": 17,
+            "merged_at": "2026-09-25T11:39:17Z",
+            "head_sha": "2be250663090ede5a514ba880990f1a871e7fef4",
+            "merge_commit_sha": "828d34ab1460820cf732810d01b56985d46a4ab9",
+            "title": "feat: consolidate CloudEvents, NDJSON and OTLP delivery in PR17"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-24T23:30:46-04:00 ci: retain synthetic hidden lock files listed in evidence checksums",
+        "tree": "20da7a24e7adf1a69c2373f3729c8e33e10b2ba8",
+        "difference_from_master": "195 files changed, 1275 insertions(+), 18155 deletions(-)"
+      },
+      {
+        "name": "fix/go127-reliability",
+        "sha": "aa4128f53e51b0ed68f60ed755b9018621c06b56",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [
+          {
+            "number": 6,
+            "merged_at": "2026-09-22T17:29:49Z",
+            "head_sha": "aa4128f53e51b0ed68f60ed755b9018621c06b56",
+            "merge_commit_sha": "d97a5175e3287bbd9282be06425b5c6ea2285525",
+            "title": "Upgrade to Go 1.27 and fix reproduced message-delivery and journal bugs"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-22T13:00:55-04:00 ci: register the modern Go 1.27 CodeQL workflow",
+        "tree": "e70b943dbb47b4124580e263d3690c4179574990",
+        "difference_from_master": "331 files changed, 1904 insertions(+), 43677 deletions(-)"
+      },
+      {
+        "name": "master",
+        "sha": "149eed3c0ca8e6c0c1ca01ea8aeee28cc88182ea",
+        "protected": false,
+        "preserve": true,
+        "classification": "keep-long-lived-or-protected",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-10-06T22:43:07-04:00 fix: enforce private legacy journal storage and reject unsafe retained trees (#41)",
+        "tree": "8f6026fc1ca686cba909c268d113fdb81e4b7f07",
+        "difference_from_master": ""
+      },
+      {
+        "name": "observability/bounded-admission-20260930",
+        "sha": "ecf24b6fc992ea92e8272bb14d231b8ea77d1111",
+        "protected": false,
+        "preserve": false,
+        "classification": "exact-merged-pr-head",
+        "related_prs": [
+          {
+            "number": 22,
+            "merged_at": "2026-10-03T02:22:17Z",
+            "head_sha": "ecf24b6fc992ea92e8272bb14d231b8ea77d1111",
+            "merge_commit_sha": "5384f555ca055996a62cc40bd13f96824c8dd26d",
+            "title": "Record isolated b1 journal measurements and unresolved capacity gate"
+          },
+          {
+            "number": 21,
+            "merged_at": "2026-09-30T23:30:28Z",
+            "head_sha": "0e568a13f4590a95917151800fac68bd1730554d",
+            "merge_commit_sha": "bdc874d6591664d0538c6fe974f11079b255de1e",
+            "title": "Bound OTLP admission scans before backlog harms service latency"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-10-02T22:02:09-04:00 ci: initialize B1 evidence paths after runner allocation",
+        "tree": "be7a312eb48fe1fdf8950faa7c0c6b22790c9a8a",
+        "difference_from_master": "92 files changed, 516 insertions(+), 5985 deletions(-)"
+      },
+      {
+        "name": "perf/durable-group-commit-20260923",
+        "sha": "8078525f92151dcf2d584ef89adbc17f07110044",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [
+          {
+            "number": 12,
+            "merged_at": "2026-09-23T19:13:00Z",
+            "head_sha": "8078525f92151dcf2d584ef89adbc17f07110044",
+            "merge_commit_sha": "6185404600e05772239fdae2ebe5a9e0e2e4b3e9",
+            "title": "Add measured opt-in durable group commit with independent delivery audits"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-23T14:17:50-04:00 docs(perf): document reproducible evidence schema and measurement units",
+        "tree": "02bd36fc3f2bdba152a5069962133f2a0fb86e70",
+        "difference_from_master": "252 files changed, 1230 insertions(+), 32399 deletions(-)"
+      },
+      {
+        "name": "perf/e2e-load-20260925",
+        "sha": "72d55bd1d1cd5be8320031a7aa2f89ca8d0e4cba",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [
+          {
+            "number": 18,
+            "merged_at": "2026-09-26T13:44:55Z",
+            "head_sha": "72d55bd1d1cd5be8320031a7aa2f89ca8d0e4cba",
+            "merge_commit_sha": "69a1da628fa81d5a35771e66ea95d3423a7ccc83",
+            "title": "perf: add end-to-end load framework and measured CPU/latency optimizations"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-26T09:08:52-04:00 docs(ci): close interrupted journal adoption with native three-way evidence",
+        "tree": "5292e24f32dbe58ff5a93db38310bbe83972c656",
+        "difference_from_master": "134 files changed, 1121 insertions(+), 12190 deletions(-)"
+      },
+      {
+        "name": "perf/group-commit-validation-snapshot-20260923",
+        "sha": "5e920dd7743a317ceee756e83c1fbbb99d3542cf",
+        "protected": false,
+        "preserve": false,
+        "classification": "archive-only-superseded-or-experimental",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-23T11:14:56-04:00 chore: capture exact existing group-commit code for final verification",
+        "tree": "f508400ffaf2eec4e9779deb150f5386acfe6876",
+        "difference_from_master": "267 files changed, 1280 insertions(+), 33075 deletions(-)"
+      },
+      {
+        "name": "perf/measured-journal-20260923",
+        "sha": "86622a72aedfe7806280912b7668bdfd08399f8f",
+        "protected": false,
+        "preserve": false,
+        "classification": "archive-only-superseded-or-experimental",
+        "related_prs": [],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-23T00:16:30-04:00 test: retain the journal dependency graph for offline benchmarks",
+        "tree": "02b9d267bd21c67a2fb75c780fb84d0a73560092",
+        "difference_from_master": "300 files changed, 1420 insertions(+), 39469 deletions(-)"
+      },
+      {
+        "name": "perf/measured-pipeline-20260923",
+        "sha": "e33aa9bda7f768a28082ef7e8e28bd95581d18cf",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [
+          {
+            "number": 11,
+            "merged_at": "2026-09-23T13:49:48Z",
+            "head_sha": "e33aa9bda7f768a28082ef7e8e28bd95581d18cf",
+            "merge_commit_sha": "76717b288a170acc0e1e12daf19def9fa7da1bb1",
+            "title": "Measure journal and pipeline performance; optimize recovery, encoding and pending-state metrics"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-23T08:24:23-04:00 ci(perf): remove completed report publisher and seal the measured performance change",
+        "tree": "fad98ffb216a0f29cefb58ec548bb2a8e41b5d49",
+        "difference_from_master": "268 files changed, 1304 insertions(+), 34409 deletions(-)"
+      },
+      {
+        "name": "test/component-behavior-20260922",
+        "sha": "cc1d4cffe9e5f96237a978169251fef17b1a9f81",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [
+          {
+            "number": 8,
+            "merged_at": "2026-09-22T20:11:35Z",
+            "head_sha": "cc1d4cffe9e5f96237a978169251fef17b1a9f81",
+            "merge_commit_sha": "dc768b2ec84625f71bc9119fa20641d0673160c3",
+            "title": "Add critical-component behavior tests and fix delivery, routing and lifecycle defects"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-22T16:00:18-04:00 ci: enforce component coverage and randomized race contracts; remove temporary import workflows",
+        "tree": "239d4234ee1be69d1f01e8386fc8ce8cc5852749",
+        "difference_from_master": "306 files changed, 1351 insertions(+), 40579 deletions(-)"
+      },
+      {
+        "name": "test/component-behavior-coverage",
+        "sha": "8e93b3be99429e861530c2fb2f4107f0b1cb3845",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [
+          {
+            "number": 7,
+            "merged_at": "2026-09-23T14:55:24Z",
+            "head_sha": "8e93b3be99429e861530c2fb2f4107f0b1cb3845",
+            "merge_commit_sha": "28f221dcaf2615e45ec88294c3fee279b3f06062",
+            "title": "Add critical-component behavior coverage and fix reproduced correctness bugs"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-23T10:54:49-04:00 Merge master into PR #7 after conflict audit",
+        "tree": "fad98ffb216a0f29cefb58ec548bb2a8e41b5d49",
+        "difference_from_master": "268 files changed, 1304 insertions(+), 34409 deletions(-)"
+      },
+      {
+        "name": "test/e2e-delivery-20260922",
+        "sha": "2ba4c786e19a72c13ae26d74b98a3ddebe6d1b92",
+        "protected": false,
+        "preserve": false,
+        "classification": "archive-only-superseded-or-experimental",
+        "related_prs": [
+          {
+            "number": 9,
+            "merged_at": null,
+            "head_sha": "2ba4c786e19a72c13ae26d74b98a3ddebe6d1b92",
+            "merge_commit_sha": "5a749e1ef1f5249e6de86db6fda3fdcba90bc223",
+            "title": "Qualify end-to-end delivery with independent crash and outage tests"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-23T11:09:13-04:00 Merge current master into PR #9",
+        "tree": "fad98ffb216a0f29cefb58ec548bb2a8e41b5d49",
+        "difference_from_master": "268 files changed, 1304 insertions(+), 34409 deletions(-)"
+      },
+      {
+        "name": "test/end-to-end-delivery-20260922",
+        "sha": "5af24a88b173e7e60071e7c37e5060db614cdcea",
+        "protected": false,
+        "preserve": false,
+        "classification": "ancestor-of-master",
+        "related_prs": [
+          {
+            "number": 10,
+            "merged_at": "2026-09-22T23:54:12Z",
+            "head_sha": "5af24a88b173e7e60071e7c37e5060db614cdcea",
+            "merge_commit_sha": "d5b3e67fcf22daad1e6c667b66277bc8bbb29b7c",
+            "title": "Verify end-to-end delivery with real crashes, independent ledgers and durable acceptance"
+          }
+        ],
+        "predecessor_of_prs": [],
+        "tip": "2026-09-22T18:31:07-04:00 ci: enforce independent delivery contracts and retain crash evidence",
+        "tree": "a1b3cd48082a99a79fa1bd62983c891c6fe70cb6",
+        "difference_from_master": "298 files changed, 1355 insertions(+), 39469 deletions(-)"
+      }
+    ],
+    "existing_tags": [
+      "refs/tags/1.0 838804a6c6e501e4175a06816775d4832c11c8a5",
+      "refs/tags/1.0.1 9cedfe847a465bd5f904a4c88ab0b9f7c9cc90ab",
+      "refs/tags/1.0.2 46f6263e6a3f0b246adca90f504cd386c162c63a",
+      "refs/tags/1.1.0 106b79a2393141679d57e9b37f46ae6cbb317025",
+      "refs/tags/1.2.0 cde77761383d631329f33d861e8c93bb02b3bd24",
+      "refs/tags/1.2.1 f3d568f0fd75c3de04f6f86b7b8d24ee19779ca5",
+      "refs/tags/1.2.2 760f8daaa5f5863c7d59b3d91e0bcc9c7f6df57e",
+      "refs/tags/1.2.3 31d2d6b24d540fb44fcf81281e268959cd9749bf",
+      "refs/tags/1.2.4 01c7b0c2c8f9bf9743db4ff1b44b0d70d9c6ae8c",
+      "refs/tags/1.2.5 fe9db28a1d56373a8b481cde3f4060daf80a46e2",
+      "refs/tags/1.3 ec3334dfe0f65bc37eb3e0d776322f1f6b17a4e3",
+      "refs/tags/1.3.1 3cc5fb589315a3ae7c8f976c933562c12e9d9b0c",
+      "refs/tags/1.4 3c3d3104172449390151a22c4fb04a6ccd5c51de",
+      "refs/tags/1.5.1 2da49e6629dd5ea6bc639e69767137c786acfcbc",
+      "refs/tags/1.5.2 27b29686ec031e458dfbc64bba95c7016719e8db",
+      "refs/tags/1.5.3 cc94e8e2eb72eee3979cb48d3d03b56d093cbc9e",
+      "refs/tags/1.6.1 163059ef94c58e2fb8b8a4da81f2dc48606f4237",
+      "refs/tags/1.6.2 a734c8b327dd6fc06e93b351b9a988938397a54f",
+      "refs/tags/1.6.7 b6d9dba68ea3e69d45ff649084bc16d058cb3d86",
+      "refs/tags/1.6.8 73ce9071646d19d605675f794f7380b109c4c938",
+      "refs/tags/1.7 1de092b8ea4de5e42a7af20c72973dbcc0652646",
+      "refs/tags/1.7.1 4670cdc551639c9a80818f226cd65dce435724aa",
+      "refs/tags/1.7.2 d8b48936b68ee40c291bb9381c450e554ce36fc5",
+      "refs/tags/1.8 e8513a4d339d7d3209ffdbf30485bace16e5f5f8",
+      "refs/tags/1.8.1 4d9c66ee389efa79c583b71aa8247cc51cf969a4",
+      "refs/tags/1.8.2 ce742df2854466753c40d346fde66d75eac621b4",
+      "refs/tags/1.8.3 c3a1532876fbeeed6764b4efe411e92f13daf205",
+      "refs/tags/1.8.4 9154f5419e98b750ff5d2cf36cb8838f935e9e07",
+      "refs/tags/v1.10.0 cbae23d582aae59aa54ca9062f9a4a9c71bc1d9d",
+      "refs/tags/v1.10.4 6c28a100b92ad59c3dedf807f46c9408a76b3c16",
+      "refs/tags/v1.10.5 b5638332b35405adf13862c1b3e71fa46afafcb9",
+      "refs/tags/v1.10.6 b841472bf74bc56e2053d99e251053b556f7aa6a",
+      "refs/tags/v1.10.8 ebd9580af2c56fec460f43f12961674455de7724",
+      "refs/tags/v1.11.0 a5d5aea475b144dd9d39dd0f35140573bf8b840e",
+      "refs/tags/v1.11.1 bb6f0a9957d89493e06d4f38b72172683dc15bea",
+      "refs/tags/v1.11.4 ec1f9d8c238b09b456a89498efb0b7fee7de4976",
+      "refs/tags/v1.11.5 4462a3380d81a6e9eeae5e75f3756fd33f451423",
+      "refs/tags/v1.11.6 3fe9db28445aa5a4390726ad5f6c46d03fb5e3b9",
+      "refs/tags/v1.12.0 304fd6d282f994be9604331b78b8cd4fb1cfb723",
+      "refs/tags/v1.12.1 c0f7e6bfecd645a177b5021a974de080a8e1f42b",
+      "refs/tags/v1.12.2 9836afc5f88a4fc306af43ad9232775bb8122cfc",
+      "refs/tags/v1.12.3 11344cf8fde055739092978e603ed0225a7c82f5",
+      "refs/tags/v1.12.4 fec201c1d8eae4ce92a5b26f795748ac632bf815",
+      "refs/tags/v1.12.5 768f176cb6595b62333f10275b7fff22a831fad0",
+      "refs/tags/v1.12.6 c946f3fb932c44ab3b3c204cbc4f8c80f6c974cb",
+      "refs/tags/v1.12.7 a78d471866c8f68859e43ae2779472b41b2b73db",
+      "refs/tags/v1.13.0 a338d86b10e2042f0a21d6e950fdef0a8b7b1031",
+      "refs/tags/v1.13.1 29b079937f2f08b36da1d5076b28345247513577",
+      "refs/tags/v1.13.2 9cd096c14ee65c801331db80e45633259d147cd0",
+      "refs/tags/v1.13.3 25d108b76ba06791ccddf9d8bcb6bc2d6df3516a",
+      "refs/tags/v1.8.7 4f9f4531e8c7d47f79f62837533883051bcb26bc",
+      "refs/tags/v1.8.9 76fe8b5e44a19e1c00dfff7aa060487c3a11bf6a",
+      "refs/tags/v1.9.0 d3acdad65b7e9b84aa38855cbcc772d396cc89f1",
+      "refs/tags/v1.9.2 e95b76c821d0c521ea786d3f06e18e0fa8f787de",
+      "refs/tags/v1.9.3 9dffd2ed29a3d5055e96a82628b0072b16c33082"
+    ],
+    "closed_pr_count": 32,
+    "open_pr_count": 0,
+    "open_issue_count": 0,
+    "policy": "Preserve master/develop/protected branches. Archive all other branch tips without merging experimental source. Delete only reviewed exact refs after durable recovery verification."
+  }
+}

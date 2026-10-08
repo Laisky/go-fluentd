@@ -27,6 +27,8 @@ CI; measured runtimes, including cold compilation, are recorded in the PR.
 ```sh
 python3 -m unittest discover -s .scripts -p test_fast_ci.py -v
 python3 .scripts/fast_ci.py --evidence /tmp/fast-ci
+python3 .scripts/check_readme.py --self-test
+python3 .scripts/check_readme.py --static
 ```
 
 ## Retained manual qualification
@@ -53,6 +55,7 @@ through **Actions > workflow > Run workflow**, selecting the candidate branch:
 - `otlp-state.yml`
 - `otlp-wire.yml`
 - `performance.yml`
+- `readme.yml` (complete native/Docker integration matrix)
 
 Already-manual historical workflows remain available. The benchmark regression
 workflow accepts an explicit rolling baseline ref; use the candidate PR's base
@@ -79,6 +82,14 @@ deployment, credentials, secrets, branch protection and repository security
 settings are outside this scheduling amendment.
 
 CodeQL, dependency-security and legacy-journal-permissions remain automatic.
-Their runtime is separate from the fast Go testing budget. The README native/
-Docker workflow is preserved pending coordination with concurrent documentation
-work; it remains an explicit exception to the minimal-testing target.
+Their runtime is separate from the fast Go testing budget. After coordination
+with the documentation owner, the README native/Docker integration matrix is
+manual; every original job step, assertion, timeout and artifact remains intact.
+Its existing checker self-tests and static Markdown/link/shell-syntax checks
+remain automatic in `Go / test`. README.md and the checker implementation are
+unchanged. Manual examples can also be run with:
+
+```sh
+python3 .scripts/check_readme.py --native
+python3 .scripts/check_readme.py --docker
+```

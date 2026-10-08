@@ -32,6 +32,10 @@ jobs:
           cache: true
       - name: Check gate failure reporting
         run: python3 -m unittest discover -s .scripts -p test_fast_ci.py -v
+      - name: README checker controls and static documentation checks
+        run: |
+          python3 .scripts/check_readme.py --self-test
+          python3 .scripts/check_readme.py --static
       - name: Formatting and essential unit tests
         run: python3 .scripts/fast_ci.py --evidence "$RUNNER_TEMP/fast-ci"
       - name: Retain actual discovery, exit statuses, and timings

@@ -1,0 +1,29 @@
+[
+  {
+    "package": "./internal/recvs/fluentwire",
+    "tests": [
+      "TestRejectDeclaredLengthsBeforeBody",
+      "TestPipelinedAndFragmentedFrames",
+      "TestEveryScalarEncoding",
+      "TestFrameAndValueByteBoundaries",
+      "TestAggregateValuesAndSharedPackedBudget",
+      "TestDepthAndMapKeyAccounting",
+      "TestTruncationsAndInvalidMarkers",
+      "TestInvalidLimits",
+      "TestFixedWidthNumbersDoNotConsumeVariableValueLimit"
+    ]
+  },
+  {
+    "package": "./library/streamformat",
+    "tests": [
+      "TestJSONDataDomain",
+      "TestNDJSONIndependentWireContract",
+      "TestCloudEventsAllModes",
+      "TestBinaryCloudEventsBytesAndHeaderEscapes",
+      "TestCloudEventsInvalidEnvelopeDoesNotPartiallyDecode",
+      "TestJSONOwnsStringsAndDoesNotMutateInput",
+      "TestJSONStringInvalidWireStillRejected",
+      "TestRegressionNDJSONLineAndRecordBoundaries"
+    ]
+  }
+]

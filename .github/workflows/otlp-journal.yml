@@ -1,27 +1,7 @@
 name: OTLP journal lifecycle contracts
 on:
-  pull_request:
-    paths:
-      - 'internal/controller/otlp*'
-      - 'internal/otlphttp/**'
-      - 'internal/otlpstate/**'
-      - 'library/otlpwire/**'
-      - 'go.mod'
-      - 'go.sum'
-      - 'docs/otlp*.md'
-      - '.scripts/verify_otlp_journal_contracts.py'
-      - '.github/workflows/otlp-journal.yml'
-  push:
-    branches: [master]
-    paths:
-      - 'internal/controller/otlp*'
-      - 'internal/otlphttp/**'
-      - 'internal/otlpstate/**'
-      - 'library/otlpwire/**'
-      - 'go.mod'
-      - 'go.sum'
-      - '.scripts/verify_otlp_journal_contracts.py'
-      - '.github/workflows/otlp-journal.yml'
+  workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

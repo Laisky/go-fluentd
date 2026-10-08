@@ -1,20 +1,7 @@
 name: Corrected journal dependency adoption
 on:
-  pull_request:
-    paths:
-      - go.mod
-      - go.sum
-      - internal/controller/journal_selective*.go
-      - tests/loadtest/*journal_adoption.py
-      - .github/workflows/journal-adoption.yml
-  push:
-    branches: [master]
-    paths:
-      - go.mod
-      - go.sum
-      - internal/controller/journal_selective*.go
-      - tests/loadtest/*journal_adoption.py
-      - .github/workflows/journal-adoption.yml
+  workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

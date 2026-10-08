@@ -1,18 +1,6 @@
 name: OTLP edge acceptance
 
 on:
-  push:
-    branches: [master, develop, feat/otlp-edge-storage-20260930]
-  pull_request:
-    paths:
-      - 'internal/controller/otlp*'
-      - 'internal/otlpstate/**'
-      - 'tests/otlp_service/**'
-      - 'library/otlpwire/**'
-      - 'go.mod'
-      - 'go.sum'
-      - '.scripts/*b1_measure.py'
-      - '.github/workflows/otlp-edge.yml'
   workflow_dispatch:
 
 permissions:

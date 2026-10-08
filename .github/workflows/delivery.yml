@@ -30,7 +30,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.27.x'
+          go-version: '1.27.2'
       - run: go version
       - name: Build the ordinary executable with race instrumentation
         run: go build -mod=readonly -race -o "$RUNNER_TEMP/go-fluentd-delivery" .
@@ -70,7 +70,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.27.x'
+          go-version: '1.27.2'
       - name: Build both exact executable versions
         run: |
           go build -mod=readonly -race -o "$RUNNER_TEMP/go-fluentd-after" .

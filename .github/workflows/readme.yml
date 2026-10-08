@@ -29,7 +29,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         if: matrix.mode == 'native'
         with:
-          go-version: '1.27.x'
+          go-version: '1.27.2'
       - name: Verify documentation checker and Markdown structure
         run: |
           python3 .scripts/check_readme.py --self-test

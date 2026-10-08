@@ -10,7 +10,7 @@ on local dev/staging before promoting relevant changes.
 
 ## Automatic check
 
-`Go / test` runs Go 1.27.1, gofmt on every tracked Go source, and the exact named
+`Go / test` runs Go 1.27.2, gofmt on every tracked Go source, and the exact named
 test list in `.scripts/fast_ci_tests.json`. It covers MessagePack framing limits and NDJSON/CloudEvents decoding and ownership.
 The unit tests execute once (`-count=1`), with no race, coverage, benchmark, fuzz,
 external service or environment campaign. This deliberately limited gate does
@@ -62,7 +62,7 @@ workflow accepts an explicit rolling baseline ref; use the candidate PR's base
 SHA to reproduce its prior comparison. Its pinned policy reference and failure
 thresholds stay intact.
 
-For local dev/staging (Go 1.27.1; Linux for OS-specific tests):
+For local dev/staging (Go 1.27.2; Linux for OS-specific tests):
 
 ```sh
 go mod verify
@@ -93,3 +93,15 @@ unchanged. Manual examples can also be run with:
 python3 .scripts/check_readme.py --native
 python3 .scripts/check_readme.py --docker
 ```
+
+## Compiler security patch (2026-10-08)
+
+CI selects Go 1.27.2 explicitly for the current compiler and standard-library
+security fixes. This selection is separate from module dependency versions
+and the unchanged language floor. Test selections, assertions, security
+gates and manual qualification scheduling remain unchanged. Historical
+runtime receipts retain their original compiler provenance.
+
+Release source: https://go.dev/doc/devel/release . Build images and production
+deployment remain with their coordinated owners; this CI amendment does
+not claim that currently deployed binaries were rebuilt or rolled out.

@@ -1,12 +1,6 @@
 name: Dependency compatibility
 
 on:
-  push:
-    branches: [master, develop, 'chore/dependencies-*']
-    paths: ['go.mod', 'go.sum', '**/*.go', '.scripts/check_journal_upgrade.sh', '.scripts/check_component_coverage.py', '.scripts/check_metrics_dependencies.py', '.scripts/test_metrics_dependencies.py', '.github/workflows/dependency-upgrade.yml']
-  pull_request:
-    branches: [master, develop]
-    paths: ['go.mod', 'go.sum', '**/*.go', '.scripts/check_journal_upgrade.sh', '.scripts/check_component_coverage.py', '.scripts/check_metrics_dependencies.py', '.scripts/test_metrics_dependencies.py', '.github/workflows/dependency-upgrade.yml']
   workflow_dispatch:
 
 permissions:

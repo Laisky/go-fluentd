@@ -1,35 +1,7 @@
 name: OTLP configured service contracts
 on:
-  pull_request:
-    paths:
-      - 'cmd/**'
-      - 'main.go'
-      - 'internal/controller/**'
-      - 'internal/otlphttp/**'
-      - 'internal/otlpstate/**'
-      - 'library/otlpwire/**'
-      - 'tests/otlp_service/**'
-      - 'docs/settings/otlp.yml'
-      - 'docs/otlp*.md'
-      - '.scripts/verify_otlp_service_contracts.py'
-      - '.github/workflows/otlp-service.yml'
-      - 'go.mod'
-      - 'go.sum'
-  push:
-    branches: [master]
-    paths:
-      - 'cmd/**'
-      - 'main.go'
-      - 'internal/controller/**'
-      - 'internal/otlphttp/**'
-      - 'internal/otlpstate/**'
-      - 'library/otlpwire/**'
-      - 'tests/otlp_service/**'
-      - 'docs/settings/otlp.yml'
-      - '.scripts/verify_otlp_service_contracts.py'
-      - '.github/workflows/otlp-service.yml'
-      - 'go.mod'
-      - 'go.sum'
+  workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

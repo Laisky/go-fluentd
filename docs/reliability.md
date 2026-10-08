@@ -1,5 +1,10 @@
 # Go 1.27 reliability changes
 
+> Policy amendment (2026-10-08): [CI testing policy](ci-testing.md)
+> moves full/race, integration and performance qualification to manual dev/staging
+> or workflow dispatch. Historical automatic-gate descriptions below are superseded;
+> test assertions and thresholds remain intact. Repository protection settings are unchanged.
+
 ## Build and verification
 
 Go 1.27 or newer is required. CI selects the latest 1.27 patch; the checked-in Docker images use Go 1.27.1.

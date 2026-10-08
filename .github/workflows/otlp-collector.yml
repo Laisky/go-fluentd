@@ -1,8 +1,7 @@
 name: OTLP Collector interoperability
 on:
-  pull_request:
-  push:
-    branches: [master]
+  workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

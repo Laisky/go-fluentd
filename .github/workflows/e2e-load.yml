@@ -1,8 +1,7 @@
 name: End-to-end load measurements
 on:
-  pull_request:
-  push:
-    branches: [master]
+  workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

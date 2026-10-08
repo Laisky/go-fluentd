@@ -1,5 +1,10 @@
 # Component behavior tests
 
+> Policy amendment (2026-10-08): [CI testing policy](ci-testing.md)
+> moves full/race, integration and performance qualification to manual dev/staging
+> or workflow dispatch. Historical automatic-gate descriptions below are superseded;
+> test assertions and thresholds remain intact. Repository protection settings are unchanged.
+
 ## Scope and baseline
 
 The baseline is merged PR #6, `d97a5175e3287bbd9282be06425b5c6ea2285525`.

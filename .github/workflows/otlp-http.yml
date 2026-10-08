@@ -1,27 +1,7 @@
 name: OTLP HTTP transport contracts
 on:
-  pull_request:
-    paths:
-      - 'internal/otlphttp/**'
-      - 'internal/otlpstate/**'
-      - 'internal/controller/otlp_producer*'
-      - 'library/otlpwire/**'
-      - 'go.mod'
-      - 'go.sum'
-      - 'docs/otlp*.md'
-      - '.scripts/verify_otlp_http_contracts.py'
-      - '.github/workflows/otlp-http.yml'
-  push:
-    branches: [master]
-    paths:
-      - 'internal/otlphttp/**'
-      - 'internal/otlpstate/**'
-      - 'internal/controller/otlp_producer*'
-      - 'library/otlpwire/**'
-      - 'go.mod'
-      - 'go.sum'
-      - '.scripts/verify_otlp_http_contracts.py'
-      - '.github/workflows/otlp-http.yml'
+  workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

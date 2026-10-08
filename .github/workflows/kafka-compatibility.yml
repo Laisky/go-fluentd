@@ -1,12 +1,6 @@
 name: Kafka broker compatibility
 
 on:
-  push:
-    branches: [master, develop, 'chore/dependencies-*']
-    paths: ['go.mod', 'go.sum', 'internal/recvs/**', 'internal/senders/**', 'library/**', '.github/workflows/kafka-compatibility.yml', '.github/workflows/dependency-upgrade.yml']
-  pull_request:
-    branches: [master, develop]
-    paths: ['go.mod', 'go.sum', 'internal/recvs/**', 'internal/senders/**', 'library/**', '.github/workflows/kafka-compatibility.yml', '.github/workflows/dependency-upgrade.yml']
   workflow_dispatch:
 
 permissions:

@@ -1,15 +1,12 @@
 name: Performance measurements
 on:
-  pull_request:
-    branches: [master]
-  push:
-    branches: [master]
   workflow_dispatch:
     inputs:
       baseline:
         description: Baseline ref to compare using exactly the current benchmark harness
         required: false
         default: d5b3e67fcf22daad1e6c667b66277bc8bbb29b7c
+
 permissions:
   contents: read
 concurrency:

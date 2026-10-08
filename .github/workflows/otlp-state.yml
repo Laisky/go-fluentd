@@ -1,26 +1,7 @@
 name: OTLP destination accounting contracts
 on:
-  pull_request:
-    paths:
-      - 'internal/otlpstate/**'
-      - 'internal/controller/otlp_producer*.go'
-      - '.scripts/verify_otlp_accounting_contracts.py'
-      - 'docs/otlp-accounting.md'
-      - '.scripts/verify_otlp_state_contracts.py'
-      - '.github/workflows/otlp-state.yml'
-      - 'go.mod'
-      - 'go.sum'
-  push:
-    branches: [master]
-    paths:
-      - 'internal/otlpstate/**'
-      - 'internal/controller/otlp_producer*.go'
-      - '.scripts/verify_otlp_accounting_contracts.py'
-      - 'docs/otlp-accounting.md'
-      - '.scripts/verify_otlp_state_contracts.py'
-      - '.github/workflows/otlp-state.yml'
-      - 'go.mod'
-      - 'go.sum'
+  workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

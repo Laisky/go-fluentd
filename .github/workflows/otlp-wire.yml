@@ -1,23 +1,7 @@
 name: OTLP wire contracts
 on:
-  pull_request:
-    paths:
-      - 'library/otlpwire/**'
-      - '.scripts/generate_otlp_preflight_schema.py'
-      - 'docs/otlp-decode-limits.md'
-      - 'go.mod'
-      - 'go.sum'
-      - 'docs/otlp.md'
-      - '.github/workflows/otlp-wire.yml'
-  push:
-    branches: [master]
-    paths:
-      - 'library/otlpwire/**'
-      - '.scripts/generate_otlp_preflight_schema.py'
-      - 'docs/otlp-decode-limits.md'
-      - 'go.mod'
-      - 'go.sum'
-      - '.github/workflows/otlp-wire.yml'
+  workflow_dispatch:
+
 permissions:
   contents: read
 jobs:

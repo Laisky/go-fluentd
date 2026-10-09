@@ -64,7 +64,7 @@ func (p *OTLPJournal) reserveAdmission(scanCtx, parent context.Context, r OTLPRe
 		return ErrOTLPJournalCapacity
 	}
 	reserveBytes, reserveFiles := pending*bytes+checkpointBytes, pending*files+checkpointFiles
-	used, entries, err := otlpDirectoryUsage(scanCtx, p.cfg.Directory, p.cfg.MaxStorageBytes-reserveBytes, p.cfg.StorageScanMaxEntries)
+	used, entries, err := p.scanRoot(scanCtx, p.cfg.MaxStorageBytes-reserveBytes, p.cfg.StorageScanMaxEntries)
 	if err != nil {
 		if parent.Err() != nil {
 			return parent.Err()
@@ -80,6 +80,5 @@ func (p *OTLPJournal) reserveAdmission(scanCtx, parent context.Context, r OTLPRe
 		p.storageRejected.Add(1)
 		return ErrOTLPJournalCapacity
 	}
-	p.maxRecordReserve, p.maxRecordFiles = bytes, files
 	return nil
 }

@@ -21,7 +21,7 @@ require (
 	github.com/tinylib/msgp v1.6.4
 	github.com/zsais/go-gin-prometheus v1.0.3
 	go.opentelemetry.io/collector/pdata v1.68.0
-	golang.org/x/net v0.59.0
+	golang.org/x/net v0.60.0
 	golang.org/x/sys v0.48.0
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260921155816-b14227669459
 	google.golang.org/protobuf v1.36.12

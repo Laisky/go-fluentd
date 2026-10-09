@@ -186,3 +186,22 @@ configuration record this policy difference: results are **not** zero-refusal
 capacity claims for the production `25ms` default on shared runners. No failed
 trial is retried, dropped or accepted as a capacity sample; refusal/deadline
 behavior remains covered by the storage budget contract tests.
+The steady-state GC regression keeps the production 25ms/4,096-entry scan
+limits. A descheduled scan may refuse even a small healthy directory, so this
+functional lifecycle harness permits at most 32 attempts for the same envelope.
+It retries only the joined scan-budget/capacity refusal, and checks every refusal
+for unchanged WAL writes, identity, checkpoint, pending and high-water reservations, retained
+file contents/modes, configured limits and sticky fault, plus exact rejection
+counters. All original fan-out, receipt GC, restart and no-duplicate assertions
+still apply. This is not a zero-refusal capacity or throughput claim.
+
+A deterministic first-attempt deadline regression proves recovery under the same
+limits; permanent exhaustion still returns an error after a bounded attempt
+count, and unrelated metadata I/O errors stop on the first attempt. Production
+admission does not retry or change its storage budgets.
+Future-work reservation high-water is committed only after both final scan
+budget and caller-cancellation checks pass. A completed inventory racing either
+check must refuse without reserving a never-admitted envelope. Deterministic
+boundary tests cover both cases; the deadline case also proves that a rejected
+large envelope cannot block subsequent small envelopes under the same 2MiB
+capacity limit.

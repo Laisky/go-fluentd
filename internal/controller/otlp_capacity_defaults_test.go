@@ -152,7 +152,10 @@ func TestRegressionOTLPDefaultGCSteadyStateFanoutAndRestart(t *testing.T) {
 				}
 				for cycle := int64(1); cycle <= 16; cycle++ {
 					for i := 0; i < 3; i++ {
-						if e = p.Admit(context.Background(), req); e != nil {
+						// Metadata deadline refusal is valid backpressure, even for a
+						// small root under race scheduling. Keep the SAME default
+						// budget and prove every refused attempt was side-effect free.
+						if _, e = admitWithScanBudgetRetry(p, req, 32); e != nil {
 							t.Fatal(e)
 						}
 					}

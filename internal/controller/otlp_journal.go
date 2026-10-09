@@ -93,6 +93,7 @@ type OTLPJournal struct {
 	syncWAL  func() error
 	writeWAL func(*journal.Data) error
 	scanWAL  func(context.Context) (int64, error)
+	scanRoot func(context.Context, int64, int) (int64, int64, error)
 }
 
 // OpenOTLPJournal creates metadata only in an empty provisioned directory. An
@@ -187,6 +188,9 @@ func OpenOTLPJournal(ctx context.Context, cfg OTLPJournalConfig, peers []OTLPDes
 	p.reservedRecords.Store(p.frontier - p.generation.ReleasedThrough)
 	p.syncWAL, p.writeWAL = p.wal.Sync, p.wal.WriteData
 	p.scanWAL = p.storageBytes
+	p.scanRoot = func(ctx context.Context, stopAfter int64, maxEntries int) (int64, int64, error) {
+		return otlpDirectoryUsage(ctx, p.cfg.Directory, stopAfter, maxEntries)
+	}
 	if err = ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -364,6 +368,10 @@ func (p *OTLPJournal) Admit(ctx context.Context, request *otlpwire.Request) erro
 		return p.rejectScanBudget()
 	}
 	cancelScan()
+	// Only an admitted plan may raise future-work reservation high-water.
+	// A completed inventory can race cancellation or its final deadline check;
+	// refusing that plan must not consume capacity for later smaller envelopes.
+	p.observeCapacityRecord(r, len(d.Data["otlp_delivery"].([]byte)))
 	p.frontier = r.ID
 	p.reservedRecords.Store(p.frontier - p.generation.ReleasedThrough)
 	if err = p.writeWAL(d); err != nil {

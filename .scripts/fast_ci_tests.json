@@ -30,7 +30,27 @@
     "package": "./internal/controller",
     "tests": [
       "TestRegressionOTLPExpiredFinalScanCannotRaiseReservationHighWater",
-      "TestRegressionOTLPCanceledFinalScanCannotRaiseReservationHighWater"
+      "TestRegressionOTLPCanceledFinalScanCannotRaiseReservationHighWater",
+      "TestOTLPConfigDiagnosticsDoNotRenderValues",
+      "TestOTLPConfigDiagnosticPreservesDecoderCause",
+      "TestOTLPConfigPrivacyPreservesValidBehavior"
+    ]
+  },
+  {
+    "package": "./cmd",
+    "tests": [
+      "TestRegressionStartupDoesNotPrintSecrets",
+      "TestRegressionJSONStartupAndAlertKeepSecretsPrivate",
+      "TestRegressionStartupKeepsUsefulListenerDetails",
+      "TestRegressionRemoteSettingsDoNotLogSecrets",
+      "TestRegressionRemoteSettingsFailureAndCancellation"
+    ]
+  },
+  {
+    "package": "./library/log",
+    "tests": [
+      "TestRegressionSafeURLAllowlist",
+      "TestRegressionSafeHTTPErrorPreservesCauseWithoutRenderingIt"
     ]
   }
 ]

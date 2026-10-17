@@ -73,6 +73,20 @@ type OTLPServiceDestination struct {
 	MaxBackoff      time.Duration `mapstructure:"max_backoff"`
 }
 
+// otlpConfigDecodeError keeps configuration values and field names out of startup diagnostics.
+// Its cause remains available for programmatic inspection and must not be logged.
+type otlpConfigDecodeError struct {
+	cause error
+}
+
+// Error returns a fixed subsystem/category description without decoder input.
+func (e *otlpConfigDecodeError) Error() string {
+	return "invalid settings.otlp: invalid configuration value or field"
+}
+
+// Unwrap preserves typed decoder errors and error identity for programmatic inspection.
+func (e *otlpConfigDecodeError) Unwrap() error { return e.cause }
+
 // ParseOTLPServiceConfig rejects misspelled fields and implicit string/bool
 // coercion. Durations are strings such as "30s", not unlabeled integer units.
 func ParseOTLPServiceConfig(raw interface{}) (*OTLPServiceConfig, error) {
@@ -121,10 +135,10 @@ func ParseOTLPServiceConfig(raw interface{}) (*OTLPServiceConfig, error) {
 		},
 	})
 	if err != nil {
-		return nil, err
+		return nil, &otlpConfigDecodeError{cause: err}
 	}
 	if err = dec.Decode(raw); err != nil {
-		return nil, fmt.Errorf("invalid settings.otlp: %w", err)
+		return nil, &otlpConfigDecodeError{cause: err}
 	}
 	if !c.Enabled {
 		return nil, nil

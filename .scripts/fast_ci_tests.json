@@ -30,7 +30,17 @@
     "package": "./internal/controller",
     "tests": [
       "TestRegressionOTLPExpiredFinalScanCannotRaiseReservationHighWater",
-      "TestRegressionOTLPCanceledFinalScanCannotRaiseReservationHighWater"
+      "TestRegressionOTLPCanceledFinalScanCannotRaiseReservationHighWater",
+      "TestOTLPConfigDiagnosticsDoNotRenderValues",
+      "TestOTLPConfigDiagnosticPreservesDecoderCause",
+      "TestOTLPConfigPrivacyPreservesValidBehavior"
+    ]
+  },
+  {
+    "package": "./cmd",
+    "tests": [
+      "TestRegressionStartupDoesNotPrintSecrets",
+      "TestRegressionJSONStartupAndAlertKeepSecretsPrivate"
     ]
   }
 ]

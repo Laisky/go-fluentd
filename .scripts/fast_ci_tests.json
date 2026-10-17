@@ -40,7 +40,17 @@
     "package": "./cmd",
     "tests": [
       "TestRegressionStartupDoesNotPrintSecrets",
-      "TestRegressionJSONStartupAndAlertKeepSecretsPrivate"
+      "TestRegressionJSONStartupAndAlertKeepSecretsPrivate",
+      "TestRegressionStartupKeepsUsefulListenerDetails",
+      "TestRegressionRemoteSettingsDoNotLogSecrets",
+      "TestRegressionRemoteSettingsFailureAndCancellation"
+    ]
+  },
+  {
+    "package": "./library/log",
+    "tests": [
+      "TestRegressionSafeURLAllowlist",
+      "TestRegressionSafeHTTPErrorPreservesCauseWithoutRenderingIt"
     ]
   }
 ]

@@ -144,7 +144,7 @@ func setupSettings() {
 	}
 
 	// Configuration is secret-bearing, including unknown nested plugin values.
-	// Log only an allowlisted diagnostic, never the struct or a redacted copy.
+	// Read the receiver count directly; never log the struct or a redacted copy.
 	log.Logger.Info("configuration loaded",
 		zap.Int("receiver_plugins", len(global.Config.Settings.Acceptor.Recvs.Plugins)))
 }

@@ -1,8 +1,10 @@
 # Credential-safe startup diagnostics
 
 Configuration structs and arbitrary plugin maps are never printed. Startup logs
-only fixed messages, the configuration file path, the selected log level, and
-the number of receiver plugins. This applies to ordinary and debug startup.
+record fixed messages and explicit operational fields: the configuration file
+path, selected log level, receiver plugin count, and HTTP/OTLP listener addresses
+and ports. Listener diagnostics remain available at info and debug; the complete
+configuration and arbitrary nested values are never emitted.
 Configuration decoding errors do not include offending values or arbitrary field
 names, including malformed OTLP durations and nested destination settings. OTLP
 decoding failures retain their typed cause for programmatic inspection through

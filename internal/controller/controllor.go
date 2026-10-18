@@ -26,6 +26,7 @@ import (
 
 // Controllor is an IoC that manage all roles
 type Controllor struct {
+	diskBudget   *DiskBudgetConfig
 	msgPool      *sync.Pool
 	tagBudget    *TagBudget
 	concatBudget *concatstate.Budget
@@ -50,7 +51,7 @@ func NewControllor() (c *Controllor) {
 }
 
 func (c *Controllor) initJournal(ctx context.Context) *Journal {
-	return NewJournal(ctx, &JournalCfg{
+	return NewJournal(ctx, &JournalCfg{DiskBudget: c.diskBudget,
 		TagBudget:                 c.tagBudget,
 		GroupCommitMaxMessages:    gutils.Settings.GetInt("settings.journal.group_commit_max_messages"),
 		MsgPool:                   c.msgPool,
@@ -543,8 +544,15 @@ func (c *Controllor) Run(parent context.Context) (runErr error) {
 		n := c.concatBudget.Snapshot()
 		return map[string]interface{}{"pendingMessages": n.Entries, "pendingBytes": n.Bytes, "maxPendingMessages": n.MaxEntries, "maxPendingBytes": n.MaxBytes, "budgetRefusals": n.Refused}
 	})
+	c.diskBudget, err = ParseDiskBudgetConfig(gutils.Settings.Get("settings.disk_budget"))
+	if err != nil {
+		return err
+	}
 	cfg, err := ParseOTLPServiceConfig(gutils.Settings.Get("settings.otlp"))
 	if err != nil {
+		return err
+	}
+	if err = c.diskBudget.ApplyOTLP(cfg); err != nil {
 		return err
 	}
 	if cfg != nil {

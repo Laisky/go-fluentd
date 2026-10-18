@@ -27,9 +27,10 @@ type cmdArgs struct {
 }
 
 type settings struct {
-	Logger   settingsLogger   `mapstructure:"logger"`
-	Journal  settingsJournal  `mapstructure:"journal"`
-	Acceptor settingsAcceptor `mapstructure:"acceptor"`
+	DiskBudget settingsDiskBudget `mapstructure:"disk_budget"`
+	Logger     settingsLogger     `mapstructure:"logger"`
+	Journal    settingsJournal    `mapstructure:"journal"`
+	Acceptor   settingsAcceptor   `mapstructure:"acceptor"`
 }
 
 type settingsLogger struct {
@@ -65,3 +66,9 @@ type settingsAcceptorRecvs struct {
 // 	// 	HeadRegexp string `"mapstructure:head_regexp"`
 // 	// } `"mapstructure:concat"`
 // }
+
+type settingsDiskBudget struct {
+	Directory    string `mapstructure:"directory"`
+	MaxBytes     int64  `mapstructure:"max_bytes"`
+	SegmentBytes int64  `mapstructure:"segment_bytes"`
+}

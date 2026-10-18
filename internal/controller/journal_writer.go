@@ -81,7 +81,7 @@ func (j *Journal) runDataWriter(ctx context.Context, tag string, writer journalD
 // bytes may already exist: an error response is an unknown outcome, not proof
 // of absence. No live copy or success receipt may escape the failed barrier.
 func (j *Journal) persistGroup(ctx context.Context, tag string, writer journalDataWriter, data *journal.Data, batch []*library.FluentMsg, counter *utils.Counter) error {
-	needsSync := false
+	needsSync := j.diskBudget != nil
 	for _, msg := range batch {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -102,7 +102,17 @@ func (j *Journal) persistGroup(ctx context.Context, tag string, writer journalDa
 			}
 		}
 		if err != nil {
+			if j.diskBudget != nil {
+				j.diskWriteFailures.Add(1)
+			}
 			return err
+		}
+		if j.diskBudget != nil {
+			if rotator, ok := writer.(interface{ RotateIfFull(context.Context) error }); ok {
+				if err = rotator.RotateIfFull(ctx); err != nil {
+					return err
+				}
+			}
 		}
 		needsSync = needsSync || msg.DurableAck != nil
 	}

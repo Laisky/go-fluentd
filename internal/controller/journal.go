@@ -399,8 +399,17 @@ func (j *Journal) processLegacyMsg(ctx context.Context, out chan *library.Fluent
 						return
 					}
 				}
+				var sourceMetadata map[string]interface{}
+				if raw, exists := data.Data["source_metadata"]; exists {
+					var ok bool
+					sourceMetadata, ok = raw.(map[string]interface{})
+					if !ok {
+						replayErr = fmt.Errorf("invalid persisted source metadata for message %d", data.ID)
+						return
+					}
+				}
 				msg := j.MsgPool.Get().(*library.FluentMsg)
-				*msg = library.FluentMsg{ID: data.ID, Tag: storedTag, JournalTag: tag, Message: message, SourceFormat: format}
+				*msg = library.FluentMsg{ID: data.ID, Tag: storedTag, JournalTag: tag, Message: message, SourceFormat: format, SourceMetadata: sourceMetadata}
 				select {
 				case out <- msg:
 				case <-ctx.Done():
@@ -592,7 +601,7 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 			msg *library.FluentMsg
 			ok  bool
 		)
-		defer log.Logger.Info("skipDumpChan goroutine exit", zap.String("msg", fmt.Sprint(msg)))
+		defer log.Logger.Info("skipDumpChan goroutine exit")
 		for {
 			select {
 			case <-ctx.Done():
@@ -603,6 +612,12 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 					return
 				}
 
+				if j.diskBudget != nil {
+					j.diskRefused.Add(1)
+					msg.CompleteAcceptance(errors.New("overall disk budget forbids unpersisted bypass"))
+					j.MsgPool.Put(msg)
+					continue
+				}
 				if err := j.TagBudget.Admit(msg.Tag); err != nil {
 					msg.CompleteAcceptance(err)
 					j.MsgPool.Put(msg)
@@ -624,7 +639,7 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 			jji interface{}
 			msg *library.FluentMsg
 		)
-		defer log.Logger.Info("legacy dumper exit", zap.String("msg", fmt.Sprint(msg)))
+		defer log.Logger.Info("legacy dumper exit")
 		for {
 			select {
 			case <-ctx.Done():
@@ -636,6 +651,11 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 				}
 			}
 
+			if j.diskBudget != nil && msg.DurableAck == nil {
+				j.diskRefused.Add(1)
+				j.MsgPool.Put(msg)
+				continue
+			}
 			log.Logger.Debug("try to dump msg", zap.String("tag", msg.Tag))
 			if jji, ok = j.tag2JJInchanMap.Load(msg.Tag); !ok {
 				if err := j.createJournalRunner(ctx, msg.Tag); err != nil {
@@ -671,7 +691,6 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 					default:
 						log.Logger.Error("discard log since of journal & downstream busy",
 							zap.String("tag", msg.Tag),
-							zap.String("msg", fmt.Sprint(msg)),
 						)
 						j.MsgPool.Put(msg)
 					}

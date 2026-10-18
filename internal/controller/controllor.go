@@ -83,6 +83,7 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 			switch t {
 			case "fluentd":
 				receivers = append(receivers, recvs.NewFluentdRecv(&recvs.FluentdRecvCfg{
+					BestEffort:             gutils.Settings.GetBool("settings.acceptor.recvs.plugins." + name + ".best_effort"),
 					ConcatBudget:           c.concatBudget,
 					Ingress:                fluentIngressConfig(name),
 					Name:                   name,
@@ -119,7 +120,7 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 			case "http":
 				receivers = append(receivers, recvs.NewHTTPRecv(&recvs.HTTPRecvCfg{ // wechat mini program
 					Name:               name,
-					RequireDurableAck:  gutils.Settings.GetBool("settings.acceptor.recvs.plugins." + name + ".require_durable_ack"),
+					RequireDurableAck:  c.diskBudget != nil || gutils.Settings.GetBool("settings.acceptor.recvs.plugins."+name+".require_durable_ack"),
 					HTTPSrv:            server,
 					Env:                env,
 					MsgKey:             gutils.Settings.GetString("settings.acceptor.recvs.plugins." + name + ".msg_key"),
@@ -169,6 +170,18 @@ func (c *Controllor) initRecvs(env string) []recvs.AcceptorRecvItf {
 		log.Logger.Panic("recv plugins configuration error")
 	}
 
+	for _, receiver := range receivers {
+		receiver.SetDurableAdmission(c.diskBudget != nil)
+	}
+	monitor.AddMetric("receiverAdmission", func() map[string]interface{} {
+		stats := make(map[string]interface{}, len(receivers))
+		for _, receiver := range receivers {
+			if source, ok := receiver.(interface{ DurableAdmissionStats() map[string]uint64 }); ok {
+				stats[receiver.GetName()] = source.DurableAdmissionStats()
+			}
+		}
+		return stats
+	})
 	return receivers
 }
 
@@ -546,6 +559,9 @@ func (c *Controllor) Run(parent context.Context) (runErr error) {
 	})
 	c.diskBudget, err = ParseDiskBudgetConfig(gutils.Settings.Get("settings.disk_budget"))
 	if err != nil {
+		return err
+	}
+	if err = validateDurableAdmissionPolicy(gutils.Settings, gutils.Settings.GetString("env")); err != nil {
 		return err
 	}
 	cfg, err := ParseOTLPServiceConfig(gutils.Settings.Get("settings.otlp"))

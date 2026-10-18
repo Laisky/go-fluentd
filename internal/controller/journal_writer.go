@@ -94,6 +94,10 @@ func (j *Journal) persistGroup(ctx context.Context, tag string, writer journalDa
 		if msg.SourceFormat != "" {
 			data.Data["source_format"] = msg.SourceFormat
 		}
+		delete(data.Data, "source_metadata")
+		if msg.SourceMetadata != nil {
+			data.Data["source_metadata"] = msg.SourceMetadata
+		}
 		counter.Count()
 		var err error
 		for attempt := 0; attempt < 2; attempt++ {

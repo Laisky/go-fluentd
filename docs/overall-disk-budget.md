@@ -6,6 +6,10 @@ reviewed in https://github.com/Laisky/go-journal/pull/16 on current master.
 The existing storage-only Draft47 and production remain unchanged. The published
 ab4 qualification image contains storage mapping only, not this feature.
 
+Budgeted input now uses a common durable receipt boundary across receivers.
+See [protocol behavior, compatibility and qualification](durable-admission.md)
+before enabling it on legacy HTTP, Forward, Kafka or syslog deployments.
+
 ## Scope and configuration
 
 This is a general collector feature. A single configured budget covers ALL
@@ -108,8 +112,8 @@ cannot participate in an enforced budget.
   older or retention-disabled readers. The current legacy controller refuses a
   budget-owned root without its configured budget. Rollback must preserve
   retention/accounting; an old unbudgeted binary is not a safe rollback.
-- No destructive rotation mode is included. The optional replacement direction
-  remains unclarified, and no deletion is authorized.
+- No destructive rotation mode or standing deletion policy is included. The
+  specifically approved one-time backlog reset is recorded below.
 
 Monitor overallDisk known/limitBytes/chargedBytes/reservedBytes/refused/
 writeFailures, and OTLP shared_limit_bytes/shared_charged_bytes/
@@ -119,7 +123,7 @@ health, filesystem bytes/inodes, upstream export_failed and delivery metrics.
 Backpressure can still overflow a volatile upstream SDK queue; this feature
 does not make that queue durable.
 
-## Existing b1 state and non-destructive transition
+## Existing b1 state and approved transition
 
 Independent metadata-only root measurements at 2026-10-18 13:05 UTC found
 3,708,342,272 bytes in the active backlog root plus 552,960 bytes fresh:
@@ -131,18 +135,35 @@ bytes (88% used). These are non-atomic observations, not a quota guarantee.
 Subreads are non-atomic. WAL was about 1.845 GB; outcomes and bookkeeping make
 up much of the rest. This figure excludes separately retained immutable
 historical backups. Their current total was not resampled in this phase.
-No backup, WAL, receipt or history was deleted or moved.
+No backup, WAL, receipt or history was deleted or moved during those measurements.
+
+At 2026-10-18 17:09 UTC the user explicitly accepted one-time log loss and
+authorized clearing the accumulated private backlog. That scoped operation
+completed at 17:18 UTC after an unbounded graceful Docker stop (no forced kill),
+exclusive-owner checks and native storage locks. It removed 509607 backlog files
+and three child directories, retaining the root inode and private permissions.
+Closed-before allocated charge was 4769546240 bytes; the root alone was 4096
+bytes afterward. Host available bytes increased from 4310732800 to 9079246848.
+No HOME/VictoriaLogs data, historical backup, fresh root or configuration was
+cleared. File counts do not establish a count of unique lost log records.
+
+The old private backlog worker remains stopped. A 17:30 UTC follow-up found the
+root still empty; the fresh worker retained its PID/start time/restart count and
+accepted-receipt progress continued. Refusal counters increased from 11 to 13
+during the operation and remained 13 at follow-up. This is not evidence of zero
+disruption or causation. The new aggregate limit is still NOT deployed.
 
 Unregistered nonempty or over-budget state is refused, not reset or adopted with
 invented reservations. Starting a new empty root does not make the old active
 obligations disappear from deployment acceptance. The cap is NOT live yet.
 
-A reviewed transition must preserve all current obligations and their
-namespace/destination/ACK provenance. First qualify a read-only recovery plan
-and exact eligible-ACK reclamation or durable off-host staging, then review
-the concrete runtime operation. VictoriaLogs HTTP 200 is not proof of a durable
-archive and cannot justify deleting local accepted work. No b1 resize is an
-option. A temporary above-cap old-worker drain is also not implicitly approved.
+The one-time loss approval is not a standing deletion policy. Future transitions
+must preserve current obligations and their namespace/destination/ACK provenance
+unless separately and specifically authorized. Qualify recovery or durable
+off-host staging before reviewing another runtime operation. VictoriaLogs HTTP
+200 is not proof of a durable archive and cannot justify deleting local accepted
+work. No b1 resize is an option. A temporary above-cap old-worker drain is not
+implicitly approved.
 
 ## Finite release and rollback sequence
 

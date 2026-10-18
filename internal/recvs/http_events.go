@@ -135,12 +135,14 @@ func (r *HTTPEventsRecv) handle(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), r.cfg.AckTimeout)
 	defer cancel()
 	if ctx.Err() != nil || r.msgPool == nil || r.counter == nil || r.syncOutChan == nil {
+		c.Header("Retry-After", "1")
 		c.AbortWithStatus(http.StatusServiceUnavailable)
 		return
 	}
-	receipts := make([]chan error, 0, len(records))
+	receipts := make([]<-chan error, 0, len(records))
 	for _, record := range records {
 		if ctx.Err() != nil {
+			c.Header("Retry-After", "1")
 			c.AbortWithStatus(http.StatusServiceUnavailable)
 			return
 		}
@@ -149,33 +151,26 @@ func (r *HTTPEventsRecv) handle(c *gin.Context) {
 		msg.SourceFormat = r.cfg.Format
 		if msg.ID < 0 {
 			r.msgPool.Put(msg)
+			c.Header("Retry-After", "1")
 			c.AbortWithStatus(http.StatusServiceUnavailable)
 			return
 		}
-		receipt := make(chan error, 1)
-		msg.DurableAck = receipt
-		select {
-		case r.syncOutChan <- msg:
-			// The pipeline now owns msg and may immediately recycle it. Keep
-			// only the independent receipt, never read or recycle msg again.
-			receipts = append(receipts, receipt)
-		case <-ctx.Done():
-			r.msgPool.Put(msg)
+
+		receipt, err := r.BeginDurable(ctx, msg)
+		if err != nil {
+			c.Header("Retry-After", "1")
 			c.AbortWithStatus(http.StatusServiceUnavailable)
 			return
 		}
+		receipts = append(receipts, receipt)
 	}
 	for _, receipt := range receipts {
-		select {
-		case err, ok := <-receipt:
-			if !ok || err != nil {
-				c.AbortWithStatus(http.StatusServiceUnavailable)
-				return
-			}
-		case <-ctx.Done():
+		if err := r.WaitDurable(ctx, receipt); err != nil {
+			c.Header("Retry-After", "1")
 			c.AbortWithStatus(http.StatusServiceUnavailable)
 			return
 		}
 	}
+
 	c.Status(http.StatusNoContent)
 }

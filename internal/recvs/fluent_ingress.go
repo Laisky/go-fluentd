@@ -3,13 +3,17 @@ package recvs
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"github.com/Laisky/zap"
 	"io"
 	"net"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/tinylib/msgp/msgp"
 	"gofluentd/internal/recvs/fluentwire"
@@ -134,3 +138,231 @@ func setFluentReadDeadline(conn net.Conn, deadline time.Time) error {
 }
 
 func isFluentIngressLimit(err error) bool { return errors.Is(err, fluentwire.ErrLimit) }
+
+// durableFluentEntry retains one validated record and its original decoded timestamp.
+type durableFluentEntry struct {
+	timestamp interface{}
+	message   map[string]interface{}
+}
+
+const maximumFluentChunkBytes = 512
+
+// durableFluentFrame validates every entry before any pipeline ownership transfer.
+// Options retain their decoded values; gzip is permitted only for bounded packed input.
+func (r *FluentdRecv) durableFluentFrame(v library.FluentBatchMsg, budget *fluentwire.Budget) (tag string, entries []durableFluentEntry, options map[string]interface{}, chunk interface{}, err error) {
+	if len(v) < 2 {
+		err = errors.New("invalid Fluent frame")
+		return
+	}
+	switch value := v[0].(type) {
+	case string:
+		tag = value
+	case []byte:
+		tag = string(value)
+	default:
+		err = errors.New("invalid Fluent tag")
+		return
+	}
+	if tag == "" || !utf8.ValidString(tag) {
+		err = errors.New("invalid Fluent tag")
+		return
+	}
+	optionIndex := 3
+	switch v[1].(type) {
+	case []interface{}, []byte:
+		optionIndex = 2
+	}
+	if len(v) != optionIndex && len(v) != optionIndex+1 {
+		err = errors.New("invalid Fluent frame shape")
+		return
+	}
+	if len(v) == optionIndex+1 {
+		var ok bool
+		options, ok = v[optionIndex].(map[string]interface{})
+		if !ok || options == nil {
+			err = errors.New("invalid Fluent options")
+			return
+		}
+	}
+	if value, ok := options["chunk"]; ok {
+		switch value := value.(type) {
+		case string:
+			if len(value) == 0 || len(value) > maximumFluentChunkBytes || !utf8.ValidString(value) {
+				err = errors.New("invalid Fluent chunk")
+				return
+			}
+			chunk = value
+		case []byte:
+			if len(value) == 0 || len(value) > maximumFluentChunkBytes {
+				err = errors.New("invalid Fluent chunk")
+				return
+			}
+			chunk = bytes.Clone(value)
+		default:
+			err = errors.New("invalid Fluent chunk")
+			return
+		}
+	}
+	if chunk == nil && !r.BestEffort {
+		err = errors.New("durable Fluent requires a chunk")
+		return
+	}
+	compression := ""
+	if value, ok := options["compressed"]; ok {
+		compression, ok = value.(string)
+		if !ok || compression != "gzip" && compression != "text" {
+			err = errors.New("unsupported Fluent compression")
+			return
+		}
+	}
+	add := func(timestamp, record interface{}) bool {
+		if !validDurableFluentTimestamp(timestamp) {
+			err = errors.New("invalid Fluent timestamp")
+			return false
+		}
+		message, ok := record.(map[string]interface{})
+		if !ok || message == nil {
+			err = errors.New("invalid Fluent record")
+			return false
+		}
+		if len(entries) >= r.Ingress.MaxContainerElements {
+			err = errors.New("Fluent record count limit")
+			return false
+		}
+		entries = append(entries, durableFluentEntry{timestamp: timestamp, message: message})
+		return true
+	}
+	switch body := v[1].(type) {
+	case []interface{}:
+		if compression != "" && compression != "text" {
+			err = errors.New("compression requires packed Fluent input")
+			return
+		}
+		for _, item := range body {
+			entry, ok := item.([]interface{})
+			if !ok || len(entry) != 2 {
+				err = errors.New("invalid Fluent forward entry")
+				return
+			}
+			if !add(entry[0], entry[1]) {
+				return
+			}
+		}
+	case []byte:
+		packed := body
+		if compression == "gzip" {
+			gz, e := gzip.NewReader(bytes.NewReader(body))
+			if e != nil {
+				err = errors.New("invalid Fluent gzip")
+				return
+			}
+			expanded, e := io.ReadAll(io.LimitReader(gz, int64(r.Ingress.MaxFrameBytes)+1))
+			ce := gz.Close()
+			if e != nil || ce != nil || len(expanded) > r.Ingress.MaxFrameBytes {
+				err = errors.New("invalid or oversized Fluent gzip")
+				return
+			}
+			packed = expanded
+		}
+		reader := bufio.NewReader(bytes.NewReader(packed))
+		for {
+			var entry library.FluentBatchMsg
+			e := decodeFluentFrame(reader, budget, &entry, 2, 2)
+			if e == io.EOF {
+				break
+			}
+			if e != nil {
+				err = errors.New("invalid or oversized Fluent packed entry")
+				return
+			}
+			if !add(entry[0], entry[1]) {
+				return
+			}
+		}
+	default:
+		if compression != "" && compression != "text" {
+			err = errors.New("compression requires packed Fluent input")
+			return
+		}
+		if !add(v[1], v[2]) {
+			return
+		}
+	}
+	if len(entries) == 0 {
+		err = errors.New("empty Fluent batch")
+		return
+	}
+	return
+}
+
+// decodeDurableFluent sends a chunk ACK only after all bounded, validated entries pass Sync.
+// Failure may leave a durable prefix; no ACK is sent and sender retry may duplicate it.
+func (r *FluentdRecv) decodeDurableFluent(ctx context.Context, conn net.Conn) {
+	stop := context.AfterFunc(ctx, func() { conn.Close() })
+	defer stop()
+	defer conn.Close()
+	reader := bufio.NewReader(conn)
+	for ctx.Err() == nil {
+		var frame library.FluentBatchMsg
+		budget, err := r.readFluentFrame(conn, reader, &frame)
+		if err != nil {
+			return
+		}
+		tag, entries, options, chunk, err := r.durableFluentFrame(frame, budget)
+		if err != nil {
+			r.logger.Warn("durable Fluent frame rejected", zap.Error(err))
+			return
+		}
+		admissionCtx, cancel := context.WithTimeout(ctx, r.Ingress.FrameTimeout)
+		for _, entry := range entries {
+			msg := r.newMsg()
+			msg.ID, msg.Tag, msg.Message = r.counter.Count(), tag, entry.message
+			msg.SourceMetadata = map[string]interface{}{"protocol": "forward", "timestamp": entry.timestamp, "options": options}
+			if err = r.SubmitDurable(admissionCtx, msg); err != nil {
+				break
+			}
+		}
+		cancel()
+		if err != nil {
+			r.logger.Warn("durable Fluent admission refused", zap.Error(err))
+			return
+		}
+		if chunk == nil {
+			continue
+		}
+		if err = conn.SetWriteDeadline(time.Now().Add(r.Ingress.FrameTimeout)); err != nil {
+			return
+		}
+		writer := msgp.NewWriter(conn)
+		if err = writer.WriteMapHeader(1); err != nil {
+			return
+		}
+		if err = writer.WriteString("ack"); err != nil {
+			return
+		}
+		if err = writer.WriteIntf(chunk); err != nil {
+			return
+		}
+		if err = writer.Flush(); err != nil {
+			return
+		}
+	}
+}
+
+// validDurableFluentTimestamp accepts integer seconds or the exact Fluent EventTime extension.
+func validDurableFluentTimestamp(value interface{}) bool {
+	switch v := value.(type) {
+	case int:
+		return v >= 0
+	case int64:
+		return v >= 0
+	case int32:
+		return v >= 0
+	case uint, uint64, uint32, uint16, uint8:
+		return true
+	case *msgp.RawExtension:
+		return v != nil && v.Type == 0 && len(v.Data) == 8 && binary.BigEndian.Uint32(v.Data[4:]) < 1000000000
+	default:
+		return false
+	}
+}

@@ -106,6 +106,10 @@ type diskRecord struct {
 // Different key stripes may execute concurrently. Close waits for in-flight Do
 // callbacks, which must honor their context. Do not call Store methods from send.
 type Store struct {
+	// BeforePersist funds bounded physical/temp/directory growth before any inode write.
+	// Configure once before exposing the Store to concurrent callers.
+	BeforePersist func(int64) error
+
 	life              sync.RWMutex
 	closed            bool
 	dir               string
@@ -463,6 +467,11 @@ func (s *Store) persist(name string, rec entry) error {
 	data, err := json.Marshal(diskRecord{hex.EncodeToString(sum[:]), payload})
 	if err != nil {
 		return err
+	}
+	if s.BeforePersist != nil {
+		if err = s.BeforePersist(int64(len(data))); err != nil {
+			return err
+		}
 	}
 	f, err := os.CreateTemp(s.dir, ".pending-"+name+"-*")
 	if err != nil {

@@ -393,3 +393,7 @@ contributor history are visible in the repository and pull requests.
 
 Multiline pending-state limits and saturation/replay behavior are documented in
 [concatenation limits](docs/concatenation-limits.md).
+
+## Overall disk budget
+
+Opt-in `settings.disk_budget` coordinates one persistent storage limit across legacy journals, OTLP state and multiple collector processes. See [accounting, configuration and safe recovery](docs/overall-disk-budget.md).

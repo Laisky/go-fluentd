@@ -365,6 +365,7 @@ console payload, health/monitor responses, and invalid-request behavior.
 | --- | --- |
 | Tested demo and troubleshooting | [Quickstart](docs/quickstart.md) |
 | OTLP service and real Collector acceptance | [Service](docs/otlp-service.md) / [settings](docs/settings/otlp.yml) / [acceptance](docs/otlp-collector-acceptance.md) |
+| Faithful typed log storage (opt-in) | [Raw OTLP archive, query view and expansion limits](docs/native-log-storage.md) |
 | OTLP edge storage and checkpoint rollback | [Admission controls and receipt GC](docs/otlp-edge-storage.md) |
 | Full configuration reference | [English](docs/settings/settings.yml) / [Chinese](docs/settings/settings_cn.yml) |
 | Reliability and recovery | [Design notes](docs/reliability.md) / [executable contract](tests/delivery/CONTRACT.md) |

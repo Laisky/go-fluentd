@@ -140,7 +140,11 @@ func (h *Receiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// This callback owns durable admission, not merely a send on an in-memory queue.
 	if err := h.admit(ctx, req); err != nil {
-		writeFailure(w, ct, 503, "OTLP durable admission failed")
+		if errors.Is(err, otlpwire.ErrTooLarge) {
+			writeFailure(w, ct, 413, "OTLP destination encoding exceeds limits")
+		} else {
+			writeFailure(w, ct, 503, "OTLP durable admission failed")
+		}
 		return
 	}
 	if err := ctx.Err(); err != nil {

@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -67,6 +68,7 @@ type OTLPServiceDestination struct {
 	BearerTokenEnv  string        `mapstructure:"bearer_token_env"`
 	CAFile          string        `mapstructure:"ca_file"`
 	Gzip            bool          `mapstructure:"gzip"`
+	LogStorageCodec string        `mapstructure:"log_storage_codec"`
 	Timeout         time.Duration `mapstructure:"timeout"`
 	MaxAttempts     int           `mapstructure:"max_attempts"`
 	InitialBackoff  time.Duration `mapstructure:"initial_backoff"`
@@ -248,14 +250,15 @@ func loadOTLPCA(path string) (*x509.CertPool, error) {
 // Stop cancels requests and waits for storage ownership to be released. Sync
 // syscalls cannot be interrupted and can exceed the HTTP shutdown budget.
 type OTLPService struct {
-	owner     *OTLPJournal
-	server    *http.Server
-	listener  net.Listener
-	exporters []*otlphttp.Exporter
-	cancel    context.CancelFunc
-	done      chan struct{}
-	mu        sync.Mutex
-	err       error
+	codecAdmissionRejected atomic.Uint64
+	owner                  *OTLPJournal
+	server                 *http.Server
+	listener               net.Listener
+	exporters              []*otlphttp.Exporter
+	cancel                 context.CancelFunc
+	done                   chan struct{}
+	mu                     sync.Mutex
+	err                    error
 }
 
 func (s *OTLPService) Addr() net.Addr         { return s.listener.Addr() }
@@ -350,7 +353,15 @@ func StartOTLPService(parent context.Context, c OTLPServiceConfig) (_ *OTLPServi
 		}
 	}()
 	limits := otlpwire.Limits{WireBytes: c.MaxWireBytes, DecodedBytes: c.MaxDecodedBytes, Items: c.MaxItems}
-	receiver, err := otlphttp.NewReceiver(otlphttp.ReceiverConfig{Limits: limits, BearerToken: token, MaxConcurrent: c.MaxConcurrent, Timeout: c.RequestTimeout, BodyReadTimeout: c.BodyReadTimeout}, func(ctx context.Context, r *otlpwire.Request) error { return s.owner.Admit(ctx, r) })
+	receiver, err := otlphttp.NewReceiver(otlphttp.ReceiverConfig{Limits: limits, BearerToken: token, MaxConcurrent: c.MaxConcurrent, Timeout: c.RequestTimeout, BodyReadTimeout: c.BodyReadTimeout}, func(ctx context.Context, r *otlpwire.Request) error {
+		for _, exporter := range s.exporters {
+			if codecError := exporter.ValidateStorageRequest(r); codecError != nil {
+				s.codecAdmissionRejected.Add(1)
+				return codecError
+			}
+		}
+		return s.owner.Admit(ctx, r)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -372,7 +383,7 @@ func StartOTLPService(parent context.Context, c OTLPServiceConfig) (_ *OTLPServi
 				return nil, e
 			}
 		}
-		x, e := otlphttp.NewExporter(otlphttp.ExporterConfig{Endpoints: map[otlpwire.Signal]string{otlpwire.Logs: d.LogsEndpoint, otlpwire.Metrics: d.MetricsEndpoint, otlpwire.Traces: d.TracesEndpoint}, BearerToken: auth, RootCAs: ca, Gzip: d.Gzip, RequestLimits: limits, ResponseBytes: c.MaxResponseBytes, Timeout: d.Timeout, MaxAttempts: d.MaxAttempts, InitialBackoff: d.InitialBackoff, MaxBackoff: d.MaxBackoff})
+		x, e := otlphttp.NewExporter(otlphttp.ExporterConfig{Endpoints: map[otlpwire.Signal]string{otlpwire.Logs: d.LogsEndpoint, otlpwire.Metrics: d.MetricsEndpoint, otlpwire.Traces: d.TracesEndpoint}, BearerToken: auth, RootCAs: ca, Gzip: d.Gzip, LogStorageCodec: d.LogStorageCodec, RequestLimits: limits, ResponseBytes: c.MaxResponseBytes, Timeout: d.Timeout, MaxAttempts: d.MaxAttempts, InitialBackoff: d.InitialBackoff, MaxBackoff: d.MaxBackoff})
 		if e != nil {
 			return nil, fmt.Errorf("invalid OTLP destination configuration: %w", e)
 		}
@@ -392,7 +403,7 @@ func StartOTLPService(parent context.Context, c OTLPServiceConfig) (_ *OTLPServi
 	s.server = &http.Server{Handler: receiver, ReadHeaderTimeout: c.ReadHeaderTimeout, ReadTimeout: c.BodyReadTimeout, WriteTimeout: c.RequestTimeout + time.Second, IdleTimeout: c.IdleTimeout, MaxHeaderBytes: c.MaxHeaderBytes, TLSConfig: tc, BaseContext: func(net.Listener) context.Context { return ctx }, TLSNextProto: map[string]func(*http.Server, *tls.Conn, http.Handler){}}
 	monitor.AddMetric("otlpStorage", func() map[string]interface{} {
 		rejected, reclaimed := s.owner.StorageCounters()
-		return map[string]interface{}{"admissionRejected": rejected, "scanBudgetRejected": s.owner.ScanBudgetRejected(), "acceptedReceiptsReclaimed": reclaimed, "maxStorageBytes": c.MaxStorageBytes, "maxStorageFiles": c.MaxStorageFiles, "capacity": s.owner.CapacitySnapshot(), "storageScanMaxEntries": c.StorageScanMaxEntries, "storageScanTimeout": c.StorageScanTimeout.String(), "receiptGC": c.ReceiptGC}
+		return map[string]interface{}{"admissionRejected": rejected, "codecAdmissionRejected": s.codecAdmissionRejected.Load(), "scanBudgetRejected": s.owner.ScanBudgetRejected(), "acceptedReceiptsReclaimed": reclaimed, "maxStorageBytes": c.MaxStorageBytes, "maxStorageFiles": c.MaxStorageFiles, "capacity": s.owner.CapacitySnapshot(), "storageScanMaxEntries": c.StorageScanMaxEntries, "storageScanTimeout": c.StorageScanTimeout.String(), "receiptGC": c.ReceiptGC}
 	})
 	// HTTP/1.1 is deliberate: max_connections is not an HTTP/2 stream quota.
 	go s.run(ctx, c.ShutdownTimeout)

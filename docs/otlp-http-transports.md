@@ -4,9 +4,10 @@
 
 `internal/otlphttp` implements the HTTP receiver handler and exporter for logs,
 metrics and traces. They are tested with live HTTP peers, the real journal,
-`OTLPProducer` and the durable disposition store. **The application does not yet
-register these components through YAML or start an OTLP listener.** This is not a
-ready-to-deploy Collector replacement. See the [implementation plan](otlp.md).
+`OTLPProducer` and the durable disposition store. The opt-in [YAML service](otlp-service.md)
+wires them into the application. It is a bounded service, not a full Collector
+replacement. The [native log storage codec](native-log-storage.md) is an explicit
+destination option; transparent forwarding remains the default.
 
 ## Receiver contract
 
@@ -56,7 +57,10 @@ certificates, supports custom cloned root CAs, and requires TLS 1.2 or newer.
 Redirects are not followed. No global HTTP transport is modified.
 
 `Exporter.Send` revalidates the envelope/count, preserves the original payload
-encoding, and optionally gzips it once. Retries in the same call use identical
+encoding by default, and optionally gzips it once. The explicit native log
+storage codec emits protobuf containing the original typed archive and a JSON
+query view; its exact decoded/compressed-wire and backend-row limits are checked
+before new WAL admission. Retries in the same call use identical
 encoded bytes. Bind this callback through `OTLPProducer`/`Store.DoDelivery`; a nil
 error by itself is **not** an acknowledgement. The classified outcome determines
 whether the destination was accepted, retryable or durably quarantined.

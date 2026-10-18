@@ -46,7 +46,7 @@ jobs:
           go version | tee /tmp/kafka-compatibility/go-version.txt
           go list -mod=readonly -m all > /tmp/kafka-compatibility/modules.txt
           test -z "$(gofmt -l internal/recvs/kafka*.go)"
-          go test -mod=readonly -race -count=3 -timeout=180s -v -run '^TestRegressionKafkaUpgradeRealBroker$' ./internal/recvs 2>&1 | tee /tmp/kafka-compatibility/tests.log
+          go test -mod=readonly -race -count=3 -timeout=300s -v -run '^Test(RegressionKafkaUpgradeRealBroker|DurableKafkaRealBroker)$' ./internal/recvs 2>&1 | tee /tmp/kafka-compatibility/tests.log
           git diff --exit-code -- go.mod go.sum
       - name: Collect broker logs and stop it
         if: always()

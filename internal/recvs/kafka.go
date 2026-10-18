@@ -104,6 +104,11 @@ func (r *KafkaRecv) consumerConfig() *sarama.Config {
 	// Keep the legacy new-group policy: start at the end when no committed
 	// offset exists. Never silently replay a whole topic during an upgrade.
 	cfg.Consumer.Offsets.Initial = sarama.OffsetNewest
+	// With no prior commit, strict mode must replay retained records after a
+	// pre-admission cancellation instead of silently jumping to the new end.
+	if r.durableAdmission {
+		cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
+	}
 	cfg.Consumer.Offsets.AutoCommit.Enable = true
 	cfg.Consumer.Offsets.AutoCommit.Interval = r.IntervalDuration
 	// Eager range assignment cancels the session on revocation, including

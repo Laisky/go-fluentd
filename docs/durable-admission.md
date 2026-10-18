@@ -59,8 +59,14 @@ the pinned Sarama 1.61.1 cancels the session on claim exit, so rejoin retries
 from the committed position. A poison record therefore blocks its partition
 until operators repair input or explicitly authorize a loss policy. Strict
 input is limited to 8 MiB total value/key/topic/header bytes and 4096 headers.
-New consumer groups retain the existing `OffsetNewest` policy; configure broker
-offsets before startup if historical topic ingestion is required.
+Strict new consumer groups start at `OffsetOldest`. Otherwise canceling before
+the first successful receipt leaves no committed offset, and `OffsetNewest`
+could skip the refused record on rejoin. Existing committed offsets take
+precedence. Budget-omitted deployments keep their prior `OffsetNewest` behavior.
+Strict mode can therefore backfill retained topic history for a new group;
+provision its capacity and deliberately set initial broker offsets before
+startup if a different historical boundary is required. Already expired broker
+records cannot be recovered by this admission contract.
 
 ## Compatibility and preservation
 

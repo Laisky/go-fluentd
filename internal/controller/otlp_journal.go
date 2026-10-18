@@ -780,8 +780,14 @@ func (p *OTLPJournal) chargeShared(ctx context.Context, n int64) error {
 func (p *OTLPJournal) SharedBudgetRejected() uint64 { return p.sharedBudgetRejected.Load() }
 
 func (p *OTLPJournal) prepareSharedReplay(ctx context.Context) error {
-	if err := p.chargeShared(ctx, 1<<20); err != nil {
-		return err
+	// Only a nonempty active writer rotates. Rewinding an unchanged retained
+	// snapshot creates no segment; a phantom rotation charge can consume the
+	// funding needed to acknowledge accepted work after a full-store restart.
+	// walGate serializes segmentWritten with admission and rotation.
+	if p.segmentWritten > 0 {
+		if err := p.chargeShared(ctx, 1<<20); err != nil {
+			return err
+		}
 	}
 	rotated, err := p.wal.PrepareRetainedReplay(ctx)
 	if rotated {

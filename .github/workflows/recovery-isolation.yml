@@ -1,0 +1,47 @@
+name: Retained OTLP recovery isolation
+on:
+  pull_request:
+    paths:
+      - internal/controller/otlp_recovery_budget_test.go
+      - tests/recovery_isolation/**
+      - .github/workflows/recovery-isolation.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: recovery-isolation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GOMAXPROCS: '2'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version: '1.27.2'
+      - name: Preserve bounded recovery and capacity policy
+        run: |
+          go test -race -count=1 -run '^TestRegressionOTLPOverBudgetRecoveryDrainsBeforeFreshAdmission$' ./internal/controller
+      - name: Pull the exact published executable and isolated peer image
+        run: |
+          docker pull ppcelery/go-fluentd@sha256:596e34b01800570c8ae301b5484f84bc354bed49208717ac0ee5c0c2ca9d515b
+          docker pull python@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258
+      - name: Real-process ownership, pressure, crashes, delivery and convergence
+        run: python3 tests/recovery_isolation/run.py --output "$RUNNER_TEMP/recovery-isolation"
+      - name: Retain only synthetic acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: retained-recovery-isolation-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/recovery-isolation/summary.json
+            ${{ runner.temp }}/recovery-isolation/ledger.jsonl
+            ${{ runner.temp }}/recovery-isolation/*.log
+          if-no-files-found: warn
+          retention-days: 14

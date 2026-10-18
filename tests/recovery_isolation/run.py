@@ -460,7 +460,7 @@ class Campaign:
             exit_code=exitcode,
         )
         # A synthetic sparse file proves bounded admission pressure without filling disk.
-        pressure = live / "synthetic-pressure"
+        pressure = live / "otlp" / "synthetic-pressure"
         f = pressure.open("wb")
         f.truncate(2147483648)
         f.close()

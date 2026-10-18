@@ -4,11 +4,14 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -66,6 +69,30 @@ func TestOverallArchiveOfflineRecoveryOwnershipDryRunAndExecute(t *testing.T) {
 	if e = p.Close(); e != nil {
 		t.Fatal(e)
 	}
+	hashes := func() map[string]string {
+		t.Helper()
+		out := map[string]string{}
+		e := filepath.Walk(root, func(path string, info os.FileInfo, e error) error {
+			if e != nil {
+				return e
+			}
+			if info.Mode().IsRegular() {
+				b, e := os.ReadFile(path)
+				if e != nil {
+					return e
+				}
+				h := sha256.Sum256(b)
+				rel, _ := filepath.Rel(root, path)
+				out[rel] = hex.EncodeToString(h[:])
+			}
+			return nil
+		})
+		if e != nil {
+			t.Fatal(e)
+		}
+		return out
+	}
+	before := hashes()
 	if n, e := RecoverOTLPAcceptedArchive(ctx, c, false); e != nil || n != 2 || calls.Load() != 0 {
 		t.Fatal("dry run sent or missed archive", n, e)
 	}
@@ -77,18 +104,29 @@ func TestOverallArchiveOfflineRecoveryOwnershipDryRunAndExecute(t *testing.T) {
 			t.Fatal("original missing")
 		}
 	}
-	if capacityReceiptCount(t, root) != 2 {
-		t.Fatal("recovery removed original")
+	if !reflect.DeepEqual(before, hashes()) {
+		t.Fatal("read-only recovery changed source names or bytes")
 	}
-	// Corrupt a synthetic archived receipt: validate all before sending anything.
+	// Corrupt a synthetic packed original: validate all before sending anything.
 	entries, _ := os.ReadDir(root)
+	corrupted := false
 	for _, entry := range entries {
-		if len(entry.Name()) == 69 && strings.HasSuffix(entry.Name(), ".json") {
-			if e = os.WriteFile(filepath.Join(root, entry.Name()), []byte("{}"), 0600); e != nil {
+		if strings.HasSuffix(entry.Name(), ".pack") {
+			path := filepath.Join(root, entry.Name())
+			b, e := os.ReadFile(path)
+			if e != nil || len(b) < 45 {
+				t.Fatal("missing packed original", e)
+			}
+			b[44] ^= 1
+			if e = os.WriteFile(path, b, 0600); e != nil {
 				t.Fatal(e)
 			}
+			corrupted = true
 			break
 		}
+	}
+	if !corrupted {
+		t.Fatal("corruption control did not touch a retained original")
 	}
 	_, e = RecoverOTLPAcceptedArchive(ctx, c, true)
 	if e == nil || calls.Load() != 2 || strings.Contains(e.Error(), "synthetic-private-archive-token") {

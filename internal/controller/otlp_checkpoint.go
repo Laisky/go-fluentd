@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"gofluentd/internal/diskbudget"
 	"io"
 	"os"
 	"path/filepath"
@@ -107,7 +108,7 @@ func openOTLPGeneration(dir string, sharedBudget ...bool) (otlpGeneration, strin
 	}
 	var extra interface{}
 	seed, e := hex.DecodeString(g.Namespace)
-	if d.Decode(&extra) != io.EOF || (g.Version != 1 && g.Version != 2) || e != nil || len(seed) != 32 || hex.EncodeToString(seed) != g.Namespace {
+	if d.Decode(&extra) != io.EOF || (g.Version != 1 && g.Version != 2 && g.Version != 3) || e != nil || len(seed) != 32 || hex.EncodeToString(seed) != g.Namespace {
 		return otlpGeneration{}, "", errors.New("invalid OTLP generation metadata")
 	}
 	if g.SharedBudgetVersion < 0 || g.SharedBudgetVersion > 2 || (g.SharedBudgetVersion > 0 && !(len(sharedBudget) > 0 && sharedBudget[0])) {
@@ -116,8 +117,11 @@ func openOTLPGeneration(dir string, sharedBudget ...bool) (otlpGeneration, strin
 	if g.SharedBudgetVersion == 2 && !(len(sharedBudget) > 1 && sharedBudget[1]) {
 		return otlpGeneration{}, "", errors.New("retained accepted archive policy required by generation")
 	}
+	if g.Version == 3 && !(len(sharedBudget) > 1 && sharedBudget[1]) {
+		return otlpGeneration{}, "", errors.New("packed accepted originals require retained policy")
+	}
 	if (g.Version == 1 && (g.ReleasedThrough != 0 || g.Checksum != "")) ||
-		(g.Version == 2 && (g.ReleasedThrough < 0 || g.Checksum != g.checksum())) {
+		(g.Version >= 2 && (g.ReleasedThrough < 0 || g.Checksum != g.checksum())) {
 		return otlpGeneration{}, "", errors.New("invalid OTLP released-frontier checksum")
 	}
 	st, err = os.Lstat(wal)
@@ -143,8 +147,12 @@ func (p *OTLPJournal) checkpointAndPrune(ctx context.Context, cutoff int64) erro
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if p.generation.Version != 2 || cutoff > p.generation.ReleasedThrough {
-		next := otlpGeneration{Version: 2, Namespace: p.namespace, ReleasedThrough: cutoff, SharedBudgetVersion: p.generation.SharedBudgetVersion}
+	wantVersion := 2
+	if p.cfg.RetainAccepted {
+		wantVersion = 3
+	}
+	if p.generation.Version != wantVersion || cutoff > p.generation.ReleasedThrough {
+		next := otlpGeneration{Version: wantVersion, Namespace: p.namespace, ReleasedThrough: cutoff, SharedBudgetVersion: p.generation.SharedBudgetVersion}
 		next.Checksum = next.checksum()
 		if p.budget != nil {
 			if err := p.budget.Charge(ctx, 64<<10); err != nil {
@@ -157,8 +165,17 @@ func (p *OTLPJournal) checkpointAndPrune(ctx context.Context, cutoff int64) erro
 		p.generation = next
 	}
 	if p.cfg.RetainAccepted {
+		n, err := p.store.CompactAccepted(ctx, p.namespace, p.generation.ReleasedThrough)
+		p.receiptsReclaimed.Add(uint64(n))
+		if err != nil {
+			if errors.Is(err, diskbudget.ErrCapacity) {
+				p.archiveCompactionDeferred.Add(1)
+			} else {
+				return err
+			}
+		}
 		if p.budget != nil {
-			return p.budget.Reconcile(ctx, p.frontier == p.generation.ReleasedThrough)
+			return p.budget.Reconcile(ctx, p.frontier == p.generation.ReleasedThrough && !p.store.PackingPending())
 		}
 		return nil
 	}

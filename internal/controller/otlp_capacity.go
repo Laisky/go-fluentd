@@ -64,7 +64,14 @@ func (p *OTLPJournal) CapacitySnapshot() OTLPCapacitySnapshot {
 // Neither terminal records nor already-admitted work are discarded to fit.
 func (p *OTLPJournal) capacityRecord(r OTLPRecord, encodedBytes int) (int64, int64) {
 	receipt := 2*(int64(len(r.Envelope.Payload))+int64(p.cfg.Limits.ResponseBytes)) + 64<<10
-	return 2*int64(encodedBytes) + 2048 + 2*int64(len(r.Required))*receipt, 2*int64(len(r.Required)) + 2
+	future, files := 2*int64(encodedBytes)+2048+2*int64(len(r.Required))*receipt, 2*int64(len(r.Required))+2
+	if p.cfg.RetainAccepted {
+		// Two funded copies plus bounded index stages allow lossless receipt
+		// packing/recovery without requesting fresh space from a full store.
+		future += int64(len(r.Required)) * 4 * (receipt + 64<<10)
+		files += int64(len(r.Required)) * 4
+	}
+	return future, files
 }
 
 func (p *OTLPJournal) observeCapacityRecord(r OTLPRecord, encodedBytes int) {

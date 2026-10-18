@@ -96,6 +96,7 @@ type OTLPJournal struct {
 	sharedBudgetRejected               atomic.Uint64
 	scanBudgetRejected                 atomic.Uint64
 	receiptsReclaimed                  atomic.Uint64
+	archiveCompactionDeferred          atomic.Uint64
 	lastStorageBytes, lastStorageFiles atomic.Int64
 	reservedRecords                    atomic.Int64
 	capacityKnown                      atomic.Bool // recovered the first retained snapshot before admitting more
@@ -224,6 +225,9 @@ func OpenOTLPJournal(ctx context.Context, cfg OTLPJournalConfig, peers []OTLPDes
 		return nil, err
 	}
 	p.namespace = p.generation.Namespace
+	if store.HasAcceptedPacks() && p.generation.Version < 3 {
+		return nil, errors.New("packed receipt state requires matching generation")
+	}
 	// Only this owner rotates snapshots. Background rotation would invalidate a
 	// bounded replay cursor; periodic flush is unnecessary because every operation
 	// explicitly synchronizes. The upstream workers still stop normally on Close.
@@ -238,13 +242,13 @@ func OpenOTLPJournal(ctx context.Context, cfg OTLPJournalConfig, peers []OTLPDes
 	if p.frontier, err = p.wal.LoadMaxId(); err != nil {
 		return nil, err
 	}
-	if p.generation.Version == 2 {
+	if p.generation.Version >= 2 {
 		p.frontier = max(p.frontier, p.generation.ReleasedThrough)
 	}
 	p.capacityKnown.Store(p.frontier == p.generation.ReleasedThrough)
 	p.reservedRecords.Store(p.frontier - p.generation.ReleasedThrough)
 	if budget != nil {
-		if err = budget.Reconcile(ctx, p.frontier == p.generation.ReleasedThrough); err != nil {
+		if err = budget.Reconcile(ctx, p.frontier == p.generation.ReleasedThrough && (!p.cfg.RetainAccepted || !p.store.PackingPending())); err != nil {
 			return nil, err
 		}
 	}
@@ -561,7 +565,7 @@ func (p *OTLPJournal) ReplayBatch(ctx context.Context) (report OTLPBatchReport, 
 			<-p.walGate
 			return report, p.poison(errors.New("OTLP replay exceeds frozen frontier"))
 		}
-		if p.generation.Version == 2 && r.ID <= p.generation.ReleasedThrough {
+		if p.generation.Version >= 2 && r.ID <= p.generation.ReleasedThrough {
 			report.Seen++
 			report.CheckpointSkipped++
 			<-p.walGate

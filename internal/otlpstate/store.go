@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 )
@@ -121,8 +122,13 @@ type Store struct {
 	// pending is immutable after Open and contains only pre-existing uncertain
 	// temporary receipts, never a map of every delivered message. While this
 	// exclusive owner is alive any new failed persistence poisons the store.
-	pending map[string]struct{}
-	dirInfo os.FileInfo
+	pending        map[string]struct{}
+	acceptedPacks  []acceptedPack
+	packSequence   uint32
+	packingPending atomic.Bool
+	packedRecords  atomic.Uint64
+	packedParts    atomic.Uint64
+	dirInfo        os.FileInfo
 	// Per-instance I/O operations permit deterministic durability-fault tests.
 	syncRecord    func(*os.File) error
 	syncDirectory func(*os.File) error
@@ -170,6 +176,11 @@ func Open(dir string, limits Limits) (*Store, error) {
 	s.dirInfo = st
 	s.pending, err = s.loadPending()
 	if err != nil {
+		df.Close()
+		lock.Close()
+		return nil, err
+	}
+	if err = s.loadAcceptedPacks(); err != nil {
 		df.Close()
 		lock.Close()
 		return nil, err

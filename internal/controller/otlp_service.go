@@ -390,6 +390,12 @@ func StartOTLPService(parent context.Context, c OTLPServiceConfig) (_ *OTLPServi
 		rejected, reclaimed := s.owner.StorageCounters()
 		return map[string]interface{}{"admissionRejected": rejected, "codecAdmissionRejected": s.codecAdmissionRejected.Load(), "scanBudgetRejected": s.owner.ScanBudgetRejected(), "sharedBudgetRejected": s.owner.SharedBudgetRejected(), "acceptedArchiveRetained": s.owner.cfg.RetainAccepted, "acceptedReceiptsReclaimed": reclaimed, "maxStorageBytes": c.MaxStorageBytes, "maxStorageFiles": c.MaxStorageFiles, "capacity": s.owner.CapacitySnapshot(), "storageScanMaxEntries": c.StorageScanMaxEntries, "storageScanTimeout": c.StorageScanTimeout.String(), "receiptGC": c.ReceiptGC}
 	})
+	monitor.RegisterStorageMetrics(func() monitor.StorageMetrics {
+		capacity := s.owner.CapacitySnapshot()
+		rejected, _ := s.owner.StorageCounters()
+		records, parts := s.owner.store.PackingStatistics()
+		return monitor.StorageMetrics{SharedConfigured: c.SharedStorageDirectory != "", SharedKnown: capacity.SharedBudgetKnown, RecoveryReady: capacity.RecoveryReady, FilesystemAvailable: capacity.FilesystemAvailable, PackingPending: s.owner.store.PackingPending(), LimitBytes: capacity.SharedLimitBytes, ChargedBytes: capacity.SharedChargedBytes, ReservedBytes: capacity.SharedReservedBytes, PendingUpperBound: capacity.PendingUpperBound, InventoryFiles: capacity.Files, InventoryBytes: capacity.Bytes, AvailableBytes: capacity.FilesystemAvailableBytes, FreeInodes: capacity.FilesystemFreeInodes, AdmissionRejected: rejected, CodecRejected: s.codecAdmissionRejected.Load(), ScanRejected: s.owner.ScanBudgetRejected(), SharedRejected: s.owner.SharedBudgetRejected(), CompactionDeferred: s.owner.archiveCompactionDeferred.Load(), PackedRecords: records, PackedParts: parts}
+	})
 	// HTTP/1.1 is deliberate: max_connections is not an HTTP/2 stream quota.
 	go s.run(ctx, c.ShutdownTimeout)
 	return s, nil

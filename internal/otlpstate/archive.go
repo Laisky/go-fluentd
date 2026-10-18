@@ -36,6 +36,16 @@ func (s *Store) WalkAcceptedArchive(ctx context.Context, namespace string, visit
 	}
 	defer dir.Close()
 	n := 0
+	for _, part := range s.acceptedPacks {
+		if part.index.Namespace != namespace {
+			continue
+		}
+		count, e := s.walkAcceptedPack(ctx, part, 0, func(rec *entry, _ []byte) error { return visit(rec.Key, copyEnvelope(rec.Envelope)) })
+		n += count
+		if e != nil {
+			return n, e
+		}
+	}
 	for {
 		if err = ctx.Err(); err != nil {
 			return n, err

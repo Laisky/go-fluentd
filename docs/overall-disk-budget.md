@@ -10,6 +10,8 @@ Budgeted input now uses a common durable receipt boundary across receivers.
 See [protocol behavior, compatibility and qualification](durable-admission.md)
 before enabling it on legacy HTTP, Forward, Kafka or syslog deployments.
 
+Current retained-format update: [bounded lossless receipt packing](retained-receipt-packing.md). Generation3 readers, fixed operational metrics and compatible rollback requirements are described there. Historical runtime observations below remain dated evidence, not current whole-host cap acceptance.
+
 ## Scope and configuration
 
 This is a general collector feature. A single configured budget covers ALL

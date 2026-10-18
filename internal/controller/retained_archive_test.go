@@ -6,6 +6,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	journal "github.com/Laisky/go-journal"
 	"gofluentd/internal/otlpstate"
@@ -13,6 +15,8 @@ import (
 	"gofluentd/library/otlpwire"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"reflect"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -43,7 +47,7 @@ func TestOverallArchiveProcessHelper(t *testing.T) {
 		}
 	}
 	capacityDrain(t, p)
-	if capacityReceiptCount(t, cfg.Directory) != 2 {
+	if acceptedOriginalCount(t, p) != 2 {
 		t.Fatal("transport ACK discarded original recovery archive")
 	}
 	fmt.Println("OVERALL_ARCHIVE_READY")
@@ -109,7 +113,7 @@ func TestOverallArchiveSurvivesCollectorAndVolatileSinkLoss(t *testing.T) {
 	if sent.Load() != 0 {
 		t.Fatal("normal replay blindly duplicated retained archive")
 	}
-	before := capacityReceiptCount(t, root)
+	before := archiveOriginalHashes(t, root)
 	// Fill admission capacity, but archive recovery writes no replacement WAL.
 	snap, _ := p.budget.Snapshot(context.Background())
 	if e = p.budget.Reserve(context.Background(), snap.Limit-snap.ChargedBytes-snap.ReservedBytes); e != nil {
@@ -124,7 +128,7 @@ func TestOverallArchiveSurvivesCollectorAndVolatileSinkLoss(t *testing.T) {
 			t.Fatal("missing original after recovery")
 		}
 	}
-	if capacityReceiptCount(t, root) != before {
+	if !reflect.DeepEqual(archiveOriginalHashes(t, root), before) {
 		t.Fatal("recovery HTTP ACK deleted original archive")
 	}
 	if _, e = OpenOTLPJournal(context.Background(), OTLPJournalConfig{Directory: root}, []OTLPDestination{{ID: "a", Send: barrierAccepted}}); e == nil {
@@ -176,4 +180,36 @@ func TestOverallArchiveLegacyACKedOriginalsRemainReplayable(t *testing.T) {
 	if retained, e := backend.HasRetainedData(); e != nil || !retained {
 		t.Fatal("legacy recovery removed original", retained, e)
 	}
+}
+
+func acceptedOriginalCount(t *testing.T, p *OTLPJournal) int {
+	t.Helper()
+	n, e := p.store.WalkAcceptedArchive(t.Context(), p.namespace, func(_ otlpstate.Key, _ otlpstate.Envelope) error { return nil })
+	if e != nil {
+		t.Fatal("cannot validate retained originals", e)
+	}
+	return n
+}
+func archiveOriginalHashes(t *testing.T, root string) map[string]string {
+	t.Helper()
+	out := map[string]string{}
+	e := filepath.Walk(root, func(path string, info os.FileInfo, e error) error {
+		if e != nil {
+			return e
+		}
+		if info.Mode().IsRegular() {
+			b, e := os.ReadFile(path)
+			if e != nil {
+				return e
+			}
+			h := sha256.Sum256(b)
+			rel, _ := filepath.Rel(root, path)
+			out[rel] = hex.EncodeToString(h[:])
+		}
+		return nil
+	})
+	if e != nil {
+		t.Fatal(e)
+	}
+	return out
 }

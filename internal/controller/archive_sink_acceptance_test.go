@@ -134,12 +134,12 @@ func TestOverallArchiveVictoriaLogsSinkKillRecovery(t *testing.T) {
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if service.Counters().Accepted == 1 && service.owner.CapacitySnapshot().PendingUpperBound == 0 && capacityReceiptCount(t, cfg.StorageDirectory) == 1 {
+		if service.Counters().Accepted == 1 && service.owner.CapacitySnapshot().PendingUpperBound == 0 && acceptedOriginalCount(t, service.owner) == 1 {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	if service.Counters().Accepted != 1 || service.owner.CapacitySnapshot().PendingUpperBound != 0 || capacityReceiptCount(t, cfg.StorageDirectory) != 1 {
+	if service.Counters().Accepted != 1 || service.owner.CapacitySnapshot().PendingUpperBound != 0 || acceptedOriginalCount(t, service.owner) != 1 {
 		entries, _ := os.ReadDir(cfg.StorageDirectory)
 		for _, entry := range entries {
 			if len(entry.Name()) == 69 && strings.HasSuffix(entry.Name(), ".json") {
@@ -182,7 +182,7 @@ func TestOverallArchiveVictoriaLogsSinkKillRecovery(t *testing.T) {
 	if after != 0 {
 		t.Fatal("no acknowledged volatile loss reproduced; cannot claim this recovery acceptance", after)
 	}
-	if capacityReceiptCount(t, cfg.StorageDirectory) != 1 {
+	if acceptedOriginalCount(t, service.owner) != 1 {
 		t.Fatal("last durable recovery copy lost after backend ACK")
 	}
 	// Exact-full admission headroom must not prevent read-only archive replay.
@@ -223,7 +223,7 @@ func TestOverallArchiveVictoriaLogsSinkKillRecovery(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatal("recovered raw body/nested/unknown context changed")
 	}
-	if capacityReceiptCount(t, cfg.StorageDirectory) != 1 {
+	if acceptedOriginalCount(t, service.owner) != 1 {
 		t.Fatal("recovery success discarded source archive")
 	}
 	t.Logf("PASS: queryable=%d; after sink SIGKILL=%d; archive replay=%d; recovered=%d; original raw semantic equality; source archive retained; full admission budget", before, after, n, recovered)

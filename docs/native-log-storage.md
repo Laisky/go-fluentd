@@ -73,8 +73,11 @@ failures also reject the whole request and increment that counter.
 An already accepted historical record that cannot fit a newly selected encoding
 stays pending; no success, quarantine or silent deletion occurs. Stop new
 admissions if necessary, preserve the WAL and receipts, and qualify a sufficient
-budget or restore the previous encoding configuration. Never delete retained
-work to clear this condition. This is an attended recovery operation.
+wire/decoded budget when the backend row limit permits it. A record beyond the
+backend hard limit must remain retained until an appropriate qualified archival
+destination can accept it. Do not disable the codec into a lossy sink to hide the
+failure. Never delete retained work to clear this condition. This is an attended
+recovery operation.
 
 Input structure/item/depth limits still apply. Expansion checks are allocation
 bounds, not a precise process heap quota; retain container memory/CPU/PID limits.
@@ -87,6 +90,17 @@ The application SDK queue is volatile until collector admission. Delivery is
 at least once under ambiguous acknowledgements; controlled replay tests cannot
 establish universal exactly-once delivery. Retention and disk capacity remain
 separate operational limits.
+
+VictoriaLogs' HTTP acknowledgement is not a per-record fsync guarantee. The
+pinned backend defaults to a 5-second in-memory flush interval, with a minimum
+supported value of 1 second. Unflushed records can be lost on sink SIGKILL,
+OOM or host failure after the gateway has received HTTP200 and released its
+queue entry. Graceful shutdown flushes data. A shorter qualified flush interval
+reduces this window and increases disk IO; it does not provide zero-loss or
+replication guarantees. Keep this sink limitation separate from the collector's
+fsynced admission and the gateway's persistent queue. An upgrade and an IO-budget
+change require their own operator qualification and rollout approval.
+
 
 ## Query and presentation
 

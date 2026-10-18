@@ -116,7 +116,7 @@ func (b *Budget) read() (ledger, error) {
 	if e != nil {
 		return l, e
 	}
-	if !st.Mode().IsRegular() || st.Size() > 256<<10 {
+	if !st.Mode().IsRegular() || st.Size() > maxLedgerBytes {
 		return l, errors.New("invalid shared budget ledger")
 	}
 	raw, e := os.ReadFile(path)
@@ -162,7 +162,7 @@ func (b *Budget) write(l ledger) error {
 	if e != nil {
 		return e
 	}
-	if len(raw) > 256<<10 {
+	if len(raw) > maxLedgerBytes {
 		return errors.New("shared budget ledger too large")
 	}
 	f, e := os.CreateTemp(b.dir, ".budget-pending-*")
@@ -212,14 +212,8 @@ func (b *Budget) change(ctx context.Context, fn func(*ledger) error) error {
 		return e
 	}
 	defer f.Close()
-	names, e := os.ReadDir(b.dir)
-	if e != nil {
+	if e = b.validateLedgerFiles(); e != nil {
 		return e
-	}
-	for _, n := range names {
-		if n.Name() != "budget.json" && n.Name() != ".budget.lock" {
-			return errors.New("uncertain or foreign shared budget evidence retained")
-		}
 	}
 	l, e := b.read()
 	if e != nil {
@@ -426,14 +420,8 @@ func (b *Budget) Snapshot(ctx context.Context) (Snapshot, error) {
 		return out, e
 	}
 	defer f.Close()
-	names, e := os.ReadDir(b.dir)
-	if e != nil {
+	if e = b.validateLedgerFiles(); e != nil {
 		return out, e
-	}
-	for _, n := range names {
-		if n.Name() != "budget.json" && n.Name() != ".budget.lock" {
-			return out, errors.New("uncertain shared budget evidence")
-		}
 	}
 	l, e := b.read()
 	if e != nil {

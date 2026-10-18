@@ -291,3 +291,26 @@ filesystem/storage behavior. Upstream SDK queues may drop before collector
 acknowledgement; HTTP refusal/failed exports need independent alerting and
 appropriate upstream retry/durable handling. No production rollout, latest
 promotion, merge or destructive rollback occurred in this work.
+
+
+## Abandoned ledger staging files after process crashes
+
+`budget.json` is the only committed accounting authority. Ledger writes Sync a
+private staging file, rename it, and Sync the directory before returning funded
+credit to a data writer. A process killed before that commit can leave
+`.budget-pending-<decimal uint32>` beside the primary. Under the ledger flock,
+those regular 0600 single-link files must belong to the coordinator directory
+owner. They are preserved, never promoted or merged, including partial writes
+or intents that would release credit. Missing/corrupt primary state, foreign
+names, unsafe modes/ownership, symlinks and hardlinks remain refusal conditions.
+This trusts the private same-UID directory boundary; it does not authenticate
+against an actor able to replace the committed ledger itself.
+
+Crash recovery is finite. Bounded metadata inventory permits at most 128 staged
+files; allocated bytes plus the next maximum ledger write and directory-growth
+allowance must remain inside the existing 1 MiB coordinator charge. Exhaustion
+refuses further mutations without deleting evidence or enlarging the overall
+limit. Repeated crashes eventually need an attended, separately authorized
+metadata cleanup. Never delete accepted data or arbitrarily promote a staged
+ledger to bypass pressure. The decimal staging namespace is verified against
+Go 1.27.2 CreateTemp and must be requalified on toolchain changes.

@@ -90,12 +90,22 @@ func TestOverallDiskLegacyAndOTLPShareOneCapAndDrain(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer p.Close()
+	// The quota does not promise fairness: one goroutine can fill it before
+	// the other starts. Seed both formats so the concurrent saturation/drain
+	// assertions always cover accepted work from each pipeline.
+	first := &journal.Data{ID: 1, Data: map[string]interface{}{"tag": "fixture", "message": map[string]interface{}{"synthetic": "1"}}}
+	if e = backend.WriteData(first); e != nil {
+		t.Fatal(e)
+	}
+	if e = p.Admit(ctx, boundedRequest(t, 1000)); e != nil {
+		t.Fatal(e)
+	}
 	var wg sync.WaitGroup
-	legacyN, otlpN := 0, 0
+	legacyN, otlpN := 1, 1
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		for id := 1; id < 100; id++ {
+		for id := 2; id < 100; id++ {
 			d := &journal.Data{ID: int64(id), Data: map[string]interface{}{"tag": "fixture", "message": map[string]interface{}{"synthetic": fmt.Sprint(id)}}}
 			e := backend.WriteData(d)
 			if errors.Is(e, diskbudget.ErrCapacity) {
@@ -110,7 +120,7 @@ func TestOverallDiskLegacyAndOTLPShareOneCapAndDrain(t *testing.T) {
 	}()
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 100; i++ {
+		for i := 1; i < 100; i++ {
 			e := p.Admit(ctx, boundedRequest(t, 1000))
 			if errors.Is(e, ErrOTLPJournalCapacity) {
 				break

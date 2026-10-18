@@ -394,10 +394,14 @@ func (b *Budget) Reconcile(ctx context.Context, empty bool) error {
 		if !ok {
 			return ErrMigration
 		}
-		if empty {
-			c.Reserve = bootstrap
-		} else if used < c.Bytes {
+		// Refund unused pre-write charges before releasing excess funding. A
+		// quiescent recovery must never replenish consumed bootstrap space:
+		// doing so requests new capacity and can prevent a full store starting.
+		if used < c.Bytes {
 			c.Reserve += c.Bytes - used
+		}
+		if empty {
+			c.Reserve = min(c.Reserve, bootstrap)
 		}
 		c.Bytes = used
 		l.Roots[b.key] = c

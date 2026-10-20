@@ -125,8 +125,23 @@ func (r *RsyslogRecv) Run(ctx context.Context) {
 					}
 				}
 
+				var original map[string]interface{}
+				if r.durableAdmission {
+					original = make(map[string]interface{}, len(logPart))
+					for key, value := range logPart {
+						original[key] = value
+					}
+				}
 				msg = r.parseLogPart(logPart)
 				if msg == nil {
+					continue
+				}
+
+				if r.durableAdmission {
+					msg.SourceMetadata = map[string]interface{}{"protocol": "syslog", "parts": original}
+					if err := r.SubmitDurable(ctx2Srv, msg); err != nil {
+						log.Logger.Warn("syslog durable admission refused", zap.String("name", r.Name), zap.Error(err))
+					}
 					continue
 				}
 				select {

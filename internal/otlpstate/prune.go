@@ -86,27 +86,37 @@ func (s *Store) PruneAccepted(ctx context.Context, namespace string, through int
 // pruneRecord validates both the receipt checksum and its hashed filename before
 // allowing GC to use its namespace, identity or outcome. Reads are size bounded.
 func (s *Store) pruneRecord(name string) (*entry, error) {
+	rec, _, err := s.readPruneRecord(name)
+	return rec, err
+}
+
+func (s *Store) readPruneRecord(name string) (*entry, []byte, error) {
 	path := filepath.Join(s.dir, name)
 	st, err := os.Lstat(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	max := int64(s.limits.PayloadBytes+s.limits.ResponseBytes)*2 + 32*1024
 	if !st.Mode().IsRegular() || st.Size() > max {
-		return nil, ErrCorrupt
+		return nil, nil, ErrCorrupt
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	b, err := io.ReadAll(io.LimitReader(f, max+1))
 	err = errors.Join(err, f.Close())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if int64(len(b)) > max {
-		return nil, ErrCorrupt
+		return nil, nil, ErrCorrupt
 	}
+	rec, err := s.decodeArchiveRecord(name, b)
+	return rec, b, err
+}
+
+func (s *Store) decodeArchiveRecord(name string, b []byte) (*entry, error) {
 	var disk diskRecord
 	if decodeStrict(b, &disk) != nil {
 		return nil, ErrCorrupt

@@ -31,6 +31,7 @@ type ExporterConfig struct {
 	Endpoints                  map[otlpwire.Signal]string
 	BearerToken                string
 	Gzip                       bool
+	LogStorageCodec            string
 	RootCAs                    *x509.CertPool
 	RequestLimits              otlpwire.Limits
 	ResponseBytes              int64
@@ -52,6 +53,9 @@ type Exporter struct {
 }
 
 func NewExporter(c ExporterConfig) (*Exporter, error) {
+	if c.LogStorageCodec != "" && c.LogStorageCodec != "otlp-record-base64-v1" {
+		return nil, errors.New("unsupported OTLP log storage codec")
+	}
 	if len(c.Endpoints) == 0 || len(c.Endpoints) > 3 {
 		return nil, errors.New("configure 1 to 3 OTLP signal endpoints")
 	}
@@ -167,8 +171,8 @@ func clipped(s string, n int) string {
 	return s
 }
 
-// Send validates and exports one immutable request without cross-encoding or
-// splitting it. OTLP partial/permanent/invalid responses return a terminal kind,
+// Send validates and exports one immutable request without splitting it. The
+// default preserves its encoding; an explicit log storage codec emits protobuf. OTLP partial/permanent/invalid responses return a terminal kind,
 // even alongside a response-decoding error; the store must retain that outcome.
 // Only transport failures without a response and protocol-retryable statuses
 // are retried. Exhaustion never implies delivery. Caller buffers must not be
@@ -194,16 +198,9 @@ func (e *Exporter) Send(ctx context.Context, in otlpstate.Envelope) (otlpstate.O
 	if err != nil || int64(parsed.Items()) != in.Items {
 		return otlpstate.Outcome{}, errors.New("invalid OTLP envelope or item count")
 	}
-	body := parsed.Payload()
-	if e.cfg.Gzip {
-		body, err = e.compress(body)
-		if err != nil {
-			return otlpstate.Outcome{}, err
-		}
-	}
-
-	if int64(len(body)) > e.cfg.RequestLimits.WireBytes {
-		return otlpstate.Outcome{}, otlpwire.ErrTooLarge
+	body, contentType, err := e.encodeRequest(parsed)
+	if err != nil {
+		return otlpstate.Outcome{}, err
 	}
 	delay := e.cfg.InitialBackoff
 	var last otlpstate.Outcome
@@ -216,7 +213,7 @@ func (e *Exporter) Send(ctx context.Context, in otlpstate.Envelope) (otlpstate.O
 		if err != nil {
 			return last, err
 		}
-		req.Header.Set("Content-Type", parsed.ContentType())
+		req.Header.Set("Content-Type", contentType)
 		req.Header.Set("Accept-Encoding", "gzip")
 		if e.cfg.Gzip {
 			req.Header.Set("Content-Encoding", "gzip")
@@ -256,7 +253,7 @@ func (e *Exporter) Send(ctx context.Context, in otlpstate.Envelope) (otlpstate.O
 				last.Diagnostic = "ambiguous OTLP response representation"
 				return last, errors.New(last.Diagnostic)
 			}
-			out, decodeErr := otlpwire.ReadResponse(s, parsed.ContentType(), resp.StatusCode, resp.Header, bytes.NewReader(raw), otlpwire.Limits{WireBytes: e.cfg.ResponseBytes, DecodedBytes: e.cfg.ResponseBytes, Items: 1}, in.Items, time.Now())
+			out, decodeErr := otlpwire.ReadResponse(s, contentType, resp.StatusCode, resp.Header, bytes.NewReader(raw), otlpwire.Limits{WireBytes: e.cfg.ResponseBytes, DecodedBytes: e.cfg.ResponseBytes, Items: 1}, in.Items, time.Now())
 			last.RejectedItems = out.Rejected
 			last.Diagnostic = clipped(prefix+out.Diagnostic, 4096)
 			switch out.Disposition {
@@ -297,6 +294,43 @@ func (e *Exporter) Send(ctx context.Context, in otlpstate.Envelope) (otlpstate.O
 		}
 	}
 	return last, lastErr
+}
+
+// ValidateStorageRequest checks exact destination encoding budgets before durable admission.
+// Transparent signals retain their existing contract. No network call or receipt mutation occurs.
+func (e *Exporter) ValidateStorageRequest(request *otlpwire.Request) error {
+	if request == nil {
+		return errors.New("nil OTLP request")
+	}
+	if request.Signal() != otlpwire.Logs || request.Items() == 0 || e.cfg.LogStorageCodec == "" {
+		return nil
+	}
+	_, _, err := e.encodeRequest(request)
+	return err
+}
+
+// encodeRequest applies only the explicitly configured storage representation and compression.
+func (e *Exporter) encodeRequest(parsed *otlpwire.Request) ([]byte, string, error) {
+	body := parsed.Payload()
+	contentType := parsed.ContentType()
+	var err error
+	if parsed.Signal() == otlpwire.Logs && parsed.Items() > 0 && e.cfg.LogStorageCodec != "" {
+		body, err = parsed.NativeLogStorage(e.cfg.RequestLimits.DecodedBytes)
+		if err != nil {
+			return nil, "", err
+		}
+		contentType = otlpwire.Protobuf
+	}
+	if e.cfg.Gzip {
+		body, err = e.compress(body)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+	if int64(len(body)) > e.cfg.RequestLimits.WireBytes {
+		return nil, "", otlpwire.ErrTooLarge
+	}
+	return body, contentType, nil
 }
 
 // compress reuses only the fixed-size compressor workspace. Resetting to

@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 const defaultOTLPStorageFiles = 4096
@@ -19,6 +20,12 @@ func defaultOTLPStorageBytes(wal int64) int64 {
 // PendingUpperBound includes accepted IDs behind an unresolved prefix. This
 // deliberately trades available capacity for avoiding a per-envelope RAM map.
 type OTLPCapacitySnapshot struct {
+	SharedLimitBytes    int64 `json:"shared_limit_bytes,omitempty"`
+	SharedChargedBytes  int64 `json:"shared_charged_bytes,omitempty"`
+	SharedReservedBytes int64 `json:"shared_reserved_bytes,omitempty"`
+	SharedBudgetKnown   bool  `json:"shared_budget_known"`
+	WALSegmentBytes     int64 `json:"wal_segment_bytes,omitempty"`
+
 	Bytes                    int64  `json:"bytes"`
 	Files                    int64  `json:"files"`
 	PendingUpperBound        int64  `json:"pending_upper_bound"`
@@ -30,11 +37,24 @@ type OTLPCapacitySnapshot struct {
 
 func (p *OTLPJournal) CapacitySnapshot() OTLPCapacitySnapshot {
 	bytes, inodes, ok := otlpFilesystemCapacity(p.cfg.Directory)
-	return OTLPCapacitySnapshot{
+	out := OTLPCapacitySnapshot{
 		Bytes: p.lastStorageBytes.Load(), Files: p.lastStorageFiles.Load(),
 		PendingUpperBound: p.reservedRecords.Load(), RecoveryReady: p.capacityKnown.Load(),
 		FilesystemAvailableBytes: bytes, FilesystemFreeInodes: inodes, FilesystemAvailable: ok,
 	}
+	if p.budget != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+		defer cancel()
+		snap, err := p.budget.Snapshot(ctx)
+		if err == nil {
+			out.SharedLimitBytes = snap.Limit
+			out.SharedChargedBytes = snap.ChargedBytes
+			out.SharedReservedBytes = snap.ReservedBytes
+			out.SharedBudgetKnown = true
+		}
+		out.WALSegmentBytes = p.cfg.WALSegmentBytes
+	}
+	return out
 }
 
 // Reserve every not-checkpointed ID for a replay copy and all frozen destination
@@ -44,7 +64,14 @@ func (p *OTLPJournal) CapacitySnapshot() OTLPCapacitySnapshot {
 // Neither terminal records nor already-admitted work are discarded to fit.
 func (p *OTLPJournal) capacityRecord(r OTLPRecord, encodedBytes int) (int64, int64) {
 	receipt := 2*(int64(len(r.Envelope.Payload))+int64(p.cfg.Limits.ResponseBytes)) + 64<<10
-	return 2*int64(encodedBytes) + 2048 + 2*int64(len(r.Required))*receipt, 2*int64(len(r.Required)) + 2
+	future, files := 2*int64(encodedBytes)+2048+2*int64(len(r.Required))*receipt, 2*int64(len(r.Required))+2
+	if p.cfg.RetainAccepted {
+		// Two funded copies plus bounded index stages allow lossless receipt
+		// packing/recovery without requesting fresh space from a full store.
+		future += int64(len(r.Required)) * 4 * (receipt + 64<<10)
+		files += int64(len(r.Required)) * 4
+	}
+	return future, files
 }
 
 func (p *OTLPJournal) observeCapacityRecord(r OTLPRecord, encodedBytes int) {

@@ -3,10 +3,13 @@ package controller
 import (
 	"context"
 	"fmt"
+	"gofluentd/internal/diskbudget"
 	"io"
+	"math"
 	"os"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"gofluentd/internal/monitor"
@@ -29,7 +32,8 @@ const (
 )
 
 type JournalCfg struct {
-	TagBudget *TagBudget
+	DiskBudget *DiskBudgetConfig
+	TagBudget  *TagBudget
 	// GroupCommitMaxMessages bounds reliable groups; 0 or 1 keeps per-record Sync.
 	GroupCommitMaxMessages int
 	BufDirPath             string
@@ -47,6 +51,11 @@ type JournalCfg struct {
 // Journal dumps all messages to files,
 // then check every msg with committed id to make sure no msg lost
 type Journal struct {
+	diskBudget        *diskbudget.Budget
+	diskGate          sync.RWMutex
+	diskCtx           context.Context
+	diskRefused       atomic.Uint64
+	diskWriteFailures atomic.Uint64
 	*JournalCfg
 	legacyLock *utils.Mutex
 	// Keep descriptor-backed child paths alive until their journal is closed.
@@ -87,6 +96,10 @@ func NewJournal(ctx context.Context, cfg *JournalCfg) *Journal {
 	j.outChan = make(chan *library.FluentMsg, cfg.JournalOutChanLen)
 
 	ownedCtx, cancel := context.WithCancel(ctx)
+	if err := j.openOverallBudget(ownedCtx); err != nil {
+		cancel()
+		log.Logger.Panic("open overall disk budget", zap.Error(err))
+	}
 	if err := j.initLegacyJJ(ownedCtx); err != nil {
 		cancel()
 		j.closeJournalDirectories(ownedCtx)
@@ -149,6 +162,9 @@ func (j *Journal) valid() error {
 		log.Logger.Info("reset child_id_chan_len", zap.Int("child_id_chan_len", j.ChildJournalIDInchanLen))
 	}
 
+	if err := j.requireBudgetRoot(); err != nil {
+		return err
+	}
 	if err := prepareLegacyJournalRoot(j.BufDirPath); err != nil {
 		return errors.Wrapf(err, "create directory `%s` for buf", j.BufDirPath)
 	}
@@ -202,7 +218,20 @@ func (j *Journal) initLegacyJJ(ctx context.Context) error {
 	defer dir.Close()
 	// Bound names and scan work before allocating any per-tag backend. The root
 	// entry ceiling includes non-directories; do not scan arbitrary junk forever.
-	entries, err := dir.ReadDir(j.TagBudget.limit + 1)
+	extra := 1
+	if j.diskBudget != nil {
+		extra = 2
+	}
+	entries, err := dir.ReadDir(j.TagBudget.limit + extra)
+	if j.diskBudget != nil {
+		filtered := entries[:0]
+		for _, e := range entries {
+			if e.Name() != ".go-fluentd-disk-owner.lock" {
+				filtered = append(filtered, e)
+			}
+		}
+		entries = filtered
+	}
 	if err != nil && err != io.EOF {
 		return err
 	}
@@ -290,6 +319,26 @@ func (j *Journal) processLegacyMsg(ctx context.Context, out chan *library.Fluent
 					resultErr = errors.Wrapf(replayErr, "replay tag %s", tag)
 				}
 			}()
+			var retained interface {
+				PrepareRetainedReplay(context.Context) (bool, error)
+				LoadLegacyBufRetained(*journal.Data) error
+				CleanLegacyBuf() error
+			}
+			if j.diskBudget != nil {
+				var ok bool
+				retained, ok = jj.(interface {
+					PrepareRetainedReplay(context.Context) (bool, error)
+					LoadLegacyBufRetained(*journal.Data) error
+					CleanLegacyBuf() error
+				})
+				if !ok {
+					replayErr = errors.New("budgeted journal lacks retained replay API")
+					return
+				}
+				if _, replayErr = retained.PrepareRetainedReplay(ctx); replayErr != nil {
+					return
+				}
+			}
 			if !jj.LockLegacy() {
 				return
 			}
@@ -304,7 +353,19 @@ func (j *Journal) processLegacyMsg(ctx context.Context, out chan *library.Fluent
 					return
 				}
 				data := &journal.Data{Data: map[string]interface{}{}}
-				if err := jj.LoadLegacyBuf(data); err != nil {
+				var readErr error
+				if retained != nil {
+					readErr = retained.LoadLegacyBufRetained(data)
+				} else {
+					readErr = jj.LoadLegacyBuf(data)
+				}
+				if err := readErr; err != nil {
+					if retained != nil {
+						if err != io.EOF {
+							replayErr = err
+						}
+						return
+					}
 					// The backend has already released our lock. A deferred
 					// unlock here could steal a concurrent rotation's lock.
 					ownsLegacy = false
@@ -315,8 +376,10 @@ func (j *Journal) processLegacyMsg(ctx context.Context, out chan *library.Fluent
 				}
 				// Preserve even malformed records before rejecting them. The
 				// reader has advanced, so a later replay may reach cleanup.
-				if replayErr = jj.WriteData(data); replayErr != nil {
-					return
+				if retained == nil {
+					if replayErr = jj.WriteData(data); replayErr != nil {
+						return
+					}
 				}
 				storedTag, tagOK := data.Data["tag"].(string)
 				message, messageOK := data.Data["message"].(map[string]interface{})
@@ -336,8 +399,17 @@ func (j *Journal) processLegacyMsg(ctx context.Context, out chan *library.Fluent
 						return
 					}
 				}
+				var sourceMetadata map[string]interface{}
+				if raw, exists := data.Data["source_metadata"]; exists {
+					var ok bool
+					sourceMetadata, ok = raw.(map[string]interface{})
+					if !ok {
+						replayErr = fmt.Errorf("invalid persisted source metadata for message %d", data.ID)
+						return
+					}
+				}
 				msg := j.MsgPool.Get().(*library.FluentMsg)
-				*msg = library.FluentMsg{ID: data.ID, Tag: storedTag, JournalTag: tag, Message: message, SourceFormat: format}
+				*msg = library.FluentMsg{ID: data.ID, Tag: storedTag, JournalTag: tag, Message: message, SourceFormat: format, SourceMetadata: sourceMetadata}
 				select {
 				case out <- msg:
 				case <-ctx.Done():
@@ -350,6 +422,9 @@ func (j *Journal) processLegacyMsg(ctx context.Context, out chan *library.Fluent
 		return true
 	})
 	wg.Wait()
+	if resultErr == nil {
+		resultErr = j.reconcileOverallBudget(ctx)
+	}
 	return maxID, resultErr
 }
 
@@ -370,7 +445,12 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) error {
 	if err := j.TagBudget.Admit(tag); err != nil {
 		return err
 	}
+	release, e := j.diskGuard("directory", 64<<10)
+	if e != nil {
+		return e
+	}
 	directory, path, err := openJournalDirectory(j.BufDirPath, tag)
+	release()
 	if err != nil {
 		return errors.Wrap(err, "contain journal tag")
 	}
@@ -382,14 +462,18 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) error {
 	}()
 
 	log.Logger.Info("create new journal.Journal", zap.String("tag", tag))
-	jj, err := journal.NewJournal(
+	options := []journal.OptionFunc{}
+	if j.diskBudget != nil {
+		options = append(options, journal.WithStorageGuard(j.diskGuard), journal.WithFlushInterval(time.Duration(math.MaxInt64)), journal.WithRotateDuration(time.Duration(math.MaxInt64)), journal.WithRotateCheckInterval(time.Duration(math.MaxInt64)))
+	}
+	options = append(options,
 		journal.WithLogger(log.Logger.Named("journal."+tag)),
 		journal.WithBufDirPath(path),
-		journal.WithBufSizeByte(j.BufSizeBytes),
+		journal.WithBufSizeByte(j.legacySegmentBytes()),
 		journal.WithIsCompress(j.IsCompress),
 		journal.WithCommitIDTTL(j.CommittedIDTTL),
-		journal.WithIsAggresiveGC(false),
-	)
+		journal.WithIsAggresiveGC(false))
+	jj, err := journal.NewJournal(options...)
 	if err != nil {
 		return errors.Wrap(err, "new journal")
 	}
@@ -517,7 +601,7 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 			msg *library.FluentMsg
 			ok  bool
 		)
-		defer log.Logger.Info("skipDumpChan goroutine exit", zap.String("msg", fmt.Sprint(msg)))
+		defer log.Logger.Info("skipDumpChan goroutine exit")
 		for {
 			select {
 			case <-ctx.Done():
@@ -528,6 +612,12 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 					return
 				}
 
+				if j.diskBudget != nil {
+					j.diskRefused.Add(1)
+					msg.CompleteAcceptance(errors.New("overall disk budget forbids unpersisted bypass"))
+					j.MsgPool.Put(msg)
+					continue
+				}
 				if err := j.TagBudget.Admit(msg.Tag); err != nil {
 					msg.CompleteAcceptance(err)
 					j.MsgPool.Put(msg)
@@ -549,7 +639,7 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 			jji interface{}
 			msg *library.FluentMsg
 		)
-		defer log.Logger.Info("legacy dumper exit", zap.String("msg", fmt.Sprint(msg)))
+		defer log.Logger.Info("legacy dumper exit")
 		for {
 			select {
 			case <-ctx.Done():
@@ -561,6 +651,11 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 				}
 			}
 
+			if j.diskBudget != nil && msg.DurableAck == nil {
+				j.diskRefused.Add(1)
+				j.MsgPool.Put(msg)
+				continue
+			}
 			log.Logger.Debug("try to dump msg", zap.String("tag", msg.Tag))
 			if jji, ok = j.tag2JJInchanMap.Load(msg.Tag); !ok {
 				if err := j.createJournalRunner(ctx, msg.Tag); err != nil {
@@ -596,7 +691,6 @@ func (j *Journal) DumpMsgFlow(ctx context.Context, msgPool *sync.Pool, dumpChan,
 					default:
 						log.Logger.Error("discard log since of journal & downstream busy",
 							zap.String("tag", msg.Tag),
-							zap.String("msg", fmt.Sprint(msg)),
 						)
 						j.MsgPool.Put(msg)
 					}
@@ -734,9 +828,15 @@ func (j *Journal) closeJournalDirectories(ctx context.Context) {
 		value.(*journal.Journal).Close()
 		return true
 	})
-	j.tag2Directory.Range(func(tag, value interface{}) bool {
-		value.(*os.File).Close()
-		j.tag2Directory.Delete(tag)
-		return true
-	})
+	j.tag2Directory.Range(func(tag, value interface{}) bool { value.(*os.File).Close(); j.tag2Directory.Delete(tag); return true })
+	if j.diskBudget != nil {
+		j.diskBudget.Close()
+	}
+}
+
+func (j *Journal) legacySegmentBytes() int64 {
+	if j.DiskBudget != nil {
+		return min(j.BufSizeBytes, j.DiskBudget.SegmentBytes)
+	}
+	return j.BufSizeBytes
 }

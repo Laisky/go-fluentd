@@ -1,7 +1,9 @@
 package recvs
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"time"
 
 	"gofluentd/library"
@@ -102,6 +104,11 @@ func (r *KafkaRecv) consumerConfig() *sarama.Config {
 	// Keep the legacy new-group policy: start at the end when no committed
 	// offset exists. Never silently replay a whole topic during an upgrade.
 	cfg.Consumer.Offsets.Initial = sarama.OffsetNewest
+	// With no prior commit, strict mode must replay retained records after a
+	// pre-admission cancellation instead of silently jumping to the new end.
+	if r.durableAdmission {
+		cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
+	}
 	cfg.Consumer.Offsets.AutoCommit.Enable = true
 	cfg.Consumer.Offsets.AutoCommit.Interval = r.IntervalDuration
 	// Eager range assignment cancels the session on revocation, including
@@ -172,11 +179,17 @@ func (r *KafkaRecv) consumeGroup(ctx context.Context, group kafkaConsumerGroup) 
 	for ctx.Err() == nil {
 		// Consume returns after an eager rebalance. Re-enter it on the same
 		// client; client recreation is reserved for the configured lifetime.
-		if err := group.Consume(ctx, r.Topics, handler); err != nil && ctx.Err() == nil {
+		err := group.Consume(ctx, r.Topics, handler)
+		if ctx.Err() != nil {
+			return
+		}
+		if err != nil {
 			log.Logger.Warn("consume Kafka group", zap.Error(err))
-			if !kafkaRetry(ctx) {
-				return
-			}
+		}
+		// A strict poison-record claim can end its session without a transport
+		// error. Bound every strict rejoin, not only error-returning sessions.
+		if (err != nil || r.durableAdmission) && !kafkaRetry(ctx) {
+			return
 		}
 	}
 }
@@ -206,6 +219,9 @@ func (h *kafkaGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, cl
 			if !h.recv.forwardKafkaRecord(ctx, record) {
 				return nil
 			}
+			if ctx.Err() != nil {
+				return nil
+			}
 			if !h.dry {
 				session.MarkMessage(record, "")
 				count++
@@ -222,6 +238,9 @@ func (h *kafkaGroupHandler) ConsumeClaim(session sarama.ConsumerGroupSession, cl
 // eligible only after handoff to the acceptor, not after end-to-end delivery.
 // Malformed records retain the existing discard-and-advance policy.
 func (r *KafkaRecv) forwardKafkaRecord(ctx context.Context, record *sarama.ConsumerMessage) bool {
+	if r.durableAdmission {
+		return r.forwardDurableKafkaRecord(ctx, record)
+	}
 	if ctx.Err() != nil {
 		return false
 	}
@@ -276,4 +295,71 @@ func (r *KafkaRecv) parse2Msg(kmsg *sarama.ConsumerMessage) (msg *library.Fluent
 	}
 	library.ProcessAdd(r.AddCfg, msg)
 	return msg, nil
+}
+
+// kafkaRecordLimit bounds one strict input including the original transport evidence.
+const kafkaRecordLimit = 8 << 20
+
+// kafkaSourceMetadata validates a finite input and retains original broker identity and bytes.
+func kafkaSourceMetadata(record *sarama.ConsumerMessage) (map[string]interface{}, error) {
+	if record == nil {
+		return nil, fmt.Errorf("nil Kafka record")
+	}
+	remaining := kafkaRecordLimit
+	for _, n := range []int{len(record.Value), len(record.Key), len(record.Topic)} {
+		if n > remaining {
+			return nil, fmt.Errorf("Kafka record exceeds durable input limit")
+		}
+		remaining -= n
+	}
+	if len(record.Headers) > 4096 {
+		return nil, fmt.Errorf("Kafka headers exceed durable input limit")
+	}
+	headers := make([]interface{}, 0, len(record.Headers))
+	for _, h := range record.Headers {
+		if h == nil {
+			return nil, fmt.Errorf("nil Kafka header")
+		}
+		if len(h.Key) > remaining {
+			return nil, fmt.Errorf("Kafka header exceeds durable input limit")
+		}
+		remaining -= len(h.Key)
+		if len(h.Value) > remaining {
+			return nil, fmt.Errorf("Kafka header exceeds durable input limit")
+		}
+		remaining -= len(h.Value)
+		headers = append(headers, map[string]interface{}{"key": bytes.Clone(h.Key), "value": bytes.Clone(h.Value)})
+	}
+	return map[string]interface{}{"protocol": "kafka", "topic": record.Topic, "partition": record.Partition, "offset": record.Offset, "timestamp": record.Timestamp, "block_timestamp": record.BlockTimestamp, "key": bytes.Clone(record.Key), "value": bytes.Clone(record.Value), "headers": headers}, nil
+}
+
+// forwardDurableKafkaRecord keeps the current partition record unmarked until durable admission.
+// A permanent parse error stops this claim. Persistence refusals retry the same frozen identity
+// with bounded backoff and fresh local IDs; an ambiguous append may duplicate.
+// Cancellation stops retries without ever marking a later offset.
+func (r *KafkaRecv) forwardDurableKafkaRecord(ctx context.Context, record *sarama.ConsumerMessage) bool {
+	metadata, err := kafkaSourceMetadata(record)
+	if err != nil {
+		log.Logger.Warn("Kafka durable input rejected", zap.String("name", r.Name), zap.Error(err))
+		return false
+	}
+	for ctx.Err() == nil {
+		msg, err := r.parse2Msg(record)
+		if err != nil {
+			log.Logger.Warn("Kafka durable input rejected", zap.String("name", r.Name), zap.String("reason", "invalid_record"))
+			return false
+		}
+		msg.SourceMetadata = metadata
+		if err = r.SubmitDurable(ctx, msg); err == nil {
+			return ctx.Err() == nil
+		}
+		if ctx.Err() != nil {
+			return false
+		}
+		log.Logger.Warn("Kafka durable admission refused; retaining current offset", zap.String("name", r.Name), zap.Error(err))
+		if !kafkaRetry(ctx) {
+			return false
+		}
+	}
+	return false
 }

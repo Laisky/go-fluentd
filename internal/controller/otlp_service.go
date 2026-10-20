@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -28,6 +29,11 @@ import (
 // OTLPServiceConfig is an opt-in, isolated pipeline. Secrets are named by
 // environment variable, never embedded in the persisted destination plan.
 type OTLPServiceConfig struct {
+	RetainAccepted         bool   `mapstructure:"-"`
+	SharedStorageDirectory string `mapstructure:"shared_storage_dir"`
+	SharedStorageBytes     int64  `mapstructure:"shared_storage_bytes"`
+	WALSegmentBytes        int64  `mapstructure:"wal_segment_bytes"`
+
 	Enabled               bool                     `mapstructure:"enabled"`
 	ListenAddress         string                   `mapstructure:"listen_addr"`
 	StorageDirectory      string                   `mapstructure:"storage_dir"`
@@ -67,6 +73,7 @@ type OTLPServiceDestination struct {
 	BearerTokenEnv  string        `mapstructure:"bearer_token_env"`
 	CAFile          string        `mapstructure:"ca_file"`
 	Gzip            bool          `mapstructure:"gzip"`
+	LogStorageCodec string        `mapstructure:"log_storage_codec"`
 	Timeout         time.Duration `mapstructure:"timeout"`
 	MaxAttempts     int           `mapstructure:"max_attempts"`
 	InitialBackoff  time.Duration `mapstructure:"initial_backoff"`
@@ -248,14 +255,15 @@ func loadOTLPCA(path string) (*x509.CertPool, error) {
 // Stop cancels requests and waits for storage ownership to be released. Sync
 // syscalls cannot be interrupted and can exceed the HTTP shutdown budget.
 type OTLPService struct {
-	owner     *OTLPJournal
-	server    *http.Server
-	listener  net.Listener
-	exporters []*otlphttp.Exporter
-	cancel    context.CancelFunc
-	done      chan struct{}
-	mu        sync.Mutex
-	err       error
+	codecAdmissionRejected atomic.Uint64
+	owner                  *OTLPJournal
+	server                 *http.Server
+	listener               net.Listener
+	exporters              []*otlphttp.Exporter
+	cancel                 context.CancelFunc
+	done                   chan struct{}
+	mu                     sync.Mutex
+	err                    error
 }
 
 func (s *OTLPService) Addr() net.Addr         { return s.listener.Addr() }
@@ -350,49 +358,43 @@ func StartOTLPService(parent context.Context, c OTLPServiceConfig) (_ *OTLPServi
 		}
 	}()
 	limits := otlpwire.Limits{WireBytes: c.MaxWireBytes, DecodedBytes: c.MaxDecodedBytes, Items: c.MaxItems}
-	receiver, err := otlphttp.NewReceiver(otlphttp.ReceiverConfig{Limits: limits, BearerToken: token, MaxConcurrent: c.MaxConcurrent, Timeout: c.RequestTimeout, BodyReadTimeout: c.BodyReadTimeout}, func(ctx context.Context, r *otlpwire.Request) error { return s.owner.Admit(ctx, r) })
+	receiver, err := otlphttp.NewReceiver(otlphttp.ReceiverConfig{Limits: limits, BearerToken: token, MaxConcurrent: c.MaxConcurrent, Timeout: c.RequestTimeout, BodyReadTimeout: c.BodyReadTimeout}, func(ctx context.Context, r *otlpwire.Request) error {
+		for _, exporter := range s.exporters {
+			if codecError := exporter.ValidateStorageRequest(r); codecError != nil {
+				s.codecAdmissionRejected.Add(1)
+				return codecError
+			}
+		}
+		return s.owner.Admit(ctx, r)
+	})
 	if err != nil {
 		return nil, err
 	}
-	peers := make([]OTLPDestination, 0, len(c.Destinations))
-	ids := map[string]bool{}
-	for _, d := range c.Destinations {
-		if d.ID == "" || ids[d.ID] || d.LogsEndpoint == "" || d.MetricsEndpoint == "" || d.TracesEndpoint == "" {
-			return nil, errors.New("OTLP destinations require unique IDs and all three signal endpoints")
-		}
-		ids[d.ID] = true
-		auth, e := envToken(d.BearerTokenEnv, false)
-		if e != nil {
-			return nil, e
-		}
-		var ca *x509.CertPool
-		if d.CAFile != "" {
-			ca, e = loadOTLPCA(d.CAFile)
-			if e != nil {
-				return nil, e
-			}
-		}
-		x, e := otlphttp.NewExporter(otlphttp.ExporterConfig{Endpoints: map[otlpwire.Signal]string{otlpwire.Logs: d.LogsEndpoint, otlpwire.Metrics: d.MetricsEndpoint, otlpwire.Traces: d.TracesEndpoint}, BearerToken: auth, RootCAs: ca, Gzip: d.Gzip, RequestLimits: limits, ResponseBytes: c.MaxResponseBytes, Timeout: d.Timeout, MaxAttempts: d.MaxAttempts, InitialBackoff: d.InitialBackoff, MaxBackoff: d.MaxBackoff})
-		if e != nil {
-			return nil, fmt.Errorf("invalid OTLP destination configuration: %w", e)
-		}
-		s.exporters = append(s.exporters, x)
-		peers = append(peers, OTLPDestination{ID: d.ID, Send: x.Send})
+	peers, exporters, err := configuredOTLPDestinations(c, limits)
+	if err != nil {
+		return nil, err
 	}
+	s.exporters = exporters
 	// Bind first: an occupied port must not create a new storage generation.
 	ln, e := net.Listen("tcp", c.ListenAddress)
 	if e != nil {
 		return nil, fmt.Errorf("bind OTLP listener: %w", e)
 	}
 	s.listener = netutil.LimitListener(ln, c.MaxConnections)
-	s.owner, err = OpenOTLPJournal(ctx, OTLPJournalConfig{Directory: c.StorageDirectory, Compress: c.JournalGzip, Limits: otlpstate.Limits{PayloadBytes: int(c.MaxDecodedBytes), ResponseBytes: int(c.MaxResponseBytes)}, MaxWALBytes: c.MaxWALBytes, MaxStorageBytes: c.MaxStorageBytes, MaxStorageFiles: c.MaxStorageFiles, StorageScanMaxEntries: c.StorageScanMaxEntries, StorageScanTimeout: c.StorageScanTimeout, ReceiptGC: c.ReceiptGC, ReplayBatch: c.ReplayBatch, ReplayInterval: c.ReplayInterval}, peers)
+	s.owner, err = OpenOTLPJournal(ctx, OTLPJournalConfig{RetainAccepted: c.RetainAccepted, SharedStorageDirectory: c.SharedStorageDirectory, SharedStorageBytes: c.SharedStorageBytes, WALSegmentBytes: c.WALSegmentBytes, Directory: c.StorageDirectory, Compress: c.JournalGzip, Limits: otlpstate.Limits{PayloadBytes: int(c.MaxDecodedBytes), ResponseBytes: int(c.MaxResponseBytes)}, MaxWALBytes: c.MaxWALBytes, MaxStorageBytes: c.MaxStorageBytes, MaxStorageFiles: c.MaxStorageFiles, StorageScanMaxEntries: c.StorageScanMaxEntries, StorageScanTimeout: c.StorageScanTimeout, ReceiptGC: c.ReceiptGC, ReplayBatch: c.ReplayBatch, ReplayInterval: c.ReplayInterval}, peers)
 	if err != nil {
 		return nil, err
 	}
 	s.server = &http.Server{Handler: receiver, ReadHeaderTimeout: c.ReadHeaderTimeout, ReadTimeout: c.BodyReadTimeout, WriteTimeout: c.RequestTimeout + time.Second, IdleTimeout: c.IdleTimeout, MaxHeaderBytes: c.MaxHeaderBytes, TLSConfig: tc, BaseContext: func(net.Listener) context.Context { return ctx }, TLSNextProto: map[string]func(*http.Server, *tls.Conn, http.Handler){}}
 	monitor.AddMetric("otlpStorage", func() map[string]interface{} {
 		rejected, reclaimed := s.owner.StorageCounters()
-		return map[string]interface{}{"admissionRejected": rejected, "scanBudgetRejected": s.owner.ScanBudgetRejected(), "acceptedReceiptsReclaimed": reclaimed, "maxStorageBytes": c.MaxStorageBytes, "maxStorageFiles": c.MaxStorageFiles, "capacity": s.owner.CapacitySnapshot(), "storageScanMaxEntries": c.StorageScanMaxEntries, "storageScanTimeout": c.StorageScanTimeout.String(), "receiptGC": c.ReceiptGC}
+		return map[string]interface{}{"admissionRejected": rejected, "codecAdmissionRejected": s.codecAdmissionRejected.Load(), "scanBudgetRejected": s.owner.ScanBudgetRejected(), "sharedBudgetRejected": s.owner.SharedBudgetRejected(), "acceptedArchiveRetained": s.owner.cfg.RetainAccepted, "acceptedReceiptsReclaimed": reclaimed, "maxStorageBytes": c.MaxStorageBytes, "maxStorageFiles": c.MaxStorageFiles, "capacity": s.owner.CapacitySnapshot(), "storageScanMaxEntries": c.StorageScanMaxEntries, "storageScanTimeout": c.StorageScanTimeout.String(), "receiptGC": c.ReceiptGC}
+	})
+	monitor.RegisterStorageMetrics(func() monitor.StorageMetrics {
+		capacity := s.owner.CapacitySnapshot()
+		rejected, _ := s.owner.StorageCounters()
+		records, parts := s.owner.store.PackingStatistics()
+		return monitor.StorageMetrics{SharedConfigured: c.SharedStorageDirectory != "", SharedKnown: capacity.SharedBudgetKnown, RecoveryReady: capacity.RecoveryReady, FilesystemAvailable: capacity.FilesystemAvailable, PackingPending: s.owner.store.PackingPending(), LimitBytes: capacity.SharedLimitBytes, ChargedBytes: capacity.SharedChargedBytes, ReservedBytes: capacity.SharedReservedBytes, PendingUpperBound: capacity.PendingUpperBound, InventoryFiles: capacity.Files, InventoryBytes: capacity.Bytes, AvailableBytes: capacity.FilesystemAvailableBytes, FreeInodes: capacity.FilesystemFreeInodes, AdmissionRejected: rejected, CodecRejected: s.codecAdmissionRejected.Load(), ScanRejected: s.owner.ScanBudgetRejected(), SharedRejected: s.owner.SharedBudgetRejected(), CompactionDeferred: s.owner.archiveCompactionDeferred.Load(), PackedRecords: records, PackedParts: parts}
 	})
 	// HTTP/1.1 is deliberate: max_connections is not an HTTP/2 stream quota.
 	go s.run(ctx, c.ShutdownTimeout)
@@ -495,4 +497,45 @@ func CheckOTLPStorageSeparation(otlpDir, legacyDir string) error {
 		return errors.New("OTLP and legacy journal directories must not overlap")
 	}
 	return nil
+}
+
+// configuredOTLPDestinations shares TLS, authentication and codec validation with offline recovery.
+func configuredOTLPDestinations(c OTLPServiceConfig, limits otlpwire.Limits) (_ []OTLPDestination, _ []*otlphttp.Exporter, err error) {
+	if len(c.Destinations) < 1 || len(c.Destinations) > 64 {
+		return nil, nil, errors.New("OTLP requires 1 to 64 destinations")
+	}
+	exporters := make([]*otlphttp.Exporter, 0, len(c.Destinations))
+	defer func() {
+		if err != nil {
+			for _, x := range exporters {
+				x.Close()
+			}
+		}
+	}()
+	peers := make([]OTLPDestination, 0, len(c.Destinations))
+	ids := map[string]bool{}
+	for _, d := range c.Destinations {
+		if d.ID == "" || ids[d.ID] || d.LogsEndpoint == "" || d.MetricsEndpoint == "" || d.TracesEndpoint == "" {
+			return nil, nil, errors.New("OTLP destinations require unique IDs and all three signal endpoints")
+		}
+		ids[d.ID] = true
+		auth, e := envToken(d.BearerTokenEnv, false)
+		if e != nil {
+			return nil, nil, e
+		}
+		var ca *x509.CertPool
+		if d.CAFile != "" {
+			ca, e = loadOTLPCA(d.CAFile)
+			if e != nil {
+				return nil, nil, e
+			}
+		}
+		x, e := otlphttp.NewExporter(otlphttp.ExporterConfig{Endpoints: map[otlpwire.Signal]string{otlpwire.Logs: d.LogsEndpoint, otlpwire.Metrics: d.MetricsEndpoint, otlpwire.Traces: d.TracesEndpoint}, BearerToken: auth, RootCAs: ca, Gzip: d.Gzip, LogStorageCodec: d.LogStorageCodec, RequestLimits: limits, ResponseBytes: c.MaxResponseBytes, Timeout: d.Timeout, MaxAttempts: d.MaxAttempts, InitialBackoff: d.InitialBackoff, MaxBackoff: d.MaxBackoff})
+		if e != nil {
+			return nil, nil, fmt.Errorf("invalid OTLP destination configuration: %w", e)
+		}
+		exporters = append(exporters, x)
+		peers = append(peers, OTLPDestination{ID: d.ID, Send: x.Send})
+	}
+	return peers, exporters, nil
 }

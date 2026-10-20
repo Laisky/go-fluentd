@@ -47,6 +47,9 @@ settings:
         # bearer_token_env: GO_FLUENTD_COLLECTOR_TOKEN
         # ca_file: /run/otlp/collector-ca.crt
         gzip: true
+        # Optional explicit flat-log-store codec; see docs/native-log-storage.md.
+        # Default is transparent; expansion is checked before durable admission.
+        # log_storage_codec: otlp-record-base64-v1
         timeout: 30s
         max_attempts: 3
         initial_backoff: 100ms

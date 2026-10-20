@@ -12,6 +12,7 @@ import (
 	"time"
 
 	journal "github.com/Laisky/go-journal"
+	"gofluentd/internal/diskbudget"
 	"gofluentd/internal/otlpstate"
 	"gofluentd/library/otlpwire"
 )
@@ -28,6 +29,13 @@ var (
 // MaxWALBytes is an admission threshold for WAL file bytes, NOT a filesystem or
 // receipt quota. Recovery needs extra space for copying pending records.
 type OTLPJournalConfig struct {
+	RetainAccepted bool
+	// SharedStorageDirectory is one private sibling directory shared by ALL workers.
+	// Its ledger bounds WAL, outcomes, indexes, temporary evidence and reservations.
+	SharedStorageDirectory string
+	SharedStorageBytes     int64
+	WALSegmentBytes        int64
+
 	Directory      string
 	Compress       bool
 	Limits         otlpstate.Limits
@@ -68,6 +76,8 @@ type OTLPJournal struct {
 	ctx                                context.Context
 	cancel                             context.CancelFunc
 	cfg                                OTLPJournalConfig
+	budget                             *diskbudget.Budget
+	segmentWritten                     int64
 	namespace, walDir                  string
 	wal                                *journal.Journal
 	store                              *otlpstate.Store
@@ -83,8 +93,10 @@ type OTLPJournal struct {
 	snapshotPending                    int64 // smallest unresolved ID across the entire snapshot
 	hasSnapshotPending                 bool
 	storageRejected                    atomic.Uint64
+	sharedBudgetRejected               atomic.Uint64
 	scanBudgetRejected                 atomic.Uint64
 	receiptsReclaimed                  atomic.Uint64
+	archiveCompactionDeferred          atomic.Uint64
 	lastStorageBytes, lastStorageFiles atomic.Int64
 	reservedRecords                    atomic.Int64
 	capacityKnown                      atomic.Bool // recovered the first retained snapshot before admitting more
@@ -145,12 +157,58 @@ func OpenOTLPJournal(ctx context.Context, cfg OTLPJournalConfig, peers []OTLPDes
 	if cfg.MaxWALBytes < 4096 || cfg.MaxWALBytes > 1<<50 || cfg.ReplayBatch < 1 || cfg.ReplayBatch > 1024 || cfg.ReplayInterval < 10*time.Millisecond || cfg.ReplayInterval > time.Hour {
 		return nil, errors.New("invalid OTLP journal admission or replay limits")
 	}
+
+	if cfg.SharedStorageDirectory != "" {
+		if !cfg.ReceiptGC {
+			return nil, errors.New("shared budget requires checkpoint-proven receipt GC")
+		}
+		if cfg.SharedStorageBytes == 0 {
+			cfg.SharedStorageBytes = diskbudget.DefaultLimitBytes
+		}
+		if cfg.WALSegmentBytes == 0 {
+			cfg.WALSegmentBytes = 16 << 20
+		}
+		if cfg.WALSegmentBytes < 64<<10 || cfg.WALSegmentBytes > 64<<20 {
+			return nil, errors.New("wal_segment_bytes must be between64KiB and64MiB")
+		}
+	} else if cfg.SharedStorageBytes != 0 || cfg.WALSegmentBytes != 0 {
+		return nil, errors.New("shared storage directory required for budget/rotation")
+	}
+	var budget *diskbudget.Budget
+	if cfg.SharedStorageDirectory != "" {
+		budget, err = diskbudget.Open(ctx, cfg.SharedStorageDirectory, cfg.Directory, cfg.SharedStorageBytes)
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			if err != nil {
+				budget.Close()
+			}
+		}()
+	}
 	store, err := otlpstate.Open(cfg.Directory, cfg.Limits)
 	if err != nil {
 		return nil, err
 	}
-	p := &OTLPJournal{cfg: cfg, store: store, walGate: make(chan struct{}, 1), passGate: make(chan struct{}, 1), runGate: make(chan struct{}, 1), wake: make(chan struct{}, 1)}
+	p := &OTLPJournal{cfg: cfg, store: store, budget: budget, walGate: make(chan struct{}, 1), passGate: make(chan struct{}, 1), runGate: make(chan struct{}, 1), wake: make(chan struct{}, 1)}
 	p.ctx, p.cancel = context.WithCancel(ctx)
+	if budget != nil {
+		// Store ownership is held before recounting a crashed root. Reconcile
+		// pre-write overcounts BEFORE requiring new startup headroom.
+		if err = budget.Reconcile(ctx, false); err != nil {
+			store.Close()
+			p.cancel()
+			return nil, err
+		}
+		if err = budget.Charge(ctx, 1<<20); err != nil {
+			store.Close()
+			p.cancel()
+			return nil, err
+		}
+	}
+	if budget != nil {
+		store.BeforePersist = func(n int64) error { return p.chargeShared(p.ctx, 2*((n+4095)/4096*4096)+16<<10) }
+	}
 	defer func() {
 		if err != nil {
 			p.cancel()
@@ -163,15 +221,18 @@ func OpenOTLPJournal(ctx context.Context, cfg OTLPJournalConfig, peers []OTLPDes
 	if p.producer, err = NewOTLPProducer(store, peers); err != nil {
 		return nil, err
 	}
-	if p.generation, p.walDir, err = openOTLPGeneration(cfg.Directory); err != nil {
+	if p.generation, p.walDir, err = openOTLPGeneration(cfg.Directory, p.budget != nil, cfg.RetainAccepted); err != nil {
 		return nil, err
 	}
 	p.namespace = p.generation.Namespace
+	if store.HasAcceptedPacks() && p.generation.Version < 3 {
+		return nil, errors.New("packed receipt state requires matching generation")
+	}
 	// Only this owner rotates snapshots. Background rotation would invalidate a
 	// bounded replay cursor; periodic flush is unnecessary because every operation
 	// explicitly synchronizes. The upstream workers still stop normally on Close.
 	never := time.Duration(math.MaxInt64)
-	p.wal, err = journal.NewJournal(journal.WithBufDirPath(p.walDir), journal.WithIsCompress(cfg.Compress), journal.WithIsAggresiveGC(false), journal.WithBufSizeByte(1<<20), journal.WithFlushInterval(never), journal.WithRotateDuration(never), journal.WithRotateCheckInterval(never))
+	p.wal, err = journal.NewJournal(journal.WithBufDirPath(p.walDir), journal.WithIsCompress(cfg.Compress), journal.WithIsAggresiveGC(false), journal.WithBufSizeByte(p.bufferBytes()), journal.WithFlushInterval(never), journal.WithRotateDuration(never), journal.WithRotateCheckInterval(never))
 	if err != nil {
 		return nil, err
 	}
@@ -181,11 +242,16 @@ func OpenOTLPJournal(ctx context.Context, cfg OTLPJournalConfig, peers []OTLPDes
 	if p.frontier, err = p.wal.LoadMaxId(); err != nil {
 		return nil, err
 	}
-	if p.generation.Version == 2 {
+	if p.generation.Version >= 2 {
 		p.frontier = max(p.frontier, p.generation.ReleasedThrough)
 	}
 	p.capacityKnown.Store(p.frontier == p.generation.ReleasedThrough)
 	p.reservedRecords.Store(p.frontier - p.generation.ReleasedThrough)
+	if budget != nil {
+		if err = budget.Reconcile(ctx, p.frontier == p.generation.ReleasedThrough && (!p.cfg.RetainAccepted || !p.store.PackingPending())); err != nil {
+			return nil, err
+		}
+	}
 	p.syncWAL, p.writeWAL = p.wal.Sync, p.wal.WriteData
 	p.scanWAL = p.storageBytes
 	p.scanRoot = func(ctx context.Context, stopAfter int64, maxEntries int) (int64, int64, error) {
@@ -371,10 +437,26 @@ func (p *OTLPJournal) Admit(ctx context.Context, request *otlpwire.Request) erro
 	// Only an admitted plan may raise future-work reservation high-water.
 	// A completed inventory can race cancellation or its final deadline check;
 	// refusing that plan must not consume capacity for later smaller envelopes.
+	if p.budget != nil {
+		n := int64(len(d.Data["otlp_delivery"].([]byte)))
+		if 2*n+1024 > p.cfg.WALSegmentBytes {
+			p.storageRejected.Add(1)
+			return ErrOTLPJournalCapacity
+		}
+		future, _ := p.capacityRecord(r, int(n))
+		if err = p.budget.Admit(ctx, walGrowth(n), future+64<<10); err != nil {
+			if errors.Is(err, diskbudget.ErrCapacity) {
+				p.sharedBudgetRejected.Add(1)
+				p.storageRejected.Add(1)
+				return errors.Join(ErrOTLPJournalCapacity, err)
+			}
+			return p.poison(err)
+		}
+	}
 	p.observeCapacityRecord(r, len(d.Data["otlp_delivery"].([]byte)))
 	p.frontier = r.ID
 	p.reservedRecords.Store(p.frontier - p.generation.ReleasedThrough)
-	if err = p.writeWAL(d); err != nil {
+	if err = p.appendBounded(ctx, d, false, true); err != nil {
 		return p.poison(err)
 	}
 	if err = p.syncWAL(); err != nil {
@@ -405,7 +487,12 @@ func (p *OTLPJournal) ReplayBatch(ctx context.Context) (report OTLPBatchReport, 
 	}
 	if !p.replayOpen {
 		report.fresh = true
-		if err = p.wal.Rotate(callCtx); err != nil {
+		if p.budget != nil {
+			err = p.prepareSharedReplay(callCtx)
+		} else {
+			err = p.rotateBounded(callCtx, false)
+		}
+		if err != nil {
 			<-p.walGate
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return report, err
@@ -428,8 +515,20 @@ func (p *OTLPJournal) ReplayBatch(ctx context.Context) (report OTLPBatchReport, 
 			return report, errors.Join(append(pending, err)...)
 		}
 		d := new(journal.Data)
-		err = p.wal.LoadLegacyBuf(d)
+		if p.budget != nil {
+			err = p.wal.LoadLegacyBufRetained(d)
+		} else {
+			err = p.wal.LoadLegacyBuf(d)
+		}
 		if err == io.EOF {
+			// Shared-budget replay retains original sealed segments throughout outages.
+			// No replacement copy is needed: original admission was already fsynced.
+			if p.budget != nil && !p.hasSnapshotPending {
+				if cleanErr := p.wal.CleanLegacyBuf(); cleanErr != nil {
+					<-p.walGate
+					return report, p.poison(cleanErr)
+				}
+			}
 			p.replayOpen = false
 			report.Complete = true
 			cutoff := p.snapshotFrontier
@@ -466,15 +565,17 @@ func (p *OTLPJournal) ReplayBatch(ctx context.Context) (report OTLPBatchReport, 
 			<-p.walGate
 			return report, p.poison(errors.New("OTLP replay exceeds frozen frontier"))
 		}
-		if p.generation.Version == 2 && r.ID <= p.generation.ReleasedThrough {
+		if p.generation.Version >= 2 && r.ID <= p.generation.ReleasedThrough {
 			report.Seen++
 			report.CheckpointSkipped++
 			<-p.walGate
 			continue
 		}
 		p.observeCapacityRecord(r, len(d.Data["otlp_delivery"].([]byte)))
-		if err = p.writeWAL(d); err == nil {
-			err = p.syncWAL()
+		if p.budget == nil {
+			if err = p.appendBounded(callCtx, d, true, false); err == nil {
+				err = p.syncWAL()
+			}
 		}
 		<-p.walGate
 		if err != nil {
@@ -486,6 +587,11 @@ func (p *OTLPJournal) ReplayBatch(ctx context.Context) (report OTLPBatchReport, 
 				return e
 			}
 			defer func() { <-p.walGate }()
+			if p.budget != nil {
+				if e := p.chargeShared(c, 64<<10); e != nil {
+					return p.poison(e)
+				}
+			}
 			if e := p.wal.WriteId(id); e != nil {
 				return p.poison(e)
 			}
@@ -611,5 +717,85 @@ func (p *OTLPJournal) Close() error {
 	p.closed = true
 	err := p.wal.Sync()
 	p.wal.Close()
+	if p.budget != nil {
+		err = errors.Join(err, p.budget.Close())
+	}
 	return errors.Join(err, p.store.Close(), p.Err())
+}
+
+// walGrowth includes framing/compression, block rounding and directory growth.
+func walGrowth(n int64) int64 { return 2*((n+4095)/4096*4096) + 64<<10 }
+func (p *OTLPJournal) bufferBytes() int64 {
+	if p.budget != nil {
+		return min(1<<20, p.cfg.WALSegmentBytes)
+	}
+	return 1 << 20
+}
+func (p *OTLPJournal) rotateBounded(ctx context.Context, legacyHeld bool) error {
+	if p.budget == nil {
+		return p.wal.Rotate(ctx)
+	}
+	if e := p.chargeShared(ctx, 1<<20); e != nil {
+		return e
+	}
+	// Rotate without resetting an in-progress frozen cursor, even between batches.
+	if p.replayOpen && !legacyHeld {
+		if !p.wal.LockLegacy() {
+			return errors.New("bounded rotation cannot own frozen cursor")
+		}
+		defer p.wal.UnLockLegacy()
+	}
+	if e := p.wal.Rotate(ctx); e != nil {
+		return e
+	}
+	p.segmentWritten = 0
+	return nil
+}
+func (p *OTLPJournal) appendBounded(ctx context.Context, d *journal.Data, legacyHeld, charged bool) error {
+	if p.budget == nil {
+		return p.writeWAL(d)
+	}
+	n := int64(len(d.Data["otlp_delivery"].([]byte)))
+	reserve := 2*n + 1024
+	if reserve > p.cfg.WALSegmentBytes {
+		return errors.Join(ErrOTLPJournalCapacity, diskbudget.ErrCapacity)
+	}
+	if p.segmentWritten > p.cfg.WALSegmentBytes-reserve {
+		if e := p.rotateBounded(ctx, legacyHeld); e != nil {
+			return e
+		}
+	}
+	if !charged {
+		if e := p.chargeShared(ctx, walGrowth(n)); e != nil {
+			return e
+		}
+	}
+	p.segmentWritten += reserve
+	return p.writeWAL(d)
+}
+
+func (p *OTLPJournal) chargeShared(ctx context.Context, n int64) error {
+	err := p.budget.Charge(ctx, n)
+	if errors.Is(err, diskbudget.ErrCapacity) {
+		p.sharedBudgetRejected.Add(1)
+	}
+	return err
+}
+func (p *OTLPJournal) SharedBudgetRejected() uint64 { return p.sharedBudgetRejected.Load() }
+
+func (p *OTLPJournal) prepareSharedReplay(ctx context.Context) error {
+	// Only a nonempty active writer rotates. Rewinding an unchanged retained
+	// snapshot creates no segment; a phantom rotation charge can consume the
+	// funding needed to acknowledge accepted work after a full-store restart.
+	// walGate serializes segmentWritten with admission and rotation.
+	if p.segmentWritten > 0 {
+		if err := p.chargeShared(ctx, 1<<20); err != nil {
+			return err
+		}
+	}
+	rotated, err := p.wal.PrepareRetainedReplay(ctx)
+	if rotated {
+		p.segmentWritten = 0
+	}
+	return err
 }

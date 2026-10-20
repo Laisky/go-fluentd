@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/IBM/sarama v1.61.1
-	github.com/Laisky/go-journal v1.1.7-0.20261006223601-a7f7377c4a3d
+	github.com/Laisky/go-journal v1.1.7-0.20261018152132-3f73b25e0029
 	github.com/Laisky/go-syslog v2.3.3+incompatible
 	// Journal logger compatibility: v1.17 changes *LoggerType to LoggerItf.
 	github.com/Laisky/go-utils v1.16.0
@@ -16,6 +16,7 @@ require (
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/json-iterator/go v1.1.12
 	github.com/pkg/errors v0.9.1
+	github.com/prometheus/client_golang v1.24.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
 	github.com/tinylib/msgp v1.6.4
@@ -73,7 +74,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.31 // indirect
-	github.com/prometheus/client_golang v1.24.1 // indirect
 	github.com/prometheus/client_model v0.6.3 // indirect
 	github.com/prometheus/common v0.72.0 // indirect
 	github.com/prometheus/procfs v0.22.0 // indirect

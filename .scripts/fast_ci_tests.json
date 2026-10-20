@@ -52,5 +52,61 @@
       "TestRegressionSafeURLAllowlist",
       "TestRegressionSafeHTTPErrorPreservesCauseWithoutRenderingIt"
     ]
+  },
+  {
+    "package": "./internal/diskbudget",
+    "tests": [
+      "TestSharedBudgetBoundaryAndFalsePositive",
+      "TestSharedBudgetConcurrentOwnersAndRestart",
+      "TestSharedBudgetExistingOverCapAndForeignEvidence",
+      "TestSharedBudgetIndependentProcesses",
+      "TestSharedBudgetRootOwnershipAndLimitMismatch",
+      "TestSharedBudgetReconcileCountsBlocksDirectoriesAndUncertainTemps",
+      "TestSharedBudgetFailedLedgerWriteStopsAndRemainsUnknown",
+      "TestSharedBudgetReplacementCannotResetAccounting"
+    ]
+  },
+  {
+    "package": "./internal/controller",
+    "tests": [
+      "TestSharedOTLPBoundedRotationRestartAndExactReplay",
+      "TestSharedOTLPTwoWorkersCapAndAdmissionFalsePositives",
+      "TestSharedOTLPSizeRefusalLeavesSmallWorkUsable",
+      "TestSharedOTLPReplayExhaustionStopsBeforeDiscard",
+      "TestLegacyAdmissionThresholdDoesNotBoundReplayControl",
+      "TestSharedOTLPActualHTTPBackpressureAndRecovery",
+      "TestSharedOTLPSIGKILLRetainsBudgetAndAcceptedWork",
+      "TestSharedOTLPGenerationPreventsUnbudgetedReopen",
+      "TestSharedOTLPOutageDoesNotRotateOrRetireUnacknowledgedSegments",
+      "TestSharedOTLPFullAdmissionBudgetStillDrainsAcceptedWork",
+      "TestSharedOTLPRestartReconcilesCrashOvercountAtExactCap"
+    ]
+  },
+  {
+    "package": "./internal/controller",
+    "tests": [
+      "TestOverallDiskConfigAppliesToEveryPipeline",
+      "TestOverallDiskLegacyAndOTLPShareOneCapAndDrain",
+      "TestOverallDiskLegacyRefusalIsExplicitAndDoesNotPersist",
+      "TestOverallDiskLegacyRetainsUnacknowledgedPlainAndGzip",
+      "TestOverallDiskLegacySIGKILLFullLedgerRecovery"
+    ]
+  },
+  {
+    "package": "./internal/controller",
+    "tests": [
+      "TestOverallArchiveSurvivesCollectorAndVolatileSinkLoss",
+      "TestOverallArchiveLegacyACKedOriginalsRemainReplayable",
+      "TestOverallArchiveOfflineRecoveryOwnershipDryRunAndExecute",
+      "TestOverallArchiveRecoveryRefusesFreshRoot"
+    ]
+  },
+  {
+    "package": "./internal/controller",
+    "tests": [
+      "TestLegacyRecoveryTransportTLSExactRawDryRunAndRefusal",
+      "TestLegacyRecoveryTransportValidatesWholeArchiveBeforeSending",
+      "TestOverallTransitionOverCapNeedsSeparateStorageAndPreservesEveryOriginal"
+    ]
   }
 ]

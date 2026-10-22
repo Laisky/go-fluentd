@@ -42,10 +42,16 @@ seed tree.
 
 Before the final known-outcome SIGKILL, the collector must report zero pending
 work and a released checkpoint matching every admitted live envelope. Sink row
-presence alone is insufficient. The final settled sink snapshot is checked for
-all 48 keys, exact multiplicities and every payload hash, including the last
-three records. Oracle controls reject missing, unexpected, duplicate and corrupt
-final records, as well as pending/unknown/uncheckpointed outcomes.
+presence alone is insufficient. After restart, a fresh three-signal sentinel is
+admitted into the same serial replay worker and must reach both the sink and a new
+released checkpoint. That barrier proves the worker traversed retained replay
+before the final ledger audit; a checkpoint already marked settled at Open is
+not enough. The final snapshot checks all 51 keys, exact multiplicities and
+payload hashes, including the post-restart sentinel. Negative controls reject
+missing, unexpected, duplicate and corrupt records, delayed duplicate replay,
+missing sentinels, and unsettled/unknown checkpoints. The test's cleanup always
+attempts removal of positively identified owned containers, even when log
+collection fails; it never removes containers with unverified ownership.
 
 The test intentionally pauses downstream work before controlled crashes. It does
 not claim exactly-once transport: a crash between remote acceptance and local
@@ -65,8 +71,9 @@ images. The output directory must not exist. Do not run against real state.
 python3 tests/recovery_isolation/run.py --output /tmp/otlp-recovery-isolation
 ```
 
-The pull-request workflow runs the same exact executable and oracle. A startup,
-HTTP, ownership, pressure, restart or ledger failure is a failed qualification.
+The manually dispatched workflow runs the same exact executable and oracle,
+separately from the fast automatic PR gate. A startup, HTTP, ownership, pressure,
+restart or ledger failure is a failed qualification.
 Compose rendering alone is insufficient. No production rollout is performed by
 this workflow or test. Any operational cutover must preserve all old WALs and
 backups, one owner per root, existing public bindings/authentication, a measured

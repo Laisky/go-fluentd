@@ -1,15 +1,10 @@
 name: Retained OTLP recovery isolation
 on:
-  pull_request:
-    paths:
-      - internal/controller/otlp_recovery_budget_test.go
-      - tests/recovery_isolation/**
-      - .github/workflows/recovery-isolation.yml
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: recovery-isolation-${{ github.event.pull_request.number || github.ref }}
+  group: recovery-isolation-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   acceptance:

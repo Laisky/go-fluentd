@@ -55,6 +55,7 @@ through **Actions > workflow > Run workflow**, selecting the candidate branch:
 - `otlp-state.yml`
 - `otlp-wire.yml`
 - `performance.yml`
+- `recovery-isolation.yml` (historical-image Docker, WAL ownership, restart and crash campaign)
 - `readme.yml` (complete native/Docker integration matrix)
 
 Already-manual historical workflows remain available. The benchmark regression

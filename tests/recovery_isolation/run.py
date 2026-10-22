@@ -7,13 +7,13 @@ production state, real credentials, daemon faults, or firewall commands.
 
 import argparse
 import collections
-import copy
 import hashlib
 import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import time
 import uuid
 
@@ -377,6 +377,22 @@ class Campaign:
             and generation["released_through"] == self.accepted[worker]
         )
 
+    def verify_after_restart(self, worker, sequence):
+        """Fence prior replay with new durable work before auditing its sink rows.
+
+        A released checkpoint can appear settled immediately after Open, before
+        the restarted serial replay worker has traversed retained WAL records.
+        This freshly accepted sentinel must follow that replay to its checkpoint.
+        """
+        self.control(block_all=False, block_old=False)
+        self.emit(worker, "post-restart-barrier", sequence)
+        until(self.all_delivered, "post-restart sentinel did not reach the sink")
+        until(
+            lambda: self.settled(worker),
+            "post-restart sentinel lacks durable checkpoint",
+        )
+        return verify_delivery(self.expected, self.ledger())
+
     def run(self):
         assert not self.root.exists()
         self.root.mkdir(mode=0o700, parents=True)
@@ -512,7 +528,6 @@ class Campaign:
         self.emit("live", "fresh-crash", 3)
         self.stop("live", True)
         self.stop("old", True)
-        before_ledger = self.counts()
         self.restart("old")
         self.restart("live")
         assert self.generation(active)["namespace"] == seed_generation["namespace"]
@@ -592,9 +607,7 @@ class Campaign:
             lambda: self.settled("live"),
             "single owner did not recover its settled checkpoint",
         )
-        self.control(block_all=False, block_old=False)
-        final_rows = self.ledger()
-        verify_delivery(self.expected, final_rows)
+        final_counts = self.verify_after_restart("live", 5)
         self.mark(
             "Converges safely to one live worker after historical checkpoint drain; retired WAL retained"
         )
@@ -603,8 +616,8 @@ class Campaign:
             "checks": self.results,
             "image": IMAGE,
             "accepted_keys": len(self.expected),
-            "sink_rows": len(final_rows),
-            "verified_payload_hashes": len(final_rows),
+            "sink_rows": sum(final_counts.values()),
+            "verified_payload_hashes": len(final_counts),
             "final_known_outcome_checkpoint": self.accepted["live"],
             "limits": [
                 "Synthetic isolated processes and controlled outages; no production mutations",
@@ -618,21 +631,52 @@ class Campaign:
         return result
 
     def cleanup(self):
+        failures = []
         for name in reversed(self.names):
-            label = self.command(
-                [
-                    "docker",
-                    "inspect",
-                    "--format",
-                    '{{index .Config.Labels "task07.isolation"}}',
-                    name,
-                ],
-                text=True,
-            ).strip()
-            assert label == self.label
-            log = self.command(["docker", "logs", name], stderr=subprocess.STDOUT)
-            (self.root / (name + ".log")).write_bytes(log)
-            self.command(["docker", "rm", "--force", name])
+            try:
+                label = self.command(
+                    [
+                        "docker",
+                        "inspect",
+                        "--format",
+                        '{{index .Config.Labels "task07.isolation"}}',
+                        name,
+                    ],
+                    text=True,
+                ).strip()
+            except Exception as exc:
+                failures.append(f"{name}: ownership inspection failed: {exc}")
+                continue
+            if label != self.label:
+                # Never delete a container we cannot positively identify.
+                failures.append(f"{name}: ownership label mismatch")
+                continue
+            try:
+                log = self.command(["docker", "logs", name], stderr=subprocess.STDOUT)
+                (self.root / (name + ".log")).write_bytes(log)
+            except Exception as exc:
+                # Log collection must not prevent removal of an owned container.
+                failures.append(f"{name}: log capture failed: {exc}")
+            try:
+                self.command(["docker", "rm", "--force", name])
+            except Exception as exc:
+                failures.append(f"{name}: removal failed: {exc}")
+        if failures:
+            raise RuntimeError("cleanup errors: " + "; ".join(failures))
+
+
+def execute_campaign(campaign):
+    try:
+        result = campaign.run()
+    except BaseException:
+        try:
+            campaign.cleanup()
+        except Exception as cleanup_error:
+            # Keep the actual qualification failure as the primary exception.
+            print(f"cleanup after campaign failure: {cleanup_error}", file=sys.stderr)
+        raise
+    campaign.cleanup()
+    return result
 
 
 if __name__ == "__main__":
@@ -641,8 +685,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     os.umask(0o077)
     campaign = Campaign(Path(args.output).resolve())
-    try:
-        result = campaign.run()
-        print(json.dumps({"passed": True, "checks": len(result["checks"])}), flush=True)
-    finally:
-        campaign.cleanup()
+    result = execute_campaign(campaign)
+    print(json.dumps({"passed": True, "checks": len(result["checks"])}), flush=True)

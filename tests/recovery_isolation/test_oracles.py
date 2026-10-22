@@ -1,8 +1,13 @@
 """Regression controls for the historical campaign's delivery oracle."""
 import copy
 import importlib.util
+import io
+import subprocess
+import tempfile
 from pathlib import Path
 import unittest
+from contextlib import redirect_stderr
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location("recovery_campaign", Path(__file__).with_name("run.py"))
 campaign = importlib.util.module_from_spec(spec)
@@ -82,6 +87,133 @@ class SettledOutcomeTests(unittest.TestCase):
         del self.capacity["pending_upper_bound"]
         with self.assertRaises(KeyError):
             self.owner.settled("live")
+
+
+class RestartBarrierTests(unittest.TestCase):
+    def setUp(self):
+        self.owner = campaign.Campaign(Path("/synthetic"))
+        self.rows = []
+        self.controls = []
+        for signal in campaign.SIGNALS:
+            self.owner.expected[("earlier", 1, signal)] = "old-" + signal
+            self.rows.append(dict(case="earlier", sequence=1, signal=signal, sha256="old-" + signal))
+        self.owner.control = lambda **values: self.controls.append(values)
+        self.owner.ledger = lambda: list(self.rows)
+        self.owner.settled = lambda worker: True
+        self.owner.emit = self.emit
+
+    def emit(self, worker, case, sequence, accepted=True):
+        self.assertEqual((worker, case, sequence, accepted), ("live", "post-restart-barrier", 5, True))
+        self.owner.accepted[worker] += len(campaign.SIGNALS)
+        for signal in campaign.SIGNALS:
+            self.owner.expected[(case, sequence, signal)] = "new-" + signal
+            self.rows.append(dict(case=case, sequence=sequence, signal=signal, sha256="new-" + signal))
+
+    def check(self):
+        # No-sleep fake polling: a missing fence is a failure, not a timeout.
+        def immediate(predicate, message, seconds=40):
+            self.assertTrue(predicate(), message)
+        with mock.patch.object(campaign, "until", side_effect=immediate):
+            return self.owner.verify_after_restart("live", 5)
+
+    def test_fresh_sentinel_is_delivered_and_checkpointed(self):
+        counts = self.check()
+        self.assertEqual(len(counts), 6)
+        self.assertEqual(self.owner.accepted["live"], 3)
+        self.assertEqual(self.controls, [dict(block_all=False, block_old=False)])
+
+    def test_late_duplicate_after_old_checkpoint_is_rejected(self):
+        # The old immediate snapshot passes. An erroneous retained replay
+        # before the new sentinel must cause a duplicate verdict.
+        self.assertEqual(len(campaign.verify_delivery(self.owner.expected, self.rows)), 3)
+        def delayed_emit(*args, **kwargs):
+            self.rows.append(copy.deepcopy(self.rows[0]))
+            self.emit(*args, **kwargs)
+        self.owner.emit = delayed_emit
+        with self.assertRaisesRegex(AssertionError, "duplicated"):
+            self.check()
+
+    def test_missing_postrestart_sentinel_cannot_pass(self):
+        def dropped_emit(*args, **kwargs):
+            self.emit(*args, **kwargs)
+            del self.rows[-len(campaign.SIGNALS):]
+        self.owner.emit = dropped_emit
+        with self.assertRaisesRegex(AssertionError, "post-restart sentinel"):
+            self.check()
+
+    def test_unsettled_postrestart_sentinel_cannot_pass(self):
+        self.owner.settled = lambda worker: False
+        with self.assertRaisesRegex(AssertionError, "post-restart sentinel lacks durable checkpoint"):
+            self.check()
+
+
+class CleanupTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.owner = campaign.Campaign(Path(tmp.name))
+        self.owner.label = "synthetic-owner"
+        self.owner.names = ["sink", "live"]
+        self.commands = []
+        self.fail_logs = None
+        self.foreign = None
+
+        def command(args, **kwargs):
+            self.commands.append(list(args))
+            kind, name = args[1], args[-1]
+            if kind == "inspect":
+                return "foreign-owner" if name == self.foreign else self.owner.label
+            if kind == "logs":
+                if name == self.fail_logs:
+                    raise subprocess.CalledProcessError(7, args)
+                return b"synthetic-only-log"
+            if kind == "rm":
+                return b""
+            raise AssertionError("unexpected Docker command")
+        self.owner.command = command
+
+    def removed(self):
+        return [args[-1] for args in self.commands if args[1] == "rm"]
+
+    def test_log_failure_still_removes_every_owned_container(self):
+        self.fail_logs = "live"
+        with self.assertRaisesRegex(RuntimeError, "log capture failed"):
+            self.owner.cleanup()
+        self.assertEqual(self.removed(), ["live", "sink"])
+        self.assertEqual((self.owner.root / "sink.log").read_bytes(), b"synthetic-only-log")
+
+    def test_foreign_container_is_not_removed(self):
+        self.foreign = "sink"
+        with self.assertRaisesRegex(RuntimeError, "ownership label mismatch"):
+            self.owner.cleanup()
+        self.assertEqual(self.removed(), ["live"])
+
+    def test_clean_success(self):
+        self.owner.cleanup()
+        self.assertEqual(self.removed(), ["live", "sink"])
+
+
+class CampaignExecutionTests(unittest.TestCase):
+    def test_primary_failure_survives_cleanup_failure(self):
+        class BothFail:
+            def run(self):
+                raise ValueError("primary qualification failed")
+            def cleanup(self):
+                raise RuntimeError("cleanup failed")
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            with self.assertRaisesRegex(ValueError, "primary qualification failed"):
+                campaign.execute_campaign(BothFail())
+        self.assertIn("cleanup failed", stderr.getvalue())
+
+    def test_cleanup_failure_blocks_success(self):
+        class CleanupFail:
+            def run(self):
+                return {"passed": True}
+            def cleanup(self):
+                raise RuntimeError("cleanup failed")
+        with self.assertRaisesRegex(RuntimeError, "cleanup failed"):
+            campaign.execute_campaign(CleanupFail())
 
 
 if __name__ == "__main__":

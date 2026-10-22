@@ -7,6 +7,9 @@ type FluentMsg struct {
 	// SourceFormat marks envelopes which must not receive legacy log metadata.
 	// It is stored separately in the journal wrapper, never in event payloads.
 	SourceFormat string `msg:"-" json:"-"`
+	// SourceMetadata preserves input protocol context outside the event payload.
+	// The journal wrapper stores it for recovery; exporters never transmit it.
+	SourceMetadata map[string]interface{} `msg:"-" json:"-"`
 	// DeliveryID is transport metadata derived by the producer, not an event ID.
 	DeliveryID string `msg:"-" json:"-"`
 	// JournalTag is local acknowledgement provenance, not a routing tag. It is

@@ -28,6 +28,8 @@ jobs:
       - name: Preserve bounded recovery and capacity policy
         run: |
           go test -race -count=1 -run '^TestRegressionOTLPOverBudgetRecoveryDrainsBeforeFreshAdmission$' ./internal/controller
+      - name: Delivery oracle and durable-outcome negative controls
+        run: python3 -m unittest discover -s tests/recovery_isolation -p "test_*.py" -v
       - name: Pull the exact published executable and isolated peer image
         run: |
           docker pull ppcelery/go-fluentd@sha256:596e34b01800570c8ae301b5484f84bc354bed49208717ac0ee5c0c2ca9d515b

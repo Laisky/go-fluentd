@@ -140,7 +140,11 @@ func (h *Receiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// This callback owns durable admission, not merely a send on an in-memory queue.
 	if err := h.admit(ctx, req); err != nil {
-		writeFailure(w, ct, 503, "OTLP durable admission failed")
+		if errors.Is(err, otlpwire.ErrTooLarge) {
+			writeFailure(w, ct, 413, "OTLP destination encoding exceeds limits")
+		} else {
+			writeFailure(w, ct, 503, "OTLP durable admission failed")
+		}
 		return
 	}
 	if err := ctx.Err(); err != nil {
@@ -157,6 +161,11 @@ func (h *Receiver) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // emit that minimal Status rather than an Export response or HTML on failures.
 // Tests decode these bytes with the independent generated Status message.
 func writeFailure(w http.ResponseWriter, ct string, code int, message string) {
+	if code == http.StatusServiceUnavailable {
+		// OTLP retries transient full-request failures; never emit partial_success
+		// for a full durable queue, failed Sync, or ambiguous cancellation.
+		w.Header().Set("Retry-After", "1")
+	}
 	var body []byte
 	if ct == otlpwire.JSON {
 		body, _ = json.Marshal(struct {

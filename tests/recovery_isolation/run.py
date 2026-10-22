@@ -64,6 +64,20 @@ def until(check, message, seconds=40):
     raise AssertionError(message)
 
 
+def verify_delivery(expected, rows):
+    """Validate one settled sink snapshot, including the last admitted batch."""
+    counts = collections.Counter(
+        (row["case"], row["sequence"], row["signal"]) for row in rows
+    )
+    assert set(counts) == set(expected), "accepted delivery keys missing or unexpected"
+    assert all(n == 1 for n in counts.values()), "known accepted outcome duplicated"
+    assert all(
+        expected[(row["case"], row["sequence"], row["signal"])] == row["sha256"]
+        for row in rows
+    ), "payload identity changed"
+    return counts
+
+
 class Campaign:
     def __init__(self, root):
         self.root = root
@@ -71,6 +85,7 @@ class Campaign:
         self.names = []
         self.results = []
         self.expected = {}
+        self.accepted = collections.Counter()
         self.workers = {}
         self.sink = None
 
@@ -212,6 +227,7 @@ class Campaign:
                 self.expected[(case, sequence, signal)] = hashlib.sha256(
                     body
                 ).hexdigest()
+                self.accepted[worker] += 1
 
     def config(self, state, listen):
         return {
@@ -350,6 +366,16 @@ class Campaign:
 
     def all_delivered(self):
         return set(self.counts()) == set(self.expected)
+
+    def settled(self, worker):
+        """Sink presence alone is not a durable collector outcome/checkpoint."""
+        capacity = self.monitor(worker)["otlpStorage"]["capacity"]
+        generation = self.generation(self.workers[worker]["state"])
+        return (
+            capacity["recovery_ready"]
+            and capacity["pending_upper_bound"] == 0
+            and generation["released_through"] == self.accepted[worker]
+        )
 
     def run(self):
         assert not self.root.exists()
@@ -510,13 +536,7 @@ class Campaign:
             "live checkpoint did not converge",
             40,
         )
-        counts = self.counts()
-        assert all(v == 1 for v in counts.values()), "known accepted outcome duplicated"
-        assert all(
-            (r["case"], r["sequence"], r["signal"]) in self.expected
-            and self.expected[(r["case"], r["sequence"], r["signal"])] == r["sha256"]
-            for r in self.ledger()
-        ), "payload identity changed"
+        counts = verify_delivery(self.expected, self.ledger())
         self.mark(
             "Both SIGKILL/restarts retain every accepted signal and known-outcome identity without extra rows",
             accepted_keys=len(self.expected),
@@ -525,7 +545,7 @@ class Campaign:
         assert self.generation(active)["namespace"] == seed_generation["namespace"]
         assert self.generation(seed) == seed_generation
         self.mark(
-            "Historical and live generation/checkpoint continuity preserved; original synthetic seed unchanged",
+            "Historical and live generation/checkpoint continuity preserved; original seed generation unchanged",
             old_released=self.generation(active).get("released_through"),
             live_released=self.generation(live).get("released_through"),
         )
@@ -560,13 +580,21 @@ class Campaign:
         self.stop("old")
         self.emit("live", "fresh-after-convergence", 4)
         until(self.all_delivered, "single remaining worker did not accept/deliver")
+        until(
+            lambda: self.settled("live"),
+            "final batch lacks durable collector outcomes/checkpoint",
+        )
+        # Keep the intended known-outcome crash separate from ambiguous ACKs.
+        self.control(block_all=True, block_old=True)
         self.stop("live", True)
         self.restart("live")
         until(
-            lambda: self.monitor("live")["otlpStorage"]["capacity"]["recovery_ready"],
-            "single owner did not recover after convergence",
+            lambda: self.settled("live"),
+            "single owner did not recover its settled checkpoint",
         )
-        assert all(v == 1 for v in self.counts().values())
+        self.control(block_all=False, block_old=False)
+        final_rows = self.ledger()
+        verify_delivery(self.expected, final_rows)
         self.mark(
             "Converges safely to one live worker after historical checkpoint drain; retired WAL retained"
         )
@@ -575,7 +603,9 @@ class Campaign:
             "checks": self.results,
             "image": IMAGE,
             "accepted_keys": len(self.expected),
-            "sink_rows": len(self.ledger()),
+            "sink_rows": len(final_rows),
+            "verified_payload_hashes": len(final_rows),
+            "final_known_outcome_checkpoint": self.accepted["live"],
             "limits": [
                 "Synthetic isolated processes and controlled outages; no production mutations",
                 "Known durable outcomes tested; ambiguous network/ACK outcomes can still duplicate",

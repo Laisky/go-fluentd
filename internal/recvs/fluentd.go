@@ -27,6 +27,8 @@ const (
 
 // FluentdRecvCfg configuration of FluentdRecv
 type FluentdRecvCfg struct {
+	// BestEffort permits chunkless clients only; durable admission and disk limits remain enforced.
+	BestEffort   bool
 	Ingress      FluentIngressCfg
 	ConcatBudget *concatstate.Budget
 	Name,
@@ -160,7 +162,9 @@ func (r *FluentdRecv) GetName() string {
 
 // Run starting this recv
 func (r *FluentdRecv) Run(ctx context.Context) {
-	r.concators = r.startConcators(ctx)
+	if !r.durableAdmission {
+		r.concators = r.startConcators(ctx)
+	}
 	var connections sync.WaitGroup
 	slots := make(chan struct{}, r.Ingress.MaxConnections)
 	defer connections.Wait()
@@ -185,6 +189,10 @@ func (r *FluentdRecv) Run(ctx context.Context) {
 }
 
 func (r *FluentdRecv) decodeMsg(ctx context.Context, conn net.Conn) {
+	if r.durableAdmission {
+		r.decodeDurableFluent(ctx, conn)
+		return
+	}
 	stop := context.AfterFunc(ctx, func() { conn.Close() })
 	defer stop()
 	defer conn.Close()

@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 )
@@ -106,6 +107,10 @@ type diskRecord struct {
 // Different key stripes may execute concurrently. Close waits for in-flight Do
 // callbacks, which must honor their context. Do not call Store methods from send.
 type Store struct {
+	// BeforePersist funds bounded physical/temp/directory growth before any inode write.
+	// Configure once before exposing the Store to concurrent callers.
+	BeforePersist func(int64) error
+
 	life              sync.RWMutex
 	closed            bool
 	dir               string
@@ -117,8 +122,13 @@ type Store struct {
 	// pending is immutable after Open and contains only pre-existing uncertain
 	// temporary receipts, never a map of every delivered message. While this
 	// exclusive owner is alive any new failed persistence poisons the store.
-	pending map[string]struct{}
-	dirInfo os.FileInfo
+	pending        map[string]struct{}
+	acceptedPacks  []acceptedPack
+	packSequence   uint32
+	packingPending atomic.Bool
+	packedRecords  atomic.Uint64
+	packedParts    atomic.Uint64
+	dirInfo        os.FileInfo
 	// Per-instance I/O operations permit deterministic durability-fault tests.
 	syncRecord    func(*os.File) error
 	syncDirectory func(*os.File) error
@@ -166,6 +176,11 @@ func Open(dir string, limits Limits) (*Store, error) {
 	s.dirInfo = st
 	s.pending, err = s.loadPending()
 	if err != nil {
+		df.Close()
+		lock.Close()
+		return nil, err
+	}
+	if err = s.loadAcceptedPacks(); err != nil {
 		df.Close()
 		lock.Close()
 		return nil, err
@@ -463,6 +478,11 @@ func (s *Store) persist(name string, rec entry) error {
 	data, err := json.Marshal(diskRecord{hex.EncodeToString(sum[:]), payload})
 	if err != nil {
 		return err
+	}
+	if s.BeforePersist != nil {
+		if err = s.BeforePersist(int64(len(data))); err != nil {
+			return err
+		}
 	}
 	f, err := os.CreateTemp(s.dir, ".pending-"+name+"-*")
 	if err != nil {

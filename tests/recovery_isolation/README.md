@@ -1,5 +1,11 @@
 # Retained backlog recovery isolation
 
+This is an explicit historical-image/default-compatibility control. Its pinned
+process image is independent of the checked-out Go source. The Go regression
+compiles current source, but this process campaign does not enable the shared
+disk budget, retained-original mode or native log-storage codec. It does not
+qualify current native storage, a 3GB aggregate cap or production migration.
+
 A restored WAL can be larger than current admission budgets. The ordinary owner
 correctly refuses fresh ingress until its retained snapshot is recovered and
 physical WAL capacity is reclaimed. `recovery_ready` describes reservation
@@ -27,10 +33,19 @@ while the historical owner makes progress. A competing owner of the same WAL
 must fail for the ownership lock, with different unused listener ports so a port
 collision cannot pass the assertion. Disposable sparse-file pressure must refuse
 new admission without losing accepted work. Actual SIGKILL/restart of both owners
-must preserve accepted payload identity, namespaces, checkpoints and known
+must preserve all accepted payload hashes, namespaces, checkpoints and known
 accepted outcomes. The historical owner is retired only after its pending bound
 is zero and its checkpoint is complete; the live owner must continue after that
-convergence and another restart. Original synthetic seed state remains retained.
+convergence and another restart. Original synthetic seed state remains retained;
+the assertion checks its generation metadata, not a byte manifest of the entire
+seed tree.
+
+Before the final known-outcome SIGKILL, the collector must report zero pending
+work and a released checkpoint matching every admitted live envelope. Sink row
+presence alone is insufficient. The final settled sink snapshot is checked for
+all 48 keys, exact multiplicities and every payload hash, including the last
+three records. Oracle controls reject missing, unexpected, duplicate and corrupt
+final records, as well as pending/unknown/uncheckpointed outcomes.
 
 The test intentionally pauses downstream work before controlled crashes. It does
 not claim exactly-once transport: a crash between remote acceptance and local

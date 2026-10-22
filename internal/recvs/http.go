@@ -1,8 +1,10 @@
 package recvs
 
 import (
+	"bytes"
 	"context"
 	"crypto/md5"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -98,13 +100,13 @@ func (r *HTTPRecv) validate(ctx *gin.Context, msg *library.FluentMsg) bool {
 		msg.Message[r.TimeKey] = []byte(msg.Message[r.TimeKey].(string))
 	case []byte:
 	default:
-		log.Logger.Warn("unknown type of timekey", zap.String(r.TimeKey, fmt.Sprint(msg.Message[r.TimeKey])))
+		log.Logger.Warn("unknown type of timekey")
 		r.BadRequest(ctx, "unknown type of timekey")
 		return false
 	}
 
 	if !r.TSRegexp.Match(msg.Message[r.TimeKey].([]byte)) {
-		log.Logger.Warn("unknown format of timekey", zap.ByteString(r.TimeKey, msg.Message[r.TimeKey].([]byte)))
+		log.Logger.Warn("unknown format of timekey")
 		r.BadRequest(ctx, "unknown format of timekey")
 		return false
 	}
@@ -119,16 +121,14 @@ func (r *HTTPRecv) validate(ctx *gin.Context, msg *library.FluentMsg) bool {
 	case string:
 		msg.Message[r.SigKey] = []byte(msg.Message[r.SigKey].(string))
 	default:
-		log.Logger.Warn("`unknown type of `sig`", zap.String(r.SigKey, fmt.Sprint(msg.Message[r.SigKey])))
+		log.Logger.Warn("unknown signature type")
 		r.BadRequest(ctx, "`unknown type of `sig`")
 		return false
 	}
 	hash := md5.Sum(append(msg.Message[r.TimeKey].([]byte), r.SigSalt...))
 	sig := hex.EncodeToString(hash[:])
-	if sig != string(msg.Message[r.SigKey].([]byte)) {
-		log.Logger.Warn("signature of timekey incorrect",
-			zap.String("expect", sig),
-			zap.ByteString("got", msg.Message[r.SigKey].([]byte)))
+	if subtle.ConstantTimeCompare([]byte(sig), msg.Message[r.SigKey].([]byte)) != 1 {
+		log.Logger.Warn("signature of timekey incorrect")
 		r.BadRequest(ctx, "signature error")
 		return false
 	}
@@ -136,19 +136,15 @@ func (r *HTTPRecv) validate(ctx *gin.Context, msg *library.FluentMsg) bool {
 	// check whether @timestamp is expires
 	now := utils.Clock.GetUTCNow()
 	if ts, err := time.Parse(r.TimeFormat, string(msg.Message[r.TimeKey].([]byte))); err != nil {
-		log.Logger.Error("parse ts got error",
-			zap.Error(err),
-			zap.ByteString(r.TimeKey, msg.Message[r.TimeKey].([]byte)))
+		log.Logger.Error("parse timestamp failed")
 		r.BadRequest(ctx, "signature error")
 		return false
 	} else if now.Sub(ts) > r.MaxAllowedDelaySec {
-		log.Logger.Warn("timekey expires", zap.Time("ts", ts))
+		log.Logger.Warn("timekey expires")
 		r.BadRequest(ctx, "expires")
 		return false
 	} else if ts.Sub(now) > r.MaxAllowedAheadSec {
-		log.Logger.Warn("timekey ahead of now",
-			zap.Time("ts", ts),
-			zap.Time("now", now))
+		log.Logger.Warn("timekey ahead of now")
 		r.BadRequest(ctx, "come from future?")
 		return false
 	}
@@ -172,8 +168,8 @@ func (r *HTTPRecv) HTTPLogHandler(ctx *gin.Context) {
 	case "uat":
 	case "prod":
 	default:
-		log.Logger.Warn("unknown env", zap.String("env", env))
-		r.BadRequest(ctx, fmt.Sprintf("only accept sit/perf/uat/prod, but got `%v`", env))
+		log.Logger.Warn("unknown env")
+		r.BadRequest(ctx, "only accept sit/perf/uat/prod")
 		return
 	}
 	// log.Logger.Debug("got new http log", zap.String("env", env))
@@ -208,6 +204,9 @@ func (r *HTTPRecv) HTTPLogHandler(ctx *gin.Context) {
 		return
 	}
 
+	if r.durableAdmission {
+		msg.SourceMetadata = map[string]interface{}{"protocol": "legacy_http", "body": bytes.Clone(msgData)}
+	}
 	if !r.validate(ctx, msg) {
 		r.msgPool.Put(msg)
 		return
@@ -220,37 +219,29 @@ func (r *HTTPRecv) HTTPLogHandler(ctx *gin.Context) {
 	// Retain only immutable values after publication: a fast pipeline may
 	// complete and recycle msg before the handler resumes.
 	id := msg.ID
-	out := r.asyncOutChan
-	var receipt chan error
-	if r.RequireDurableAck {
-		receipt = make(chan error, 1)
-		msg.DurableAck = receipt
-		out = r.syncOutChan
-	}
-	if ctx.Request.Context().Err() != nil {
-		r.msgPool.Put(msg)
-		ctx.AbortWithStatus(http.StatusServiceUnavailable)
-		return
-	}
-	select {
-	case out <- msg:
-	case <-ctx.Request.Context().Done():
-		r.msgPool.Put(msg)
-		ctx.AbortWithStatus(http.StatusServiceUnavailable)
-		return
-	}
-	if receipt != nil {
+
+	if r.RequireDurableAck || r.durableAdmission {
+		if err := r.SubmitDurable(ctx.Request.Context(), msg); err != nil {
+			ctx.Header("Retry-After", "1")
+			ctx.AbortWithStatus(http.StatusServiceUnavailable)
+			return
+		}
+	} else {
+		if ctx.Request.Context().Err() != nil {
+			r.msgPool.Put(msg)
+			ctx.Header("Retry-After", "1")
+			ctx.AbortWithStatus(http.StatusServiceUnavailable)
+			return
+		}
 		select {
-		case err := <-receipt:
-			if err != nil {
-				ctx.AbortWithStatus(http.StatusServiceUnavailable)
-				return
-			}
+		case r.asyncOutChan <- msg:
 		case <-ctx.Request.Context().Done():
-			// Ownership is already in the pipeline; never recycle it here.
+			r.msgPool.Put(msg)
+			ctx.Header("Retry-After", "1")
 			ctx.AbortWithStatus(http.StatusServiceUnavailable)
 			return
 		}
 	}
+
 	ctx.JSON(http.StatusOK, map[string]int64{"msgid": id})
 }

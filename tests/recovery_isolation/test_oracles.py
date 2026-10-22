@@ -4,6 +4,7 @@ import importlib.util
 import json
 import io
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 import unittest
@@ -285,6 +286,42 @@ class SuccessfulCampaignEvidenceTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "cleanup-failed"):
                 campaign.execute_campaign(SyntheticCleanupFailure())
             self.assertFalse((root / "summary.json").exists())
+
+
+
+class HistoricalCheckpointEvidenceTests(unittest.TestCase):
+    def test_complete_historical_frontier_is_accepted(self):
+        original = {"namespace": "historical"}
+        current = {"namespace": "historical", "released_through": 36}
+        self.assertEqual(campaign.verify_historical_checkpoint(current, original, 36), current)
+
+    def test_stale_historical_frontier_rejected_despite_zero_pending(self):
+        old_capacity = {"recovery_ready": True, "pending_upper_bound": 0}
+        self.assertTrue(old_capacity["recovery_ready"] and old_capacity["pending_upper_bound"] == 0)
+        with self.assertRaisesRegex(AssertionError, "historical checkpoint"):
+            campaign.verify_historical_checkpoint(
+                {"namespace": "historical", "released_through": 35},
+                {"namespace": "historical"},
+                36,
+            )
+
+    def test_foreign_historical_namespace_is_rejected(self):
+        with self.assertRaisesRegex(AssertionError, "historical WAL namespace"):
+            campaign.verify_historical_checkpoint(
+                {"namespace": "wrong", "released_through": 36},
+                {"namespace": "historical"},
+                36,
+            )
+
+
+class OptimizedInterpreterTests(unittest.TestCase):
+    def test_optimized_interpreter_cannot_skip_campaign_assertions(self):
+        process = subprocess.run(
+            [sys.executable, "-O", str(Path(__file__).with_name("run.py")), "--help"],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertNotEqual(process.returncode, 0)
+        self.assertIn("requires Python assertions", process.stderr)
 
 
 if __name__ == "__main__":

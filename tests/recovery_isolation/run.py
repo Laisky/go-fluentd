@@ -17,6 +17,11 @@ import sys
 import time
 import uuid
 
+# The qualification relies on assertions for non-destructive safety checks.
+# An optimized interpreter must never silently suppress those assertions.
+if not __debug__:
+    raise RuntimeError("recovery acceptance requires Python assertions; do not use -O")
+
 IMAGE = "ppcelery/go-fluentd@sha256:596e34b01800570c8ae301b5484f84bc354bed49208717ac0ee5c0c2ca9d515b"
 TOKEN = "synthetic-recovery-isolation-only"
 SIGNALS = ("logs", "metrics", "traces")
@@ -76,6 +81,15 @@ def verify_delivery(expected, rows):
         for row in rows
     ), "payload identity changed"
     return counts
+
+
+def verify_historical_checkpoint(current, original, accepted_frontier):
+    """The retired historical WAL must release every previously admitted ID."""
+    if current.get("namespace") != original.get("namespace"):
+        raise AssertionError("historical WAL namespace changed")
+    if current.get("released_through", 0) != accepted_frontier:
+        raise AssertionError("historical checkpoint did not reach accepted frontier")
+    return current
 
 
 class Campaign:
@@ -217,6 +231,9 @@ class Campaign:
         return json.dumps(record, separators=(",", ":")).encode()
 
     def emit(self, worker, case, sequence, accepted=True):
+        before_rejected = None
+        if not accepted:
+            before_rejected = self.monitor(worker)["otlpStorage"]["admissionRejected"]
         for signal in SIGNALS:
             body = self.payload(case, sequence, signal)
             status, _ = self.http(
@@ -228,6 +245,10 @@ class Campaign:
                     body
                 ).hexdigest()
                 self.accepted[worker] += 1
+        if not accepted:
+            after_rejected = self.monitor(worker)["otlpStorage"]["admissionRejected"]
+            if after_rejected - before_rejected < len(SIGNALS):
+                raise AssertionError("HTTP 503 lacked expected storage admission rejection")
 
     def config(self, state, listen):
         return {
@@ -557,11 +578,13 @@ class Campaign:
             accepted_keys=len(self.expected),
             row_counts=sorted(set(counts.values())),
         )
-        assert self.generation(active)["namespace"] == seed_generation["namespace"]
+        old_generation = verify_historical_checkpoint(
+            self.generation(active), seed_generation, self.accepted["seed"]
+        )
         assert self.generation(seed) == seed_generation
         self.mark(
             "Historical and live generation/checkpoint continuity preserved; original seed generation unchanged",
-            old_released=self.generation(active).get("released_through"),
+            old_released=old_generation["released_through"],
             live_released=self.generation(live).get("released_through"),
         )
         workers = [self.workers[k]["name"] for k in ("old", "live")]
@@ -627,7 +650,6 @@ class Campaign:
                 "Live split topology NOT applied by this campaign",
             ],
         }
-        (self.root / "summary.json").write_text(json.dumps(result, indent=2) + "\n")
         return result
 
     def cleanup(self):
@@ -676,6 +698,8 @@ def execute_campaign(campaign):
             print(f"cleanup after campaign failure: {cleanup_error}", file=sys.stderr)
         raise
     campaign.cleanup()
+    # Do not publish green artifacts until owned resources have been cleaned up.
+    (campaign.root / "summary.json").write_text(json.dumps(result, indent=2) + "\n")
     return result
 
 

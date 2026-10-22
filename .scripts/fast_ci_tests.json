@@ -45,10 +45,7 @@
       "TestRegressionJSONStartupAndAlertKeepSecretsPrivate",
       "TestRegressionStartupKeepsUsefulListenerDetails",
       "TestRegressionRemoteSettingsDoNotLogSecrets",
-      "TestRegressionRemoteSettingsFailureAndCancellation",
-      "TestPateoAlertPreservesLegacyWireAndLevelGate",
-      "TestPateoAlertQueueIsBounded",
-      "TestPateoAlertClosesResponsesWithoutRetry"
+      "TestRegressionRemoteSettingsFailureAndCancellation"
     ]
   },
   {

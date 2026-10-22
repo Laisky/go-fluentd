@@ -191,16 +191,4 @@ func setupLogger(ctx context.Context) {
 			WithOptions(zap.HooksWithFields(alertPusher.GetZapHook()))).(*gutils.LoggerType)
 	}
 
-	if gutils.Settings.GetString("settings.pateo_alert.push_api") != "" {
-		// pateo wechat alert pusher
-		pateoAlertPusher, err := newPateoAlertPusher(
-			ctx,
-			gutils.Settings.GetString("settings.pateo_alert.push_api"),
-			gutils.Settings.GetString("settings.pateo_alert.token"),
-		)
-		if err != nil {
-			log.Logger.Panic("create PateoAlertPusher", zap.Error(log.SafeHTTPError("initialize alert pusher", gutils.Settings.GetString("settings.pateo_alert.push_api"), err)))
-		}
-		log.Logger = any(log.Logger.WithOptions(zap.HooksWithFields(pateoAlertPusher.GetZapHook()))).(*gutils.LoggerType)
-	}
 }

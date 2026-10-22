@@ -174,7 +174,7 @@ func setupLogger(ctx context.Context) {
 	}
 
 	log.Logger.Info("enable alert pusher")
-	log.Logger = log.Logger.Named("go-fluentd-" + global.Config.CMDArgs.Env + "-" + global.Config.CMDArgs.HostName)
+	log.Logger = any(log.Logger.Named("go-fluentd-" + global.Config.CMDArgs.Env + "-" + global.Config.CMDArgs.HostName)).(*gutils.LoggerType)
 
 	if gutils.Settings.GetString("settings.logger.push_api") != "" {
 		// telegram alert
@@ -187,13 +187,13 @@ func setupLogger(ctx context.Context) {
 		if err != nil {
 			log.Logger.Panic("create AlertPusher", zap.Error(log.SafeHTTPError("initialize alert pusher", gutils.Settings.GetString("settings.logger.push_api"), err)))
 		}
-		log.Logger = log.Logger.
-			WithOptions(zap.HooksWithFields(alertPusher.GetZapHook()))
+		log.Logger = any(log.Logger.
+			WithOptions(zap.HooksWithFields(alertPusher.GetZapHook()))).(*gutils.LoggerType)
 	}
 
 	if gutils.Settings.GetString("settings.pateo_alert.push_api") != "" {
 		// pateo wechat alert pusher
-		pateoAlertPusher, err := gutils.NewPateoAlertPusher(
+		pateoAlertPusher, err := newPateoAlertPusher(
 			ctx,
 			gutils.Settings.GetString("settings.pateo_alert.push_api"),
 			gutils.Settings.GetString("settings.pateo_alert.token"),
@@ -201,6 +201,6 @@ func setupLogger(ctx context.Context) {
 		if err != nil {
 			log.Logger.Panic("create PateoAlertPusher", zap.Error(log.SafeHTTPError("initialize alert pusher", gutils.Settings.GetString("settings.pateo_alert.push_api"), err)))
 		}
-		log.Logger = log.Logger.WithOptions(zap.HooksWithFields(pateoAlertPusher.GetZapHook()))
+		log.Logger = any(log.Logger.WithOptions(zap.HooksWithFields(pateoAlertPusher.GetZapHook()))).(*gutils.LoggerType)
 	}
 }

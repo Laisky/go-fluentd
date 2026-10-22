@@ -467,7 +467,7 @@ func (j *Journal) createJournalRunner(ctx context.Context, tag string) error {
 		options = append(options, journal.WithStorageGuard(j.diskGuard), journal.WithFlushInterval(time.Duration(math.MaxInt64)), journal.WithRotateDuration(time.Duration(math.MaxInt64)), journal.WithRotateCheckInterval(time.Duration(math.MaxInt64)))
 	}
 	options = append(options,
-		journal.WithLogger(log.Logger.Named("journal."+tag)),
+		journal.WithLogger(any(log.Logger.Named("journal."+tag)).(*utils.LoggerType)),
 		journal.WithBufDirPath(path),
 		journal.WithBufSizeByte(j.legacySegmentBytes()),
 		journal.WithIsCompress(j.IsCompress),

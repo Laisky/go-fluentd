@@ -1,0 +1,10 @@
+{
+  "authorization": "Bearer synthetic-pateo-token",
+  "body": {
+    "content": "logger: fixture-service\ntime: 1970-01-01T03:25:45.987654321Z\nlevel: error\ncaller: fixture.go:7\nstack: fixture stack\nmessage: chosen diagnostic\n{\"context\":\"preserved\",\"large\":9007199254740993}\n",
+    "time": "1970-01-01T03:25:45.987654321Z",
+    "title": "fixture-service:chosen diagnostic"
+  },
+  "content_type": "application/json",
+  "method": "POST"
+}

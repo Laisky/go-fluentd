@@ -45,14 +45,18 @@
       "TestRegressionJSONStartupAndAlertKeepSecretsPrivate",
       "TestRegressionStartupKeepsUsefulListenerDetails",
       "TestRegressionRemoteSettingsDoNotLogSecrets",
-      "TestRegressionRemoteSettingsFailureAndCancellation"
+      "TestRegressionRemoteSettingsFailureAndCancellation",
+      "TestPateoAlertPreservesLegacyWireAndLevelGate",
+      "TestPateoAlertQueueIsBounded",
+      "TestPateoAlertClosesResponsesWithoutRetry"
     ]
   },
   {
     "package": "./library/log",
     "tests": [
       "TestRegressionSafeURLAllowlist",
-      "TestRegressionSafeHTTPErrorPreservesCauseWithoutRenderingIt"
+      "TestRegressionSafeHTTPErrorPreservesCauseWithoutRenderingIt",
+      "TestDefaultLoggerConcreteContract"
     ]
   },
   {

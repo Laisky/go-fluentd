@@ -45,7 +45,7 @@ type ElasticSearchSender struct {
 
 func NewElasticSearchSender(cfg *ElasticSearchSenderCfg) *ElasticSearchSender {
 	s := &ElasticSearchSender{
-		logger: log.Logger.Named(cfg.Name),
+		logger: any(log.Logger.Named(cfg.Name)).(*utils.LoggerType),
 		BaseSender: &BaseSender{
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
 		},

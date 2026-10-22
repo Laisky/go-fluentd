@@ -18,7 +18,7 @@ protocol/crash/Collector suites remain separate.
 
 ## Reproduce
 
-Linux, Go 1.27.1, Python 3 and `getconf` are required. Use fresh artifact directories
+Linux, Go 1.27.3, Python 3 and `getconf` are required. Use fresh artifact directories
 and run trials serially, without concurrent compilation, profiling or race tests.
 Use the same driver and configuration for both binaries.
 

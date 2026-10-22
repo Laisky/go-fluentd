@@ -9,7 +9,7 @@ peers used by the existing [service contracts](../tests/otlp_service/run.py).
 Use the [service guide](otlp-service.md) and [settings template](settings/otlp.yml)
 for deployment configuration. This evidence does not declare production readiness.
 
-The [read-only workflow](../.github/workflows/otlp-collector.yml) pins Go 1.27.1
+The [read-only workflow](../.github/workflows/otlp-collector.yml) pins Go 1.27.3
 and the official Linux amd64 Collector archive to SHA-256
 `6c2af0731a53691e3771d82a4b71e2941a46de27af191e40c697b6ed8643e50e`.
 The checksum was verified against both the release asset digest and its published

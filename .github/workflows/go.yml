@@ -28,7 +28,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
-          go-version: '1.27.2'
+          go-version: '1.27.3'
           cache: true
       - name: Check gate failure reporting
         run: python3 -m unittest discover -s .scripts -p test_fast_ci.py -v
@@ -36,6 +36,8 @@ jobs:
         run: |
           python3 .scripts/check_readme.py --self-test
           python3 .scripts/check_readme.py --static
+      - name: Fast recovery-oracle negative controls (no Docker)
+        run: python3 -m unittest discover -s tests/recovery_isolation -p "test_*.py" -v
       - name: Formatting and essential unit tests
         run: python3 .scripts/fast_ci.py --evidence "$RUNNER_TEMP/fast-ci"
       - name: Retain actual discovery, exit statuses, and timings

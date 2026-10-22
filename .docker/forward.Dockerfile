@@ -1,7 +1,7 @@
 # Legacy MooseFS integration: the runtime image and startApp.sh are deployment-owned.
 # CI validates the Go build stage without requiring that external runtime.
 # docker build --target gobin -f .docker/forward.Dockerfile -t go-fluentd-forward-build .
-FROM golang:1.27.1-bookworm AS gobin
+FROM golang:1.27.3-bookworm AS gobin
 
 WORKDIR /go-fluentd
 COPY go.mod go.sum ./

@@ -1,5 +1,5 @@
 # docker build -f .docker/test.Dockerfile -t go-fluentd-test .
-FROM golang:1.27.1-bookworm
+FROM golang:1.27.3-bookworm
 
 WORKDIR /src
 COPY go.mod go.sum ./

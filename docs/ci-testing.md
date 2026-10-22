@@ -11,7 +11,7 @@ on local dev/staging before promoting relevant changes.
 ## Automatic check
 
 `Go / test` runs Go 1.27.3, gofmt on every tracked Go source, and the exact named
-test list in `.scripts/fast_ci_tests.json`. It covers MessagePack framing limits and NDJSON/CloudEvents decoding and ownership.
+test list in `.scripts/fast_ci_tests.json`, plus Docker-free Python recovery-oracle unit controls. It covers MessagePack framing limits, NDJSON/CloudEvents decoding, durable recovery payload identities, and acceptance-oracle failure controls.
 The unit tests execute once (`-count=1`), with no race, coverage, benchmark, fuzz,
 external service or environment campaign. This deliberately limited gate does
 not establish whole-application correctness or production readiness.
@@ -95,7 +95,7 @@ python3 .scripts/check_readme.py --native
 python3 .scripts/check_readme.py --docker
 ```
 
-## Compiler security patch (2026-10-08)
+## Compiler security patch (2026-10-22)
 
 CI selects Go 1.27.3 explicitly for the current compiler and standard-library
 security fixes. This selection is separate from module dependency versions

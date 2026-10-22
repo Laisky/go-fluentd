@@ -17,7 +17,9 @@ This campaign qualifies a temporary alternative using the existing published
 executable: one private owner drains the retained WAL while the normal ingress
 owner uses a separately provisioned bounded WAL. Each original namespace and
 checkpoint remains intact. This is a second queue, not a reset of the old queue.
-No state trees are merged when converging back to one worker.
+No state trees are merged when converging back to one worker. The historical
+checkpoint must release **every accepted historical record**; a zero pending
+inventory alone is not sufficient proof of completed recovery.
 
 ## Acceptance
 
@@ -29,7 +31,9 @@ daemon fault or firewall command is used. Both collector containers are capped a
 
 The executable must first reproduce HTTP503 for fresh work at the single cold
 owner. A second independent WAL must accept and deliver logs, metrics and traces
-while the historical owner makes progress. A competing owner of the same WAL
+while the historical owner makes progress. The HTTP 503 capacity controls also require a matching increment in the
+storage-admission rejection counter, so unrelated 503 errors cannot pass.
+A competing owner of the same WAL
 must fail for the ownership lock, with different unused listener ports so a port
 collision cannot pass the assertion. Disposable sparse-file pressure must refuse
 new admission without losing accepted work. Actual SIGKILL/restart of both owners
@@ -52,6 +56,8 @@ missing, unexpected, duplicate and corrupt records, delayed duplicate replay,
 missing sentinels, and unsettled/unknown checkpoints. The test's cleanup always
 attempts removal of positively identified owned containers, even when log
 collection fails; it never removes containers with unverified ownership.
+A green `summary.json` is written **only after cleanup succeeds**. A failed
+cleanup cannot leave a passing summary artifact.
 
 The test intentionally pauses downstream work before controlled crashes. It does
 not claim exactly-once transport: a crash between remote acceptance and local
@@ -71,8 +77,9 @@ images. The output directory must not exist. Do not run against real state.
 python3 tests/recovery_isolation/run.py --output /tmp/otlp-recovery-isolation
 ```
 
-The manually dispatched workflow runs the same exact executable and oracle,
-separately from the fast automatic PR gate. A startup, HTTP, ownership, pressure,
+The manually dispatched workflow runs the exact published executable and full
+Docker campaign. Only the inexpensive Python oracle controls and two selected
+Go recovery tests run automatically. The fast PR gate remains Docker-free. A startup, HTTP, ownership, pressure,
 restart or ledger failure is a failed qualification.
 Compose rendering alone is insufficient. No production rollout is performed by
 this workflow or test. Any operational cutover must preserve all old WALs and

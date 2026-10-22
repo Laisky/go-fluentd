@@ -1,6 +1,7 @@
 """Regression controls for the historical campaign's delivery oracle."""
 import copy
 import importlib.util
+import json
 import io
 import subprocess
 import tempfile
@@ -214,6 +215,76 @@ class CampaignExecutionTests(unittest.TestCase):
                 raise RuntimeError("cleanup failed")
         with self.assertRaisesRegex(RuntimeError, "cleanup failed"):
             campaign.execute_campaign(CleanupFail())
+
+
+
+class AdmissionEvidenceTests(unittest.TestCase):
+    """RED controls: HTTP 503 alone does not identify storage-capacity refusal."""
+
+    def setUp(self):
+        self.owner = campaign.Campaign(Path("/synthetic"))
+        self.owner.workers["live"] = {"listen": 4320}
+        self.rejections = 0
+        self.owner.monitor = lambda worker: {
+            "otlpStorage": {"admissionRejected": self.rejections}
+        }
+
+    def test_503_without_storage_rejection_must_fail_capacity_qualification(self):
+        self.owner.http = lambda *args, **kwargs: (503, b"")
+        with self.assertRaisesRegex(AssertionError, "storage admission rejection"):
+            self.owner.emit("live", "pressure-refused", 0, False)
+
+    def test_503_with_three_storage_rejections_is_qualified(self):
+        def refused(*args, **kwargs):
+            self.rejections += 1
+            return 503, b""
+        self.owner.http = refused
+        self.owner.emit("live", "pressure-refused", 0, False)
+        self.assertEqual(self.rejections, len(campaign.SIGNALS))
+        self.assertFalse(self.owner.expected)
+
+
+class SuccessfulCampaignEvidenceTests(unittest.TestCase):
+    """RED control: success is durable only after cleanup succeeds."""
+
+    def test_summary_is_published_after_successful_cleanup(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            order = []
+
+            class SyntheticSuccess:
+                def __init__(self):
+                    self.root = root
+
+                def run(self):
+                    order.append("run")
+                    return {"passed": True, "checks": [{"check": "synthetic"}]}
+
+                def cleanup(self):
+                    order.append("cleanup")
+
+            result = campaign.execute_campaign(SyntheticSuccess())
+            self.assertEqual(order, ["run", "cleanup"])
+            self.assertTrue((root / "summary.json").is_file(), "cleaned successful campaign lacks summary")
+            self.assertEqual(json.loads((root / "summary.json").read_text()), result)
+
+    def test_failed_cleanup_does_not_publish_passed_summary(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+
+            class SyntheticCleanupFailure:
+                def __init__(self):
+                    self.root = root
+
+                def run(self):
+                    return {"passed": True}
+
+                def cleanup(self):
+                    raise RuntimeError("cleanup-failed")
+
+            with self.assertRaisesRegex(RuntimeError, "cleanup-failed"):
+                campaign.execute_campaign(SyntheticCleanupFailure())
+            self.assertFalse((root / "summary.json").exists())
 
 
 if __name__ == "__main__":

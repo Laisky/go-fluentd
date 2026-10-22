@@ -315,4 +315,4 @@ refuses further mutations without deleting evidence or enlarging the overall
 limit. Repeated crashes eventually need an attended, separately authorized
 metadata cleanup. Never delete accepted data or arbitrarily promote a staged
 ledger to bypass pressure. The decimal staging namespace is verified against
-Go 1.27.2 CreateTemp and must be requalified on toolchain changes.
+Go 1.27.3 CreateTemp and must be requalified on toolchain changes.

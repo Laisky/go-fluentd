@@ -7,7 +7,7 @@
 
 ## Build and verification
 
-Go 1.27 or newer is required. CI selects the latest 1.27 patch; the checked-in Docker images use Go 1.27.1.
+Go 1.27 or newer is required. CI selects Go 1.27.3; the checked-in Docker images use Go 1.27.3.
 
 ```sh
 go mod verify
@@ -36,7 +36,7 @@ The journal's two-generation committed-ID cache retains its non-destructive look
 
 ## Legacy image boundary
 
-The normal runtime and test Dockerfiles are self-contained. `forward.Dockerfile` retains the deployment-owned MooseFS runtime and requires an externally supplied `startApp.sh`; that script is not in this repository. CI builds its `gobin` stage only. `golang-stretch.Dockerfile` keeps its historical filename for compatibility but now builds on Go 1.27.1 / Debian Bookworm.
+The normal runtime and test Dockerfiles are self-contained. `forward.Dockerfile` retains the deployment-owned MooseFS runtime and requires an externally supplied `startApp.sh`; that script is not in this repository. CI builds its `gobin` stage only. `golang-stretch.Dockerfile` keeps its historical filename for compatibility but now builds on Go 1.27.3 / Debian Bookworm.
 
 
 ## Reliable HTTP acceptance and executable-level qualification

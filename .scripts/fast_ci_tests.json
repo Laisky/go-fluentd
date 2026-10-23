@@ -112,5 +112,12 @@
       "TestLegacyRecoveryTransportValidatesWholeArchiveBeforeSending",
       "TestOverallTransitionOverCapNeedsSeparateStorageAndPreservesEveryOriginal"
     ]
+  },
+  {
+    "package": "./tests/dependencysecurity",
+    "tests": [
+      "TestRegressionJWTRejectsMalformedNumericDates",
+      "TestJWTOrdinaryClaimsAndAudience"
+    ]
   }
 ]

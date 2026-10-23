@@ -10,6 +10,7 @@ require (
 	github.com/Laisky/zap v1.27.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/coreos/etcd v3.3.27+incompatible
+	github.com/form3tech-oss/jwt-go v3.2.5+incompatible
 	github.com/gin-contrib/pprof v1.5.6
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-viper/mapstructure/v2 v2.5.0
@@ -43,7 +44,6 @@ require (
 	github.com/coreos/pkg v0.0.0-20240122114842-bbd7aa9bf6fb // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/eapache/go-resiliency v1.7.0 // indirect
-	github.com/form3tech-oss/jwt-go v3.2.3+incompatible // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
 	github.com/gin-contrib/sse v1.1.2 // indirect

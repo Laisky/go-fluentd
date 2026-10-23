@@ -4,9 +4,9 @@ go 1.27.0
 
 require (
 	github.com/IBM/sarama v1.61.1
-	github.com/Laisky/go-journal/v2 v2.0.0-20261023031907-5d778355b676
+	github.com/Laisky/go-journal/v2 v2.0.0-20261023042131-121913df7a4b
 	github.com/Laisky/go-syslog v2.3.3+incompatible
-	github.com/Laisky/go-utils v1.17.1
+	github.com/Laisky/go-utils v1.16.0
 	github.com/Laisky/zap v1.27.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/coreos/etcd v3.3.27+incompatible
@@ -41,18 +41,17 @@ require (
 	github.com/cloudwego/base64x v0.1.7 // indirect
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
 	github.com/coreos/pkg v0.0.0-20240122114842-bbd7aa9bf6fb // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/eapache/go-resiliency v1.7.0 // indirect
+	github.com/form3tech-oss/jwt-go v3.2.3+incompatible // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
-	github.com/gammazero/deque v0.1.1 // indirect
 	github.com/gin-contrib/sse v1.1.2 // indirect
 	github.com/go-playground/locales v0.14.2 // indirect
 	github.com/go-playground/universal-translator v0.18.2 // indirect
 	github.com/go-playground/validator/v10 v10.30.5 // indirect
 	github.com/goccy/go-json v0.11.1 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
-	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/google/go-cpy v0.0.0-20211218193943-a9c933c06932 // indirect
 	github.com/hashicorp/go-uuid v1.0.4 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect

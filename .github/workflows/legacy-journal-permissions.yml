@@ -32,6 +32,15 @@ jobs:
           baseline="$RUNNER_TEMP/private-journal-baseline"
           git worktree add --detach "$baseline" 7f06b5bb68f373995b712db4f7882f9bb2d72867
           cp internal/controller/journal_permissions_regression_test.go "$baseline/internal/controller/"
+          python3 - "$baseline/internal/controller/journal_permissions_regression_test.go" <<'PYFIX'
+          import pathlib, sys
+          path = pathlib.Path(sys.argv[1])
+          text = path.read_text()
+          current = '"github.com/Laisky/go-journal/v2"'
+          if text.count(current) != 1:
+              raise SystemExit('expected exactly one journal v2 fixture import')
+          path.write_text(text.replace(current, '"github.com/Laisky/go-journal"'))
+          PYFIX
           (cd "$baseline" && go mod download)
           set +e
           (cd "$baseline" && go test -mod=readonly -count=1 -timeout=180s -json -run '^TestRegressionLegacyPrivate(Root|ChildAndFiles|Creation)$' ./internal/controller) > "$evidence/red.jsonl" 2>&1

@@ -4,7 +4,7 @@ go 1.27.0
 
 require (
 	github.com/IBM/sarama v1.61.1
-	github.com/Laisky/go-journal/v2 v2.0.0-20261023042131-121913df7a4b
+	github.com/Laisky/go-journal/v2 v2.0.0-20261023050540-77b298c24ab2
 	github.com/Laisky/go-syslog v2.3.3+incompatible
 	github.com/Laisky/go-utils v1.16.0
 	github.com/Laisky/zap v1.27.0

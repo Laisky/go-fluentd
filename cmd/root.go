@@ -174,7 +174,7 @@ func setupLogger(ctx context.Context) {
 	}
 
 	log.Logger.Info("enable alert pusher")
-	log.Logger = any(log.Logger.Named("go-fluentd-" + global.Config.CMDArgs.Env + "-" + global.Config.CMDArgs.HostName)).(*gutils.LoggerType)
+	log.Logger = log.Logger.Named("go-fluentd-" + global.Config.CMDArgs.Env + "-" + global.Config.CMDArgs.HostName)
 
 	if gutils.Settings.GetString("settings.logger.push_api") != "" {
 		// telegram alert
@@ -187,8 +187,8 @@ func setupLogger(ctx context.Context) {
 		if err != nil {
 			log.Logger.Panic("create AlertPusher", zap.Error(log.SafeHTTPError("initialize alert pusher", gutils.Settings.GetString("settings.logger.push_api"), err)))
 		}
-		log.Logger = any(log.Logger.
-			WithOptions(zap.HooksWithFields(alertPusher.GetZapHook()))).(*gutils.LoggerType)
+		log.Logger = log.Logger.
+			WithOptions(zap.HooksWithFields(alertPusher.GetZapHook()))
 	}
 
 }

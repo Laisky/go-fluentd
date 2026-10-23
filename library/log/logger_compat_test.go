@@ -25,9 +25,9 @@ func TestDefaultLoggerConcreteContract(t *testing.T) {
 		t.Fatal("default logger identity or level changed")
 	}
 	var output bytes.Buffer
-	child := any(logger.Named("compatibility").WithOptions(zap.WrapCore(func(zapcore.Core) zapcore.Core {
+	child := logger.Named("compatibility").WithOptions(zap.WrapCore(func(zapcore.Core) zapcore.Core {
 		return zapcore.NewCore(zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), zapcore.AddSync(&output), zapcore.DebugLevel)
-	}))).(*utils.LoggerType)
+	}))
 	child.Debug("synthetic diagnostic", zap.String("context", "kept"), zap.Int64("sequence", 9007199254740993))
 	if err := child.Sync(); err != nil {
 		t.Fatal(err)

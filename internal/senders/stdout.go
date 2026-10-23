@@ -32,7 +32,7 @@ type StdoutSender struct {
 // NewStdoutSender create new null sender
 func NewStdoutSender(cfg *StdoutSenderCfg) *StdoutSender {
 	s := &StdoutSender{
-		logger: any(log.Logger.Named(cfg.Name)).(*utils.LoggerType),
+		logger: log.Logger.Named(cfg.Name),
 		BaseSender: &BaseSender{
 			IsDiscardWhenBlocked: cfg.IsDiscardWhenBlocked,
 		},

@@ -71,7 +71,7 @@ type FluentdRecv struct {
 // NewFluentdRecv create new FluentdRecv
 func NewFluentdRecv(cfg *FluentdRecvCfg) (r *FluentdRecv) {
 	r = &FluentdRecv{
-		logger:         any(log.Logger.Named(cfg.Name)).(*utils.LoggerType),
+		logger:         log.Logger.Named(cfg.Name),
 		BaseRecv:       &BaseRecv{},
 		FluentdRecvCfg: cfg,
 		concatTagCfg:   map[string]*concatCfg{},

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Laisky/go-journal"
+	"github.com/Laisky/go-journal/v2"
 	"github.com/coreos/etcd/pkg/fileutil"
 	"gofluentd/library"
 )

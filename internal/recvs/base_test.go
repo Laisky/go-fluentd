@@ -29,7 +29,7 @@ var (
 )
 
 func init() {
-	if err := log.Logger.ChangeLevel("debug"); err != nil {
+	if err := log.SetLevel("debug"); err != nil {
 		log.Logger.Panic("change log level", zap.Error(err))
 	}
 }

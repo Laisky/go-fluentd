@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	journal "github.com/Laisky/go-journal"
+	journal "github.com/Laisky/go-journal/v2"
 )
 
 type b1AdmissionOutcome string

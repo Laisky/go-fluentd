@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
-	journal "github.com/Laisky/go-journal"
+	journal "github.com/Laisky/go-journal/v2"
 	"github.com/Laisky/go-utils"
 	"github.com/tinylib/msgp/msgp"
 	"gofluentd/library"

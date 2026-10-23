@@ -11,13 +11,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Laisky/zap"
+	"github.com/cespare/xxhash/v2"
 	"gofluentd/internal/concatstate"
 	"gofluentd/library"
 	"gofluentd/library/log"
-
-	utils "github.com/Laisky/go-utils"
-	"github.com/Laisky/zap"
-	"github.com/cespare/xxhash/v2"
 )
 
 const (
@@ -62,7 +60,7 @@ type concatCfg struct {
 type FluentdRecv struct {
 	*BaseRecv
 	*FluentdRecvCfg
-	logger *utils.LoggerType
+	logger *zap.Logger
 
 	concatTagCfg map[string]*concatCfg
 	concators    []chan *library.FluentMsg

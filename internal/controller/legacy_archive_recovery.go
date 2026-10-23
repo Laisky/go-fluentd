@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	journal "github.com/Laisky/go-journal"
+	journal "github.com/Laisky/go-journal/v2"
 	"go.opentelemetry.io/collector/pdata/plog/plogotlp"
 	"gofluentd/internal/otlpstate"
 	"gofluentd/library/otlpwire"

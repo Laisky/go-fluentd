@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"github.com/Laisky/zap"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	journal "github.com/Laisky/go-journal"
+	journal "github.com/Laisky/go-journal/v2"
 	"github.com/tinylib/msgp/msgp"
 )
 
@@ -82,7 +83,7 @@ func TestRegressionSelectiveReplaySequenceCompatibility(t *testing.T) {
 					}
 					ctx, cancel := context.WithCancel(context.Background())
 					defer cancel()
-					loader := journal.NewLegacyLoader(ctx, journal.Logger, paths, nil, gz, time.Hour)
+					loader := journal.NewLegacyLoader(ctx, zap.NewNop(), paths, nil, gz, time.Hour)
 					loader.AddID(9)
 					got := &journal.Data{ID: 777, Data: map[string]interface{}{"sentinel": "caller"}}
 					err := loader.Load(got)

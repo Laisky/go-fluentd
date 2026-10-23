@@ -59,7 +59,7 @@ jobs:
           {
             go version
             printf 'baseline=%s\nservice-baseline=%s\ncandidate=%s\npr-head=%s\nGOMAXPROCS=%s\n' "$BASELINE" "$SERVICE_BASELINE" "$(git rev-parse HEAD)" '${{ github.event.pull_request.head.sha || github.sha }}' "$GOMAXPROCS"
-            go list -m github.com/Laisky/go-journal
+            go list -m github.com/Laisky/go-journal/v2
             uname -a
             lscpu
             findmnt -T "$RUNNER_TEMP/group-files"

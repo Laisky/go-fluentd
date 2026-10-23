@@ -4,10 +4,9 @@ go 1.27.0
 
 require (
 	github.com/IBM/sarama v1.61.1
-	github.com/Laisky/go-journal v1.1.7-0.20261018152132-3f73b25e0029
+	github.com/Laisky/go-journal/v2 v2.0.0-20261023031907-5d778355b676
 	github.com/Laisky/go-syslog v2.3.3+incompatible
-	// Journal logger compatibility: v1.17 changes *LoggerType to LoggerItf.
-	github.com/Laisky/go-utils v1.16.0
+	github.com/Laisky/go-utils v1.17.1
 	github.com/Laisky/zap v1.27.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/coreos/etcd v3.3.27+incompatible
@@ -44,15 +43,16 @@ require (
 	github.com/coreos/pkg v0.0.0-20240122114842-bbd7aa9bf6fb // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/eapache/go-resiliency v1.7.0 // indirect
-	github.com/form3tech-oss/jwt-go v3.2.5+incompatible // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
+	github.com/gammazero/deque v0.1.1 // indirect
 	github.com/gin-contrib/sse v1.1.2 // indirect
 	github.com/go-playground/locales v0.14.2 // indirect
 	github.com/go-playground/universal-translator v0.18.2 // indirect
 	github.com/go-playground/validator/v10 v10.30.5 // indirect
 	github.com/goccy/go-json v0.11.1 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/google/go-cpy v0.0.0-20211218193943-a9c933c06932 // indirect
 	github.com/hashicorp/go-uuid v1.0.4 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect

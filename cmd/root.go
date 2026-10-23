@@ -96,7 +96,7 @@ func setupSettings() {
 	}
 
 	// log
-	if err := log.Logger.ChangeLevel(global.Config.CMDArgs.LogLevel); err != nil {
+	if err := log.SetLevel(global.Config.CMDArgs.LogLevel); err != nil {
 		log.Logger.Panic("change log level", zap.Error(err))
 	}
 	log.Logger.Info("set log level",

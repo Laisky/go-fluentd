@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/Laisky/zap"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	journal "github.com/Laisky/go-journal"
+	journal "github.com/Laisky/go-journal/v2"
 	utils "github.com/Laisky/go-utils"
 	"github.com/gin-gonic/gin"
 	"gofluentd/internal/acceptorfilters"
@@ -37,8 +38,8 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	_ = log.Logger.ChangeLevel("error")
-	_ = journal.Logger.ChangeLevel("error")
+	_ = log.SetLevel("error")
+
 	_ = utils.Logger.ChangeLevel("error")
 	gin.SetMode(gin.ReleaseMode)
 	os.Exit(m.Run())
@@ -541,7 +542,7 @@ func BenchmarkPerfJournalReplay(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				ctx, cancel := context.WithCancel(context.Background())
-				l := journal.NewLegacyLoader(ctx, journal.Logger, []string{dataName}, []string{idsName}, compressed, time.Hour)
+				l := journal.NewLegacyLoader(ctx, zap.NewNop(), []string{dataName}, []string{idsName}, compressed, time.Hour)
 				seen := 0
 				for {
 					var d journal.Data

@@ -6,7 +6,7 @@ import (
 	"gofluentd/library"
 	"gofluentd/library/log"
 
-	journal "github.com/Laisky/go-journal"
+	journal "github.com/Laisky/go-journal/v2"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 )

@@ -3,7 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
-	journal "github.com/Laisky/go-journal"
+	journal "github.com/Laisky/go-journal/v2"
 )
 
 // ReadRecoveryArchive exposes original retained legacy records to a dedicated

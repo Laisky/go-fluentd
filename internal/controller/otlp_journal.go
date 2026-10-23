@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	journal "github.com/Laisky/go-journal"
+	journal "github.com/Laisky/go-journal/v2"
 	"gofluentd/internal/diskbudget"
 	"gofluentd/internal/otlpstate"
 	"gofluentd/library/otlpwire"

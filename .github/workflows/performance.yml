@@ -52,9 +52,9 @@ jobs:
             cat /sys/fs/cgroup/cpu.max /sys/fs/cgroup/memory.max 2>/dev/null || true
             sha256sum "$RUNNER_TEMP/bench-before.test" "$RUNNER_TEMP/bench-after.test" "$RUNNER_TEMP/app-before" "$RUNNER_TEMP/app-after"
             printf '\nBaseline journal\n'
-            (cd "$RUNNER_TEMP/perf-before" && go list -m github.com/Laisky/go-journal)
+            (cd "$RUNNER_TEMP/perf-before" && go list -m github.com/Laisky/go-journal/v2)
             printf '\nCandidate journal\n'
-            go list -m github.com/Laisky/go-journal
+            go list -m github.com/Laisky/go-journal/v2
           } > "$RUNNER_TEMP/perf-results/environment.txt"
       - name: Five counterbalanced samples of every component workload
         run: |

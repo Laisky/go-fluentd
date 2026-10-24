@@ -6,8 +6,8 @@ github.com/Laisky/fast-skiplist v0.0.0-20210907063351-e00546c800a6 h1:V3MNilKNjN
 github.com/Laisky/fast-skiplist v0.0.0-20210907063351-e00546c800a6/go.mod h1:BdpS7FU5kzp0QV/dtCWheAV5rIOQu+Jb+uoVuVWZOvU=
 github.com/Laisky/go-chaining v0.0.0-20180507092046-43dcdc5a21be h1:7Rxhm6IjOtDAyj8eScOFntevwzkWhx94zi48lxo4m4w=
 github.com/Laisky/go-chaining v0.0.0-20180507092046-43dcdc5a21be/go.mod h1:1mdzaETo0kjvCQICPSePsoaatJN4l7JvEA1200lyevo=
-github.com/Laisky/go-journal v1.1.7-0.20261018152132-3f73b25e0029 h1:oTJdFM3poiiAG12r/FxcXAI0NSSC2lrGSiniIt+9uUg=
-github.com/Laisky/go-journal v1.1.7-0.20261018152132-3f73b25e0029/go.mod h1:8wjz86nBGSDCpnS/zpdNY/jkz48qUz24/UDszLbbUsY=
+github.com/Laisky/go-journal/v2 v2.0.0-20261024022204-7662268a48cd h1:LdE9UG0cn9FiFDYJLCl84Lq+iTU+l1oqu+7Mr7hBXwE=
+github.com/Laisky/go-journal/v2 v2.0.0-20261024022204-7662268a48cd/go.mod h1:rsJWzlubuYswcGQZZdG0LlB7tReG61KiQXrwKBkVqZw=
 github.com/Laisky/go-syslog v2.3.3+incompatible h1:TSHhP3iadAPDzC5efyYLPnGkv2pvUtuUInm7poVRkFA=
 github.com/Laisky/go-syslog v2.3.3+incompatible/go.mod h1:PPmESkLU3DEbJ3fRXam2hqJTNQVFMggsDXBnOtu2ITk=
 github.com/Laisky/go-utils v1.16.0 h1:0K/laNRT7EXcY8nKkp6RPFA5StJCJ1GRFuJZPcb2hBw=
@@ -61,8 +61,9 @@ github.com/coreos/pkg v0.0.0-20240122114842-bbd7aa9bf6fb/go.mod h1:E3G3o1h8I7cfc
 github.com/cpuguy83/go-md2man/v2 v2.0.0/go.mod h1:maD7wRr/U5Z6m/iR4s+kqSMx2CaBsrgA7czyZG/E6dU=
 github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
+github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dgrijalva/jwt-go v3.2.0+incompatible/go.mod h1:E3ru+11k8xSBh+hMPgOLZmtrrCbhqsmaPHjLKYnJCaQ=
 github.com/dgryski/go-sip13 v0.0.0-20181026042036-e10d5fee7954/go.mod h1:vAd38F8PWV+bWy6jNmig1y/TA+kYO4g3RSRF0IAv0no=
 github.com/eapache/go-resiliency v1.7.0 h1:n3NRTnBn5N0Cbi/IeOHuQn9s2UwVUH7Ga0ZWcP+9JTA=

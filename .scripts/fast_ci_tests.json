@@ -35,7 +35,8 @@
       "TestRegressionOTLPOverBudgetRecoveryDrainsBeforeFreshAdmission",
       "TestOTLPConfigDiagnosticsDoNotRenderValues",
       "TestOTLPConfigDiagnosticPreservesDecoderCause",
-      "TestOTLPConfigPrivacyPreservesValidBehavior"
+      "TestOTLPConfigPrivacyPreservesValidBehavior",
+      "TestRegressionOTLPJournalUsesCollectorLogger"
     ]
   },
   {
@@ -52,7 +53,10 @@
     "package": "./library/log",
     "tests": [
       "TestRegressionSafeURLAllowlist",
-      "TestRegressionSafeHTTPErrorPreservesCauseWithoutRenderingIt"
+      "TestRegressionSafeHTTPErrorPreservesCauseWithoutRenderingIt",
+      "TestDefaultLoggerConcreteContract",
+      "TestCollectorLoggerLevelSharedByChildren",
+      "TestRegressionCollectorLegacyEmissionAndAlerts"
     ]
   },
   {
@@ -109,6 +113,13 @@
       "TestLegacyRecoveryTransportTLSExactRawDryRunAndRefusal",
       "TestLegacyRecoveryTransportValidatesWholeArchiveBeforeSending",
       "TestOverallTransitionOverCapNeedsSeparateStorageAndPreservesEveryOriginal"
+    ]
+  },
+  {
+    "package": "./tests/dependencysecurity",
+    "tests": [
+      "TestRegressionJWTRejectsMalformedNumericDates",
+      "TestJWTOrdinaryClaimsAndAudience"
     ]
   }
 ]

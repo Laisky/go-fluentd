@@ -13,7 +13,7 @@ import shutil
 import subprocess
 import tempfile
 
-JOURNAL = 'github.com/Laisky/go-journal'
+JOURNAL = 'github.com/Laisky/go-journal/v2'
 OLD = 'v1.1.7-0.20260924003054-612f5354f538'
 MERGED_BAD = '8758f84c23d9ae29bf800f9e84d2ec64125008aa'
 # The candidate identity must move with the reviewed go.mod pin; controls stay fixed.

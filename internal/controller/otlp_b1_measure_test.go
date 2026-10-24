@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	journal "github.com/Laisky/go-journal"
+	journal "github.com/Laisky/go-journal/v2"
 	"gofluentd/internal/otlpstate"
 	"gofluentd/library/log"
 	"gofluentd/library/otlpwire"
@@ -70,8 +70,8 @@ func b1Resources(t *testing.T) b1Resource {
 // production path or external destination is used. Host/container bounds must
 // also be applied by the caller; this measurement never claims business latency.
 func TestOTLPB1IsolatedCapacity(t *testing.T) {
-	_ = log.Logger.ChangeLevel("error")
-	_ = journal.Logger.ChangeLevel("error")
+	_ = log.SetLevel("error")
+
 	const healthy, offeredDown = 12, 96 // total attempted requests 108, below 128
 	paced := os.Getenv("OTLP_MEASURE_PACED") == "1"
 	pace, holdInterval := 500*time.Millisecond, time.Second

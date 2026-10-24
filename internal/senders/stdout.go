@@ -23,7 +23,7 @@ type StdoutSenderCfg struct {
 // StdoutSender print or discard
 type StdoutSender struct {
 	utils.Counter
-	logger *utils.LoggerType
+	logger *zap.Logger
 
 	*BaseSender
 	*StdoutSenderCfg

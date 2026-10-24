@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	journal "github.com/Laisky/go-journal"
+	journal "github.com/Laisky/go-journal/v2"
 	"github.com/tinylib/msgp/msgp"
 	"go.opentelemetry.io/collector/pdata/plog/plogotlp"
 )

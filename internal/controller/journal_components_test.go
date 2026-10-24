@@ -2,7 +2,7 @@ package controller
 
 import (
 	"context"
-	journal "github.com/Laisky/go-journal"
+	journal "github.com/Laisky/go-journal/v2"
 	"gofluentd/library"
 	"os"
 	"path/filepath"

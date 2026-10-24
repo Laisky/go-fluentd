@@ -11,9 +11,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	journal "github.com/Laisky/go-journal"
+	journal "github.com/Laisky/go-journal/v2"
 	"gofluentd/internal/diskbudget"
 	"gofluentd/internal/otlpstate"
+	"gofluentd/library/log"
 	"gofluentd/library/otlpwire"
 )
 
@@ -232,7 +233,7 @@ func OpenOTLPJournal(ctx context.Context, cfg OTLPJournalConfig, peers []OTLPDes
 	// bounded replay cursor; periodic flush is unnecessary because every operation
 	// explicitly synchronizes. The upstream workers still stop normally on Close.
 	never := time.Duration(math.MaxInt64)
-	p.wal, err = journal.NewJournal(journal.WithBufDirPath(p.walDir), journal.WithIsCompress(cfg.Compress), journal.WithIsAggresiveGC(false), journal.WithBufSizeByte(p.bufferBytes()), journal.WithFlushInterval(never), journal.WithRotateDuration(never), journal.WithRotateCheckInterval(never))
+	p.wal, err = journal.NewJournal(journal.WithLogger(log.Logger.Named("journal.otlp")), journal.WithBufDirPath(p.walDir), journal.WithIsCompress(cfg.Compress), journal.WithIsAggresiveGC(false), journal.WithBufSizeByte(p.bufferBytes()), journal.WithFlushInterval(never), journal.WithRotateDuration(never), journal.WithRotateCheckInterval(never))
 	if err != nil {
 		return nil, err
 	}

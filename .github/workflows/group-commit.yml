@@ -46,20 +46,21 @@ jobs:
           echo "TMPDIR=$RUNNER_TEMP/group-files" >> "$GITHUB_ENV"
           git worktree add --detach "$RUNNER_TEMP/group-before" "$BASELINE"
           git worktree add --detach "$RUNNER_TEMP/group-service-before" "$SERVICE_BASELINE"
-          # Both implementations receive identical benchmark code. The historical
+          # Both implementations retain identical workload assertions. The historical
           # config ignores the new optional JSON field and remains per-record.
-          cp internal/controller/journal_writer_bench_test.go "$RUNNER_TEMP/group-service-before/internal/controller/journal_writer_bench_test.go"
-          cmp internal/controller/journal_writer_bench_test.go "$RUNNER_TEMP/group-service-before/internal/controller/journal_writer_bench_test.go"
+          python3 .scripts/journal_harness.py internal/controller/journal_writer_bench_test.go "$RUNNER_TEMP/group-service-before/internal/controller/journal_writer_bench_test.go" --root "$RUNNER_TEMP/group-service-before" --kind group --evidence "$RUNNER_TEMP/group-results/service-baseline-journal.json"
           python3 -m unittest discover -s tests/performance -p 'test_*.py'
           go mod verify
           (cd "$RUNNER_TEMP/group-before" && go mod verify && go build -mod=readonly -o "$RUNNER_TEMP/group-before-app" .)
-          (cd "$RUNNER_TEMP/group-service-before" && go test -mod=readonly -c -o "$RUNNER_TEMP/group-before-service" ./internal/controller)
+          (cd "$RUNNER_TEMP/group-service-before" && go test -mod=readonly -c -o "$RUNNER_TEMP/group-before-service" ./internal/controller && git diff --exit-code -- go.mod go.sum)
           go build -mod=readonly -o "$RUNNER_TEMP/group-after-app" .
           go test -mod=readonly -c -o "$RUNNER_TEMP/group-after-service" ./internal/controller
           {
             go version
             printf 'baseline=%s\nservice-baseline=%s\ncandidate=%s\npr-head=%s\nGOMAXPROCS=%s\n' "$BASELINE" "$SERVICE_BASELINE" "$(git rev-parse HEAD)" '${{ github.event.pull_request.head.sha || github.sha }}' "$GOMAXPROCS"
-            go list -m github.com/Laisky/go-journal
+            (cd "$RUNNER_TEMP/group-before" && go list -mod=readonly -m -json github.com/Laisky/go-journal)
+            cat "$RUNNER_TEMP/group-results/service-baseline-journal.json"
+            go list -m github.com/Laisky/go-journal/v2
             uname -a
             lscpu
             findmnt -T "$RUNNER_TEMP/group-files"

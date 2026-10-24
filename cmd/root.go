@@ -96,7 +96,7 @@ func setupSettings() {
 	}
 
 	// log
-	if err := log.Logger.ChangeLevel(global.Config.CMDArgs.LogLevel); err != nil {
+	if err := log.SetLevel(global.Config.CMDArgs.LogLevel); err != nil {
 		log.Logger.Panic("change log level", zap.Error(err))
 	}
 	log.Logger.Info("set log level",
@@ -191,16 +191,4 @@ func setupLogger(ctx context.Context) {
 			WithOptions(zap.HooksWithFields(alertPusher.GetZapHook()))
 	}
 
-	if gutils.Settings.GetString("settings.pateo_alert.push_api") != "" {
-		// pateo wechat alert pusher
-		pateoAlertPusher, err := gutils.NewPateoAlertPusher(
-			ctx,
-			gutils.Settings.GetString("settings.pateo_alert.push_api"),
-			gutils.Settings.GetString("settings.pateo_alert.token"),
-		)
-		if err != nil {
-			log.Logger.Panic("create PateoAlertPusher", zap.Error(log.SafeHTTPError("initialize alert pusher", gutils.Settings.GetString("settings.pateo_alert.push_api"), err)))
-		}
-		log.Logger = log.Logger.WithOptions(zap.HooksWithFields(pateoAlertPusher.GetZapHook()))
-	}
 }

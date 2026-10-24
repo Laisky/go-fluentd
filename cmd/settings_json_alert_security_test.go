@@ -41,7 +41,7 @@ func TestRegressionJSONStartupAndAlertKeepSecretsPrivate(t *testing.T) {
 	if err != nil {
 		t.Fatal("cannot locate startup fixture subprocess")
 	}
-	for _, scenario := range []string{"valid", "invalid", "alert"} {
+	for _, scenario := range []string{"valid", "invalid", "alert", "empty"} {
 		for _, level := range []string{"info", "debug"} {
 			mode := scenario + ":" + level
 			t.Run(mode, func(t *testing.T) {
@@ -71,6 +71,12 @@ func TestRegressionJSONStartupAndAlertKeepSecretsPrivate(t *testing.T) {
 				if scenario == "alert" {
 					expected = "JSON_ALERT_PAYLOAD_VALIDATED"
 				}
+				if scenario == "empty" {
+					expected = "JSON_EMPTY_ALERT_VALIDATED"
+				}
+				if scenario != "invalid" && !strings.Contains(string(output), "synthetic ordinary logging positive control") {
+					t.Error("ordinary logging disappeared during alert setup")
+				}
 				if !strings.Contains(string(output), expected) {
 					t.Error("startup fixture did not reach its positive control")
 				}
@@ -86,7 +92,7 @@ func runJSONStartupChild(t *testing.T, mode string) {
 		t.Fatal("invalid JSON startup fixture mode")
 	}
 	scenario, level := parts[0], parts[1]
-	if scenario != "valid" && scenario != "invalid" && scenario != "alert" {
+	if scenario != "valid" && scenario != "invalid" && scenario != "alert" && scenario != "empty" {
 		t.Fatal("unknown JSON startup fixture scenario")
 	}
 
@@ -122,10 +128,14 @@ func runJSONStartupChild(t *testing.T, mode string) {
 	if scenario == "invalid" {
 		compress = jsonDecodeCanary
 	}
+	pushAPI := server.URL
+	if scenario == "empty" {
+		pushAPI = ""
+	}
 	fixture := map[string]any{
 		"settings": map[string]any{
 			"logger": map[string]any{
-				"push_api": server.URL, "alert_type": jsonFixtureAlertType, "push_token": jsonPushTokenCanary,
+				"push_api": pushAPI, "alert_type": jsonFixtureAlertType, "push_token": jsonPushTokenCanary,
 			},
 			"journal": map[string]any{"buf_dir_path": filepath.Join(t.TempDir(), "legacy"), "is_compress": compress},
 			"otlp":    map[string]any{"enabled": true, "bearer_token": jsonOTLPCanary},
@@ -146,7 +156,7 @@ func runJSONStartupChild(t *testing.T, mode string) {
 	if level == "debug" {
 		flags = append(flags, "--debug")
 	}
-	if scenario == "alert" {
+	if scenario == "alert" || scenario == "empty" {
 		flags = append(flags, "--log-alert")
 	}
 	if err := rootCmd.ParseFlags(flags); err != nil {
@@ -173,21 +183,24 @@ func runJSONStartupChild(t *testing.T, mode string) {
 	}
 
 	setupSettings()
-	if global.Config.Settings.Logger.PushAPI != server.URL ||
+	if global.Config.Settings.Logger.PushAPI != pushAPI ||
 		global.Config.Settings.Logger.AlertType != jsonFixtureAlertType ||
 		global.Config.Settings.Logger.PushToken != jsonPushTokenCanary ||
 		gutils.Settings.GetString("settings.otlp.bearer_token") != jsonOTLPCanary ||
 		gutils.Settings.GetString("settings.acceptor.recvs.plugins.custom.arbitrary_unknown_key.nested") != jsonNestedCanary {
 		t.Fatal("JSON configuration fields were silently ignored or changed")
 	}
-	if global.Config.CMDArgs.EnableLogAlert != (scenario == "alert") {
+	if global.Config.CMDArgs.EnableLogAlert != (scenario == "alert" || scenario == "empty") {
 		t.Fatal("actual log-alert flag binding changed")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	setupLogger(ctx)
 
-	if scenario == "valid" {
+	// An info entry before the error is a FIFO negative control for the
+	// opt-in SDK level gate and a positive control for ordinary logging.
+	log.Logger.Info("synthetic ordinary logging positive control")
+	if scenario == "valid" || scenario == "empty" {
 		log.Logger.Error("synthetic disabled-hook positive control")
 		select {
 		case <-requests:
@@ -196,7 +209,11 @@ func runJSONStartupChild(t *testing.T, mode string) {
 			t.Fatal("disabled alert hook attempted a request")
 		case <-time.After(100 * time.Millisecond):
 		}
-		fmt.Println("JSON_STARTUP_VALIDATED")
+		if scenario == "empty" {
+			fmt.Println("JSON_EMPTY_ALERT_VALIDATED")
+		} else {
+			fmt.Println("JSON_STARTUP_VALIDATED")
+		}
 		return
 	}
 

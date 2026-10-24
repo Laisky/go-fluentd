@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	journal "github.com/Laisky/go-journal"
+	journal "github.com/Laisky/go-journal/v2"
 	"gofluentd/library"
 )
 

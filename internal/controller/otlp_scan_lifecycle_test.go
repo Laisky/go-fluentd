@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	journal "github.com/Laisky/go-journal"
+	journal "github.com/Laisky/go-journal/v2"
 	"gofluentd/internal/otlpstate"
 	"gofluentd/library/log"
 	"gofluentd/library/otlpwire"
@@ -29,8 +29,8 @@ func TestOTLPJournalChosenScanCapsHealthyLifecycle(t *testing.T) {
 
 func measureChosenScanCapsLifecycle(t *testing.T, cycles, perSignal int) {
 	t.Helper()
-	_ = log.Logger.ChangeLevel("error")
-	_ = journal.Logger.ChangeLevel("error")
+	_ = log.SetLevel("error")
+
 	cfg := OTLPJournalConfig{Directory: t.TempDir(), MaxWALBytes: 1 << 30, MaxStorageBytes: 2 << 30,
 		StorageScanMaxEntries: 1024, StorageScanTimeout: 10 * time.Millisecond,
 		ReceiptGC: true, ReplayBatch: 16, ReplayInterval: 10 * time.Millisecond}

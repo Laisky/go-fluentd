@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"github.com/Laisky/zap"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	journal "github.com/Laisky/go-journal"
+	journal "github.com/Laisky/go-journal/v2"
 	"github.com/tinylib/msgp/msgp"
 
 	"gofluentd/library"
@@ -119,7 +120,7 @@ func TestRegressionSelectiveJournalNeverHidesAcknowledgedCorruption(t *testing.T
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			loader := journal.NewLegacyLoader(ctx, journal.Logger, []string{path}, nil, gz, time.Hour)
+			loader := journal.NewLegacyLoader(ctx, zap.NewNop(), []string{path}, nil, gz, time.Hour)
 			loader.AddID(19)
 			if err := loader.Load(new(journal.Data)); err == nil || err == io.EOF {
 				t.Fatalf("acknowledged corruption became successful replay/EOF: %v", err)

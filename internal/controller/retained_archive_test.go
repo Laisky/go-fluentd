@@ -9,7 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	journal "github.com/Laisky/go-journal"
+	journal "github.com/Laisky/go-journal/v2"
 	"gofluentd/internal/otlpstate"
 	"gofluentd/library"
 	"gofluentd/library/otlpwire"

@@ -5,22 +5,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gofluentd/library/log"
+	"gofluentd/library/otlpwire"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
-
-	journal "github.com/Laisky/go-journal"
-	"gofluentd/library/log"
-	"gofluentd/library/otlpwire"
 )
 
 func otlpBenchmarkOwner(b *testing.B, evidence int) (*OTLPJournal, *otlpwire.Request) {
 	b.Helper()
-	_ = log.Logger.ChangeLevel("error")
-	_ = journal.Logger.ChangeLevel("error")
+	_ = log.SetLevel("error")
+
 	p, err := OpenOTLPJournal(context.Background(), OTLPJournalConfig{
 		Directory: b.TempDir(), MaxWALBytes: 1 << 30, MaxStorageBytes: 2 << 30, StorageScanMaxEntries: 65536, StorageScanTimeout: time.Second, ReceiptGC: true,
 	}, []OTLPDestination{{ID: "home", Send: barrierAccepted}})

@@ -39,7 +39,7 @@ type ElasticSearchSenderCfg struct {
 type ElasticSearchSender struct {
 	*BaseSender
 	*ElasticSearchSenderCfg
-	logger     *utils.LoggerType
+	logger     *zap.Logger
 	httpClient *http.Client
 }
 

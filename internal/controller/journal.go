@@ -17,7 +17,7 @@ import (
 	"gofluentd/library/log"
 	"gofluentd/library/streamformat"
 
-	"github.com/Laisky/go-journal"
+	"github.com/Laisky/go-journal/v2"
 	utils "github.com/Laisky/go-utils"
 	"github.com/Laisky/zap"
 	"github.com/pkg/errors"

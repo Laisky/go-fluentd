@@ -3,7 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
-	journal "github.com/Laisky/go-journal"
+	journal "github.com/Laisky/go-journal/v2"
 	utils "github.com/Laisky/go-utils"
 	"gofluentd/library"
 	"io"

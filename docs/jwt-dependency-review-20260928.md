@@ -154,3 +154,9 @@ govulncheck -show=verbose -mode=binary /tmp/go-fluentd-security
 
 Neither passing behavioral tests nor a clean independent scanner proves absence
 of all possible vulnerabilities. No merge or deployment is performed.
+
+## 2026-10-23 migration regression follow-up
+
+Journal/SDK graph reconciliation accidentally selected form3tech-oss/jwt-go v3.2.3 instead of the previously qualified v3.2.5. Restore v3.2.5; no unrelated version change is needed. The new signed-token regression proves v3.2.3 accepts malformed string exp/iat/nbf NumericDate claims and v3.2.5 rejects all three. Ordinary signed dates and string/array/malformed audience controls pass in both versions. These tests run in the existing fast gate.
+
+The automated review attributed this downgrade to CVE-2020-26160 in dgrijalva/jwt-go. That module identity and audience description do not match the inspected form3tech fork: its v3.2.3 and v3.2.5 audience implementations are identical and array-aware. Do not claim the old audience CVE was reproduced in this fork. The restored approved version is justified by the actual malformed-date regression and dependency history. No production JWT/authentication exposure is inferred from this isolated dependency test.

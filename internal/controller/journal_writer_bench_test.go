@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	journal "github.com/Laisky/go-journal"
+	journal "github.com/Laisky/go-journal/v2"
 	utils "github.com/Laisky/go-utils"
 	"gofluentd/library"
 	"gofluentd/library/log"
@@ -26,8 +26,8 @@ func (s *measuredJournal) Sync() error { s.syncs++; return s.Journal.Sync() }
 // outside timing; completed durable receipts AND live publication are inside.
 // Each operation is one 2 KiB record, not an entire batch or an unsynced append.
 func BenchmarkJournalDurableService(b *testing.B) {
-	_ = log.Logger.ChangeLevel("error")
-	_ = journal.Logger.ChangeLevel("error")
+	_ = log.SetLevel("error")
+
 	for _, compressed := range []bool{false, true} {
 		for _, clients := range []int{1, 16, 64} {
 			b.Run(fmt.Sprintf("gzip=%v/clients=%d", compressed, clients), func(b *testing.B) {

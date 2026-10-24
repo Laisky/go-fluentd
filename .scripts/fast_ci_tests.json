@@ -35,7 +35,8 @@
       "TestRegressionOTLPOverBudgetRecoveryDrainsBeforeFreshAdmission",
       "TestOTLPConfigDiagnosticsDoNotRenderValues",
       "TestOTLPConfigDiagnosticPreservesDecoderCause",
-      "TestOTLPConfigPrivacyPreservesValidBehavior"
+      "TestOTLPConfigPrivacyPreservesValidBehavior",
+      "TestRegressionOTLPJournalUsesCollectorLogger"
     ]
   },
   {
@@ -54,7 +55,8 @@
       "TestRegressionSafeURLAllowlist",
       "TestRegressionSafeHTTPErrorPreservesCauseWithoutRenderingIt",
       "TestDefaultLoggerConcreteContract",
-      "TestCollectorLoggerLevelSharedByChildren"
+      "TestCollectorLoggerLevelSharedByChildren",
+      "TestRegressionCollectorLegacyEmissionAndAlerts"
     ]
   },
   {

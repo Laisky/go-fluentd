@@ -13,6 +13,13 @@ func init() {
 	config := zap.NewProductionConfig()
 	config.Encoding = "console"
 	config.Level = loggerLevel
+	// Match the former go-utils/v1 logger's emitted stream and formatting.
+	// Sampling must stay disabled: it can suppress repeated error alert hooks.
+	config.Sampling = nil
+	config.OutputPaths = []string{"stdout"}
+	config.EncoderConfig.EncodeTime = zapcore.RFC3339TimeEncoder
+	config.EncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	config.EncoderConfig.MessageKey = "message"
 	logger, err := config.Build()
 	if err != nil {
 		panic("initialize collector logger: " + err.Error())

@@ -535,6 +535,8 @@ func BenchmarkPerfJournalReplay(b *testing.B) {
 			require(b, ae.Close())
 			require(b, df.Close())
 			require(b, af.Close())
+			// Configure quiet logging outside timing on both journal ABI sides.
+			quietLogger := zap.NewNop()
 			// Loader construction belongs to each measured pass; buffers must not be
 			// warmed in setup when measuring the allocations needed by real recovery.
 			b.ReportAllocs()
@@ -542,7 +544,7 @@ func BenchmarkPerfJournalReplay(b *testing.B) {
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				ctx, cancel := context.WithCancel(context.Background())
-				l := journal.NewLegacyLoader(ctx, zap.NewNop(), []string{dataName}, []string{idsName}, compressed, time.Hour)
+				l := journal.NewLegacyLoader(ctx, quietLogger, []string{dataName}, []string{idsName}, compressed, time.Hour)
 				seen := 0
 				for {
 					var d journal.Data

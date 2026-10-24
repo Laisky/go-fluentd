@@ -36,8 +36,9 @@ jobs:
           git worktree add --detach "$RUNNER_TEMP/perf-before" "$base"
           mkdir -p "$RUNNER_TEMP/perf-before/tests/performance"
           cp tests/performance/*_test.go "$RUNNER_TEMP/perf-before/tests/performance/"
+          python3 .scripts/journal_harness.py tests/performance/benchmark_test.go "$RUNNER_TEMP/perf-before/tests/performance/benchmark_test.go" --root "$RUNNER_TEMP/perf-before" --kind performance --evidence "$RUNNER_TEMP/perf-results/baseline-journal.json"
           python3 -m unittest discover -s tests/performance -p 'test_*.py'
-          (cd "$RUNNER_TEMP/perf-before" && go mod verify && go test -mod=readonly -c -o "$RUNNER_TEMP/bench-before.test" ./tests/performance && go build -mod=readonly -o "$RUNNER_TEMP/app-before" .)
+          (cd "$RUNNER_TEMP/perf-before" && go mod verify && go test -mod=readonly -c -o "$RUNNER_TEMP/bench-before.test" ./tests/performance && go build -mod=readonly -o "$RUNNER_TEMP/app-before" . && git diff --exit-code -- go.mod go.sum)
           go mod verify
           go test -mod=readonly -c -o "$RUNNER_TEMP/bench-after.test" ./tests/performance
           go build -mod=readonly -o "$RUNNER_TEMP/app-after" .
@@ -52,7 +53,8 @@ jobs:
             cat /sys/fs/cgroup/cpu.max /sys/fs/cgroup/memory.max 2>/dev/null || true
             sha256sum "$RUNNER_TEMP/bench-before.test" "$RUNNER_TEMP/bench-after.test" "$RUNNER_TEMP/app-before" "$RUNNER_TEMP/app-after"
             printf '\nBaseline journal\n'
-            (cd "$RUNNER_TEMP/perf-before" && go list -m github.com/Laisky/go-journal/v2)
+            cat "$RUNNER_TEMP/perf-results/baseline-journal.json"
+            go version -m "$RUNNER_TEMP/app-before" "$RUNNER_TEMP/app-after"
             printf '\nCandidate journal\n'
             go list -m github.com/Laisky/go-journal/v2
           } > "$RUNNER_TEMP/perf-results/environment.txt"

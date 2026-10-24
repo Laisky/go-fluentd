@@ -8,6 +8,8 @@ github.com/Laisky/go-chaining v0.0.0-20180507092046-43dcdc5a21be h1:7Rxhm6IjOtDA
 github.com/Laisky/go-chaining v0.0.0-20180507092046-43dcdc5a21be/go.mod h1:1mdzaETo0kjvCQICPSePsoaatJN4l7JvEA1200lyevo=
 github.com/Laisky/go-journal/v2 v2.0.0-20261023050540-77b298c24ab2 h1:2ZWni1KMXFWfKCr86QTH80XCcwrxwGZQ2gQub4SNHaI=
 github.com/Laisky/go-journal/v2 v2.0.0-20261023050540-77b298c24ab2/go.mod h1:rsJWzlubuYswcGQZZdG0LlB7tReG61KiQXrwKBkVqZw=
+github.com/Laisky/go-journal/v2 v2.0.0-20261024022204-7662268a48cd h1:LdE9UG0cn9FiFDYJLCl84Lq+iTU+l1oqu+7Mr7hBXwE=
+github.com/Laisky/go-journal/v2 v2.0.0-20261024022204-7662268a48cd/go.mod h1:rsJWzlubuYswcGQZZdG0LlB7tReG61KiQXrwKBkVqZw=
 github.com/Laisky/go-syslog v2.3.3+incompatible h1:TSHhP3iadAPDzC5efyYLPnGkv2pvUtuUInm7poVRkFA=
 github.com/Laisky/go-syslog v2.3.3+incompatible/go.mod h1:PPmESkLU3DEbJ3fRXam2hqJTNQVFMggsDXBnOtu2ITk=
 github.com/Laisky/go-utils v1.16.0 h1:0K/laNRT7EXcY8nKkp6RPFA5StJCJ1GRFuJZPcb2hBw=

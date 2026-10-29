@@ -76,6 +76,9 @@ func (r *Request) Signal() Signal      { return r.signal }
 func (r *Request) ContentType() string { return r.contentType }
 func (r *Request) Items() int          { return r.items }
 
+// PayloadSize returns the retained payload size without copying it.
+func (r *Request) PayloadSize() int { return len(r.payload) }
+
 // Payload returns a copy so callers cannot mutate retained request bytes.
 func (r *Request) Payload() []byte { return bytes.Clone(r.payload) }
 

@@ -15,6 +15,7 @@ import (
 )
 
 type DispatcherCfg struct {
+	Observe            func(*library.FluentMsg)
 	TagBudget          *TagBudget
 	InChan             chan *library.FluentMsg
 	TagPipeline        tagfilters.TagPipelineItf
@@ -95,6 +96,10 @@ func (d *Dispatcher) Run(ctx context.Context) {
 						log.Logger.Info("inchan closed")
 						return
 					}
+				}
+
+				if d.Observe != nil {
+					d.Observe(msg)
 				}
 
 				if err := d.TagBudget.Admit(msg.Tag); err != nil {

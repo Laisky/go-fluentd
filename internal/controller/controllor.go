@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gofluentd/internal/acceptorfilters"
+	"gofluentd/internal/alerts"
 	"gofluentd/internal/concatstate"
 	"gofluentd/internal/monitor"
 	"gofluentd/internal/postfilters"
@@ -330,9 +331,14 @@ func (c *Controllor) initTagPipeline(ctx context.Context, env string, waitCommit
 	)
 }
 
-func (c *Controllor) initDispatcher(ctx context.Context, waitDispatchChan chan *library.FluentMsg, tagPipeline *tagfilters.TagPipeline) *Dispatcher {
+func (c *Controllor) initDispatcher(ctx context.Context, waitDispatchChan chan *library.FluentMsg, tagPipeline *tagfilters.TagPipeline, observer *alerts.Observer) *Dispatcher {
+	var observe func(*library.FluentMsg)
+	if observer != nil {
+		observe = func(msg *library.FluentMsg) { observer.ObserveFluent(msg.Tag, msg.Message) }
+	}
 	dispatcher := NewDispatcher(&DispatcherCfg{
 		TagBudget:   c.tagBudget,
+		Observe:     observe,
 		InChan:      waitDispatchChan,
 		TagPipeline: tagPipeline,
 		NFork:       gutils.Settings.GetInt("settings.dispatcher.nfork"),
@@ -564,6 +570,17 @@ func (c *Controllor) Run(parent context.Context) (runErr error) {
 	if err = validateDurableAdmissionPolicy(gutils.Settings, gutils.Settings.GetString("env")); err != nil {
 		return err
 	}
+	observer, err := newConfiguredTelegramObserver(ctx, gutils.Settings)
+	if err != nil {
+		return err
+	}
+	if observer != nil {
+		defer func() { cancel(); observer.Wait() }()
+		monitor.AddMetric("telegramAlert", func() map[string]interface{} {
+			s := observer.Stats()
+			return map[string]interface{}{"queued": s.Queued, "dropped": s.Dropped, "suppressed": s.Suppressed, "failed": s.Failed, "sent": s.Sent}
+		})
+	}
 	cfg, err := ParseOTLPServiceConfig(gutils.Settings.Get("settings.otlp"))
 	if err != nil {
 		return err
@@ -572,6 +589,9 @@ func (c *Controllor) Run(parent context.Context) (runErr error) {
 		return err
 	}
 	if cfg != nil {
+		if observer != nil {
+			cfg.ObserveAccepted = observer.ObserveOTLP
+		}
 		if gutils.Settings.GetBool("dry") {
 			return errors.New("OTLP durable admission cannot run in dry mode")
 		}
@@ -613,7 +633,7 @@ func (c *Controllor) Run(parent context.Context) (runErr error) {
 	waitDispatchChan := journal.DumpMsgFlow(ctx, c.msgPool, waitDumpChan, skipDumpChan)
 
 	tagPipeline := c.initTagPipeline(ctx, env, waitCommitChan)
-	dispatcher := c.initDispatcher(ctx, waitDispatchChan, tagPipeline)
+	dispatcher := c.initDispatcher(ctx, waitDispatchChan, tagPipeline, observer)
 	waitPostPipelineChan := dispatcher.GetOutChan()
 	postPipeline := c.initPostPipeline(env, waitCommitChan)
 	waitProduceChan := postPipeline.Wrap(ctx, waitPostPipelineChan)

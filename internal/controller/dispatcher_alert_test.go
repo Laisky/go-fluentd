@@ -15,7 +15,7 @@ func TestDispatcherAlertSaturationDoesNotChangeRecords(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(400) }))
 	defer server.Close()
 	ctx, cancel := context.WithCancel(context.Background())
-	o, err := alerts.New(ctx, alerts.Config{Token: "123:synthetic", ChatID: "synthetic", Tags: []string{"app"}}, server.URL, server.Client())
+	o, err := alerts.New(ctx, alerts.Config{Token: "123:synthetic", ChatID: "synthetic", IncludeMessage: true, Tags: []string{"app"}}, server.URL, server.Client())
 	if err != nil {
 		t.Fatal(err)
 	}

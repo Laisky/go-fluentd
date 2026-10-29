@@ -578,7 +578,11 @@ func (c *Controllor) Run(parent context.Context) (runErr error) {
 		defer func() { cancel(); observer.Wait() }()
 		monitor.AddMetric("telegramAlert", func() map[string]interface{} {
 			s := observer.Stats()
-			return map[string]interface{}{"queued": s.Queued, "dropped": s.Dropped, "suppressed": s.Suppressed, "failed": s.Failed, "sent": s.Sent}
+			return map[string]interface{}{"queued": s.Queued, "dropped": s.Dropped, "suppressed": s.Suppressed, "failed": s.Failed, "sent": s.Sent, "droppedRequests": s.DroppedRequests, "droppedEvents": s.DroppedEvents, "shutdownRequests": s.ShutdownRequests, "shutdownEvents": s.ShutdownEvents, "retries": s.Retries, "evicted": s.Evicted, "requestQueueDepth": s.OTLPQueueDepth, "eventQueueDepth": s.EventQueueDepth, "parserAlive": s.ParserAlive, "deliveryAlive": s.DeliveryAlive}
+		})
+		monitor.RegisterAlertMetrics(func() monitor.AlertMetrics {
+			s := observer.Stats()
+			return monitor.AlertMetrics{EventsQueued: s.Queued, EventsDropped: s.DroppedEvents, RequestsDropped: s.DroppedRequests, RequestTooLarge: s.RequestTooLarge, RequestQueueFull: s.RequestQueueFull, RequestDecodeError: s.RequestDecodeError, Suppressed: s.Suppressed, Sent: s.Sent, Failed: s.Failed, Retries: s.Retries, Evicted: s.Evicted, ShutdownEvents: s.ShutdownEvents, ShutdownRequests: s.ShutdownRequests, EventQueueDepth: s.EventQueueDepth, RequestQueueDepth: s.OTLPQueueDepth, ParserAlive: s.ParserAlive, DeliveryAlive: s.DeliveryAlive}
 		})
 	}
 	cfg, err := ParseOTLPServiceConfig(gutils.Settings.Get("settings.otlp"))

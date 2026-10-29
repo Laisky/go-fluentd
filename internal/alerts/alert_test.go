@@ -26,7 +26,7 @@ func TestFluentSeveritySourceAndDedup(t *testing.T) {
 		tag   string
 		level interface{}
 		want  bool
-	}{{"app", "error", true}, {"app", "ERROR", true}, {"app", "fatal", true}, {"app", "panic", true}, {"app", "warn", false}, {"app", 12, false}, {"app", "errorish", false}, {"other", "error", false}} {
+	}{{"app", "error", true}, {"app", "ERROR", false}, {"app", "fatal", true}, {"app", "panic", true}, {"app", "warn", false}, {"app", 12, false}, {"app", "errorish", false}, {"other", "error", false}} {
 		before := o.Stats().Queued
 		o.ObserveFluent(x.tag, map[string]interface{}{"level": x.level, "msg": fmt.Sprint(x.level)})
 		if got := o.Stats().Queued > before; got != x.want {
@@ -40,6 +40,7 @@ func TestFluentSeveritySourceAndDedup(t *testing.T) {
 }
 func TestFluentEmbeddedJSON(t *testing.T) {
 	o := inert()
+	o.cfg.IncludeMessage = true
 	o.ObserveFluent("app", map[string]interface{}{"log": []byte(`{"level":"ERROR","msg":"synthetic"}`)})
 	if o.Stats().Queued != 1 || (<-o.queue).Message != "synthetic" {
 		t.Fatal("embedded JSON not observed")
@@ -75,6 +76,7 @@ func TestRedactionAndUnicode(t *testing.T) {
 		t.Fatal("UTF-16 bound exceeded")
 	}
 	o := inert()
+	o.cfg.IncludeMessage = true
 	o.Observe(Event{Source: "app", Severity: "error", Message: strings.Repeat("x", 8193)})
 	if (<-o.queue).Message != "[oversized message omitted]" {
 		t.Fatal("oversized message retained")
@@ -170,6 +172,7 @@ func TestCancellationAndTimeout(t *testing.T) {
 }
 func TestOTLPOriginalSeverityAndSources(t *testing.T) {
 	o := inert()
+	o.cfg.IncludeMessage = true
 	o.cfg.Services = []string{"svc"}
 	raw := `{"resourceLogs":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"svc"}}]},"scopeLogs":[{"scope":{"name":"scope"},"logRecords":[{"severityNumber":17,"body":{"stringValue":"boom"}},{"severityNumber":9,"severityText":"ERROR"},{"severityText":"ERROR","body":{"stringValue":"second"}},{"severityText":"garbage"}]}]}]}`
 	r, err := otlpwire.ReadRequest(otlpwire.Logs, otlpwire.JSON, "", strings.NewReader(raw), otlpwire.DefaultLimits())

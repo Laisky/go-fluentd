@@ -1,17 +1,33 @@
 package monitor
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
 	"sync"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // AlertMetrics contains only aggregate, low-cardinality operational data.
 type AlertMetrics struct {
-	EventsQueued, EventsDropped, RequestsDropped, Suppressed, Sent, Failed, Retries, Evicted, ShutdownEvents, ShutdownRequests uint64
-	RequestTooLarge, RequestQueueFull, RequestDecodeError                                                                      uint64
-	EventQueueDepth, RequestQueueDepth                                                                                         int
-	ParserAlive, DeliveryAlive                                                                                                 bool
+	EventsQueued       uint64
+	EventsDropped      uint64
+	RequestsDropped    uint64
+	Suppressed         uint64
+	SourceLimited      uint64
+	Sent               uint64
+	Failed             uint64
+	Retries            uint64
+	Evicted            uint64
+	ShutdownEvents     uint64
+	ShutdownRequests   uint64
+	RequestTooLarge    uint64
+	RequestQueueFull   uint64
+	RequestDecodeError uint64
+	EventQueueDepth    int
+	RequestQueueDepth  int
+	ParserAlive        bool
+	DeliveryAlive      bool
 }
+
 type alertMetric struct {
 	name, help string
 	counter    bool
@@ -32,6 +48,7 @@ func newAlertCollector(get func() AlertMetrics) prometheus.Collector {
 		{name: "requests_queue_full_total", help: "OTLP requests skipped because the observer request queue was full.", counter: true, value: func(s AlertMetrics) float64 { return float64(s.RequestQueueFull) }},
 		{name: "requests_decode_failed_total", help: "OTLP requests that could not be decoded by the observer.", counter: true, value: func(s AlertMetrics) float64 { return float64(s.RequestDecodeError) }},
 		{name: "events_suppressed_total", help: "Events suppressed by the deduplication window.", counter: true, value: func(s AlertMetrics) float64 { return float64(s.Suppressed) }},
+		{name: "events_source_limited_total", help: "Distinct error kinds withheld by the per-source group budget.", counter: true, value: func(s AlertMetrics) float64 { return float64(s.SourceLimited) }},
 		{name: "deliveries_total", help: "Notifications accepted by the configured transport.", counter: true, value: func(s AlertMetrics) float64 { return float64(s.Sent) }},
 		{name: "delivery_failures_total", help: "Notifications abandoned after delivery failure.", counter: true, value: func(s AlertMetrics) float64 { return float64(s.Failed) }},
 		{name: "retries_total", help: "Delivery retry attempts scheduled.", counter: true, value: func(s AlertMetrics) float64 { return float64(s.Retries) }},

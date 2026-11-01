@@ -2,17 +2,28 @@ package alerts
 
 import (
 	"fmt"
-	"go.opentelemetry.io/collector/pdata/pcommon"
-	"go.opentelemetry.io/collector/pdata/plog/plogotlp"
-	"gofluentd/library/otlpwire"
 	"math"
 	"time"
+
+	"gofluentd/library/otlpwire"
+
+	"go.opentelemetry.io/collector/pdata/pcommon"
+	"go.opentelemetry.io/collector/pdata/plog/plogotlp"
 )
 
-// ObserveOTLP uses only the original admitted request, never the storage projection.
-// Oversized requests are skipped to bound alert-side memory and decoding work.
+// logsDecoder is the queued form of an admitted request. Keeping the immutable
+// request, rather than a copy, leaves the acknowledgement path free of work
+// proportional to its size.
+type logsDecoder interface {
+	DecodeLogs() (plogotlp.ExportRequest, error)
+}
+
+// ObserveOTLP uses only the original admitted request, never the storage
+// projection. It does nothing without selected services, so a tag-only
+// configuration costs admission no more than this check. Oversized requests are
+// skipped to bound alert-side memory and decoding work.
 func (o *Observer) ObserveOTLP(r *otlpwire.Request) {
-	if o == nil || r == nil || r.Signal() != otlpwire.Logs {
+	if o == nil || r == nil || len(o.cfg.Services) == 0 || r.Signal() != otlpwire.Logs {
 		return
 	}
 	o.lifecycle.RLock()
@@ -21,7 +32,7 @@ func (o *Observer) ObserveOTLP(r *otlpwire.Request) {
 		o.shutdownRequests.Add(1)
 		return
 	}
-	if r.PayloadSize() > 1<<20 {
+	if r.PayloadSize() > maxOTLPRequestBytes {
 		o.requestTooLarge.Add(1)
 		o.dropped.Add(1)
 		o.droppedRequests.Add(1)
@@ -35,23 +46,11 @@ func (o *Observer) ObserveOTLP(r *otlpwire.Request) {
 		o.droppedRequests.Add(1)
 		return
 	}
-	p := otlpPayload{r.ContentType(), r.Payload()}
-	o.otlp <- p
+	o.otlp <- r
 }
 
-type otlpPayload struct {
-	contentType string
-	data        []byte
-}
-
-func (o *Observer) parseOTLP(p otlpPayload) {
-	req := plogotlp.NewExportRequest()
-	var err error
-	if p.contentType == otlpwire.JSON {
-		err = req.UnmarshalJSON(p.data)
-	} else {
-		err = req.UnmarshalProto(p.data)
-	}
+func (o *Observer) parseOTLP(request logsDecoder) {
+	req, err := request.DecodeLogs()
 	if err != nil {
 		o.requestDecodeError.Add(1)
 		o.dropped.Add(1)
@@ -65,7 +64,8 @@ func (o *Observer) parseOTLP(p otlpPayload) {
 		if !ok || service.Type() != pcommon.ValueTypeStr || !contains(o.cfg.Services, service.Str()) {
 			continue
 		}
-		source := "otlp/" + cleanMetadata(service.Str(), 64)
+		origin := "otlp/" + cleanMetadata(service.Str(), 64)
+		source := origin
 		if v, ok := r.Resource().Attributes().Get("host.name"); ok && v.Type() == pcommon.ValueTypeStr {
 			source += "/" + cleanMetadata(v.Str(), 64)
 		}
@@ -75,7 +75,7 @@ func (o *Observer) parseOTLP(p otlpPayload) {
 			scopeSource := source + "/" + cleanMetadata(scope.Scope().Name(), 64)
 			records := scope.LogRecords()
 			for k := 0; k < records.Len(); k++ {
-				if o.ctx != nil && o.ctx.Err() != nil {
+				if o.ctx.Err() != nil {
 					o.shutdownRequests.Add(1)
 					return
 				}
@@ -96,15 +96,11 @@ func (o *Observer) parseOTLP(p otlpPayload) {
 				} else if !IsError(level) {
 					continue
 				}
-				message := ""
-				if o.cfg.IncludeMessage {
-					message = rec.Body().AsString()
-				}
 				var timestamp time.Time
 				if ns := uint64(rec.Timestamp()); ns > 0 && ns <= math.MaxInt64 {
 					timestamp = time.Unix(0, int64(ns)).UTC()
 				}
-				o.Observe(Event{Source: scopeSource, Severity: level, OriginalSeverity: fmt.Sprintf("%d", n), Message: message, Timestamp: timestamp})
+				o.Observe(Event{Source: scopeSource, origin: origin, Severity: level, OriginalSeverity: fmt.Sprintf("%d", n), Message: rec.Body().AsString(), Timestamp: timestamp})
 			}
 		}
 	}

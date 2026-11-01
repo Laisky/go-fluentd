@@ -138,7 +138,27 @@
       "TestReviewAggregationAndEviction",
       "TestReviewDropUnits",
       "TestReviewShutdownCountsOutstandingEvents",
-      "TestReviewNotifierBoundary"
+      "TestReviewNotifierBoundary",
+      "TestTagOnlyConfigurationSkipsOTLPWork",
+      "TestDistinctHiddenErrorsFromOneSourceAreNotCollapsed",
+      "TestHiddenMessagesRemainPrivateButDistinguishable",
+      "TestVariableTokensShareOneGroup",
+      "TestNonASCIIErrorTextStaysDistinct",
+      "TestMessageLinesCannotForgeNotificationFields",
+      "TestMultilineStackTraceRemainsReadable",
+      "TestRenderedNotificationStaysWithinTelegramLimit",
+      "TestLinkPreviewsAreDisabled",
+      "TestNoisySourceCannotStarveQuietSource",
+      "TestRotatedOTLPIdentityCannotStarveOtherService",
+      "TestServiceNameSelectorIsNotAnAuthenticationBoundary",
+      "TestInfoRecordsSkipMessageConversion",
+      "TestOTLPObservationDoesNotCopyPayload",
+      "TestSourceBudgetBoundsNotificationsAndReportsOverflow",
+      "TestSingleGroupBudgetRestoresOneNotificationPerSource",
+      "TestSummaryWaitsForQueueSpaceWithoutLosingCount",
+      "TestSummaryNamesOnlyTheAllowlistedSource",
+      "TestFingerprintIsKeyedPerObserver",
+      "TestConfigDefaultsAndBounds"
     ]
   },
   {
@@ -148,13 +168,21 @@
       "TestDispatcherAlertSaturationDoesNotChangeRecords",
       "TestNativeStorageFidelityWithFailedAlert",
       "TestAlertFailureDoesNotBlockOTLPStorageOrRepeatOnReplay",
-      "TestTelegramAlertPolicyValidation"
+      "TestTelegramAlertPolicyValidation",
+      "TestTelegramAlertTagsExpandEnv",
+      "TestAlertMonitorSeparatesLossReasons"
     ]
   },
   {
     "package": "./internal/monitor",
     "tests": [
       "TestAlertMetricsFixedAndPrivate"
+    ]
+  },
+  {
+    "package": "./library/otlpwire",
+    "tests": [
+      "TestDecodeLogsSharesRetainedPayloadSafely"
     ]
   }
 ]

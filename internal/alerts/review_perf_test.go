@@ -50,7 +50,7 @@ func BenchmarkReviewObserver(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				m := "repeat"
 				if mode == "burst_saturated" || mode == "stalled_transport" {
-					m = fmt.Sprintf("event-%d", i)
+					m = wordyFailure(i)
 				}
 				o.ObserveFluent("app", map[string]interface{}{"level": "error", "msg": m})
 			}
@@ -65,7 +65,7 @@ func BenchmarkReviewAdversarialMetadata(b *testing.B) {
 	scope := strings.Repeat("x", 8192)
 	records := strings.Repeat(`{"severityNumber":17,"body":{"stringValue":"synthetic"}},`, 63) + `{"severityNumber":17}`
 	raw := fmt.Sprintf(`{"resourceLogs":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"svc"}}]},"scopeLogs":[{"scope":{"name":%q},"logRecords":[%s]}]}]}`, scope, records)
-	p := otlpPayload{contentType: otlpwire.JSON, data: []byte(raw)}
+	p := logsRequest(b, raw)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -107,6 +107,63 @@ func BenchmarkReviewOTLPBackoff(b *testing.B) {
 	}
 }
 
+// BenchmarkFluentInfoRecord measures the common path of a selected tag whose
+// records do not qualify for notification.
+func BenchmarkFluentInfoRecord(b *testing.B) {
+	body := []byte(strings.Repeat("x", 1024))
+	for name, record := range map[string]map[string]interface{}{
+		"string_level": {"level": "info", "msg": body},
+		"bytes_level":  {"level": []byte("info"), "msg": body},
+		"embedded":     {"log": []byte(`{"level":"info","msg":"synthetic"}`)},
+	} {
+		b.Run(name, func(b *testing.B) {
+			o := inert()
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				o.ObserveFluent("app", record)
+			}
+		})
+	}
+}
+
+// BenchmarkFluentDuplicateError measures the synchronous dispatcher cost of a
+// repeated error, including grouping of the hidden message.
+func BenchmarkFluentDuplicateError(b *testing.B) {
+	for _, size := range []int{64, 1024, 8192} {
+		b.Run(fmt.Sprintf("bytes_%d", size), func(b *testing.B) {
+			o := inert()
+			record := map[string]interface{}{"level": "error", "msg": strings.Repeat("connection refused ", size/19+1)[:size]}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				o.ObserveFluent("app", record)
+			}
+		})
+	}
+}
+
+// BenchmarkTagOnlyOTLPCallback measures what admission pays when no OTLP service
+// is selected.
+func BenchmarkTagOnlyOTLPCallback(b *testing.B) {
+	for _, size := range []int{1024, 1<<20 - 128} {
+		b.Run(fmt.Sprintf("bytes_%d", size), func(b *testing.B) {
+			r := logsRequest(b, `{"resourceLogs":[],"padding":"`+strings.Repeat("x", size)+`"}`)
+			o := inert()
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				o.ObserveOTLP(r)
+				select {
+				case <-o.otlp:
+					<-o.otlpSlots
+				default:
+				}
+			}
+		})
+	}
+}
+
 // BenchmarkReviewOTLPCopy measures only the synchronous observer callback,
 // not journal admission or downstream storage latency.
 func BenchmarkReviewOTLPCopy(b *testing.B) {
@@ -118,6 +175,7 @@ func BenchmarkReviewOTLPCopy(b *testing.B) {
 				b.Fatal(err)
 			}
 			o := inert()
+			o.cfg.Services = []string{"svc"}
 			b.ReportAllocs()
 			b.SetBytes(int64(len(raw)))
 			b.ResetTimer()

@@ -1,14 +1,15 @@
 package monitor
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
 	"testing"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func TestAlertMetricsFixedAndPrivate(t *testing.T) {
 	registry := prometheus.NewPedanticRegistry()
 	registry.MustRegister(newAlertCollector(func() AlertMetrics {
-		return AlertMetrics{EventsDropped: 2, RequestsDropped: 3, EventQueueDepth: 4, ParserAlive: true}
+		return AlertMetrics{EventsDropped: 2, RequestsDropped: 3, SourceLimited: 5, EventQueueDepth: 4, ParserAlive: true}
 	}))
 	families, err := registry.Gather()
 	if err != nil {
@@ -28,7 +29,7 @@ func TestAlertMetricsFixedAndPrivate(t *testing.T) {
 			}
 		}
 	}
-	if found["gofluentd_logging_alert_events_dropped_total"] != 2 || found["gofluentd_logging_alert_requests_dropped_total"] != 3 || found["gofluentd_logging_alert_event_queue_depth"] != 4 || found["gofluentd_logging_alert_parser_up"] != 1 {
+	if found["gofluentd_logging_alert_events_dropped_total"] != 2 || found["gofluentd_logging_alert_requests_dropped_total"] != 3 || found["gofluentd_logging_alert_events_source_limited_total"] != 5 || found["gofluentd_logging_alert_event_queue_depth"] != 4 || found["gofluentd_logging_alert_parser_up"] != 1 {
 		t.Fatal(found)
 	}
 }

@@ -17,9 +17,15 @@ import (
 	"gofluentd/library/otlpwire"
 )
 
+// inert builds an observer from validated defaults without starting its workers.
 func inert() *Observer {
-	return &Observer{cfg: Config{Tags: []string{"app"}}, queue: make(chan Event, 64), otlp: make(chan otlpPayload, 4), otlpSlots: make(chan struct{}, 4), seen: map[[32]byte]time.Time{}}
+	o, err := newObserver(context.Background(), Config{Token: "123:synthetic", ChatID: "synthetic", Tags: []string{"app"}})
+	if err != nil {
+		panic(err)
+	}
+	return o
 }
+
 func TestFluentSeveritySourceAndDedup(t *testing.T) {
 	o := inert()
 	for _, x := range []struct {
@@ -84,6 +90,7 @@ func TestRedactionAndUnicode(t *testing.T) {
 }
 func TestOTLPQueueSaturation(t *testing.T) {
 	o := inert()
+	o.cfg.Services = []string{"svc"}
 	raw := `{"resourceLogs":[]}`
 	r, err := otlpwire.ReadRequest(otlpwire.Logs, otlpwire.JSON, "", strings.NewReader(raw), otlpwire.DefaultLimits())
 	if err != nil {

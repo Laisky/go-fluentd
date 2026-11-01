@@ -2,8 +2,9 @@ package controller
 
 import (
 	"context"
-	"github.com/spf13/viper"
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
 func TestTelegramAlertPolicyValidation(t *testing.T) {
@@ -20,7 +21,7 @@ func TestTelegramAlertPolicyValidation(t *testing.T) {
 	for _, tc := range []struct {
 		key   string
 		value interface{}
-	}{{"queue_size", 0}, {"queue_size", 4097}, {"otlp_queue_size", 33}, {"dedup_entries", 16385}, {"max_attempts", 6}, {"send_interval", "1ms"}, {"dedup_window", "bad"}, {"queue_size", "not-a-number"}, {"queue_szie", 10}} {
+	}{{"queue_size", 0}, {"queue_size", 4097}, {"otlp_queue_size", 33}, {"dedup_entries", 16385}, {"max_groups_per_source", 1025}, {"max_groups_per_source", 0}, {"max_attempts", 6}, {"send_interval", "1ms"}, {"dedup_window", "bad"}, {"queue_size", "not-a-number"}, {"queue_szie", 10}} {
 		v := base()
 		v.Set("settings.telegram_alert."+tc.key, tc.value)
 		if _, err := newConfiguredTelegramObserver(context.Background(), v); err == nil {
@@ -31,6 +32,7 @@ func TestTelegramAlertPolicyValidation(t *testing.T) {
 	v.Set("settings.telegram_alert.queue_size", 32)
 	v.Set("settings.telegram_alert.otlp_queue_size", 2)
 	v.Set("settings.telegram_alert.dedup_entries", 64)
+	v.Set("settings.telegram_alert.max_groups_per_source", 1)
 	v.Set("settings.telegram_alert.dedup_window", "30s")
 	v.Set("settings.telegram_alert.send_interval", "200ms")
 	v.Set("settings.telegram_alert.max_attempts", 2)

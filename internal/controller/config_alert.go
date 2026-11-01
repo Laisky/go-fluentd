@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"gofluentd/internal/alerts"
+	"gofluentd/internal/monitor"
+	"gofluentd/library"
 )
 
 type alertSettings interface {
@@ -23,14 +25,14 @@ func newConfiguredTelegramObserver(ctx context.Context, settings alertSettings) 
 		return nil, nil
 	}
 	if values, ok := settings.Get("settings.telegram_alert").(map[string]interface{}); ok {
-		allowed := map[string]bool{"enabled": true, "token_env": true, "chat_id_env": true, "tags": true, "services": true, "include_message": true, "queue_size": true, "otlp_queue_size": true, "dedup_entries": true, "dedup_window": true, "send_interval": true, "max_attempts": true}
+		allowed := map[string]bool{"enabled": true, "token_env": true, "chat_id_env": true, "tags": true, "services": true, "include_message": true, "queue_size": true, "otlp_queue_size": true, "dedup_entries": true, "max_groups_per_source": true, "dedup_window": true, "send_interval": true, "max_attempts": true}
 		for key := range values {
 			if !allowed[key] {
 				return nil, errors.New("invalid Telegram alert configuration field")
 			}
 		}
 	}
-	tags := settings.GetStringSlice("settings.telegram_alert.tags")
+	tags := library.LoadTagsReplaceEnv(settings.GetString("env"), settings.GetStringSlice("settings.telegram_alert.tags"))
 	services := settings.GetStringSlice("settings.telegram_alert.services")
 	if len(tags) == 0 && len(services) == 0 {
 		return nil, errors.New("telegram alert requires explicit tags or services")
@@ -41,7 +43,7 @@ func newConfiguredTelegramObserver(ctx context.Context, settings alertSettings) 
 	for _, option := range []struct {
 		key    string
 		target *int
-	}{{"queue_size", &cfg.EventQueueSize}, {"otlp_queue_size", &cfg.OTLPQueueSize}, {"dedup_entries", &cfg.DedupEntries}, {"max_attempts", &cfg.MaxAttempts}} {
+	}{{"queue_size", &cfg.EventQueueSize}, {"otlp_queue_size", &cfg.OTLPQueueSize}, {"dedup_entries", &cfg.DedupEntries}, {"max_groups_per_source", &cfg.MaxGroupsPerSource}, {"max_attempts", &cfg.MaxAttempts}} {
 		if v := settings.Get("settings.telegram_alert." + option.key); v != nil {
 			n, e := strconv.Atoi(fmt.Sprint(v))
 			if e != nil || n <= 0 {
@@ -67,4 +69,56 @@ func newConfiguredTelegramObserver(ctx context.Context, settings alertSettings) 
 		}
 	}
 	return alerts.New(ctx, cfg, "", nil)
+}
+
+// registerAlertMonitoring exposes observer counters on /monitor and Prometheus.
+func registerAlertMonitoring(observer *alerts.Observer) {
+	monitor.AddMetric("telegramAlert", func() map[string]interface{} { return alertMonitorFields(observer.Stats()) })
+	monitor.RegisterAlertMetrics(func() monitor.AlertMetrics {
+		s := observer.Stats()
+		return monitor.AlertMetrics{
+			EventsQueued:       s.Queued,
+			EventsDropped:      s.DroppedEvents,
+			RequestsDropped:    s.DroppedRequests,
+			RequestTooLarge:    s.RequestTooLarge,
+			RequestQueueFull:   s.RequestQueueFull,
+			RequestDecodeError: s.RequestDecodeError,
+			Suppressed:         s.Suppressed,
+			SourceLimited:      s.SourceLimited,
+			Sent:               s.Sent,
+			Failed:             s.Failed,
+			Retries:            s.Retries,
+			Evicted:            s.Evicted,
+			ShutdownEvents:     s.ShutdownEvents,
+			ShutdownRequests:   s.ShutdownRequests,
+			EventQueueDepth:    s.EventQueueDepth,
+			RequestQueueDepth:  s.OTLPQueueDepth,
+			ParserAlive:        s.ParserAlive,
+			DeliveryAlive:      s.DeliveryAlive,
+		}
+	})
+}
+
+func alertMonitorFields(s alerts.Stats) map[string]interface{} {
+	return map[string]interface{}{
+		"queued":             s.Queued,
+		"dropped":            s.Dropped,
+		"suppressed":         s.Suppressed,
+		"sourceLimited":      s.SourceLimited,
+		"failed":             s.Failed,
+		"sent":               s.Sent,
+		"droppedRequests":    s.DroppedRequests,
+		"droppedEvents":      s.DroppedEvents,
+		"requestTooLarge":    s.RequestTooLarge,
+		"requestQueueFull":   s.RequestQueueFull,
+		"requestDecodeError": s.RequestDecodeError,
+		"shutdownRequests":   s.ShutdownRequests,
+		"shutdownEvents":     s.ShutdownEvents,
+		"retries":            s.Retries,
+		"evicted":            s.Evicted,
+		"requestQueueDepth":  s.OTLPQueueDepth,
+		"eventQueueDepth":    s.EventQueueDepth,
+		"parserAlive":        s.ParserAlive,
+		"deliveryAlive":      s.DeliveryAlive,
+	}
 }

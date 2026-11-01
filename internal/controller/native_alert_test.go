@@ -11,9 +11,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"go.opentelemetry.io/collector/pdata/plog/plogotlp"
 	"gofluentd/internal/alerts"
 	"gofluentd/library/otlpwire"
+
+	"go.opentelemetry.io/collector/pdata/plog/plogotlp"
 )
 
 func TestNativeStorageFidelityWithFailedAlert(t *testing.T) {

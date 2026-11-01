@@ -2,11 +2,14 @@ package alerts
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"go.opentelemetry.io/collector/pdata/plog/plogotlp"
 )
 
 type reviewNotifier struct{ calls chan string }
@@ -42,10 +45,10 @@ func TestReviewNotifierBoundary(t *testing.T) {
 func TestReviewAggregationAndEviction(t *testing.T) {
 	o := inert()
 	o.cfg.DedupEntries = 2
-	o.Observe(Event{Source: "one", Severity: "error", Message: "first"})
-	o.Observe(Event{Source: "one", Severity: "error", Message: "second"})
+	o.Observe(Event{Source: "one", Severity: "error", Message: "request 1 failed"})
+	o.Observe(Event{Source: "one", Severity: "error", Message: "request 2 failed"})
 	if o.Stats().Queued != 1 || o.Stats().Suppressed != 1 {
-		t.Fatalf("hidden messages should group: %+v", o.Stats())
+		t.Fatalf("one error kind should group: %+v", o.Stats())
 	}
 	<-o.queue
 	o.Observe(Event{Source: "two", Severity: "error"})
@@ -55,8 +58,16 @@ func TestReviewAggregationAndEviction(t *testing.T) {
 		t.Fatalf("bounded table blocked a new source: %+v", o.Stats())
 	}
 }
+
+type undecodableRequest struct{}
+
+func (undecodableRequest) DecodeLogs() (plogotlp.ExportRequest, error) {
+	return plogotlp.NewExportRequest(), errors.New("synthetic decode failure")
+}
+
 func TestReviewDropUnits(t *testing.T) {
 	o := inert()
+	o.cfg.Services = []string{"svc"}
 	for i := 0; i < 65; i++ {
 		o.Observe(Event{Source: fmt.Sprint(i), Severity: "error"})
 	}
@@ -64,7 +75,7 @@ func TestReviewDropUnits(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		o.ObserveOTLP(req)
 	}
-	o.parseOTLP(otlpPayload{contentType: "application/json", data: []byte("invalid")})
+	o.parseOTLP(undecodableRequest{})
 	s := o.Stats()
 	if s.DroppedEvents != 1 || s.DroppedRequests != 2 || s.RequestQueueFull != 1 || s.RequestDecodeError != 1 {
 		t.Fatal(s)

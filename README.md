@@ -364,6 +364,7 @@ console payload, health/monitor responses, and invalid-request behavior.
 | Topic | Start here |
 | --- | --- |
 | Tested demo and troubleshooting | [Quickstart](docs/quickstart.md) |
+| Telegram log alerts (opt-in) | [Configuration and delivery semantics](docs/telegram-alerts.md) |
 | OTLP service and real Collector acceptance | [Service](docs/otlp-service.md) / [settings](docs/settings/otlp.yml) / [acceptance](docs/otlp-collector-acceptance.md) |
 | Faithful typed log storage (opt-in) | [Raw OTLP archive, query view and expansion limits](docs/native-log-storage.md) |
 | OTLP edge storage and checkpoint rollback | [Admission controls and receipt GC](docs/otlp-edge-storage.md) |

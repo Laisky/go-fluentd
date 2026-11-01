@@ -29,10 +29,11 @@ import (
 // OTLPServiceConfig is an opt-in, isolated pipeline. Secrets are named by
 // environment variable, never embedded in the persisted destination plan.
 type OTLPServiceConfig struct {
-	RetainAccepted         bool   `mapstructure:"-"`
-	SharedStorageDirectory string `mapstructure:"shared_storage_dir"`
-	SharedStorageBytes     int64  `mapstructure:"shared_storage_bytes"`
-	WALSegmentBytes        int64  `mapstructure:"wal_segment_bytes"`
+	ObserveAccepted        func(*otlpwire.Request) `mapstructure:"-"`
+	RetainAccepted         bool                    `mapstructure:"-"`
+	SharedStorageDirectory string                  `mapstructure:"shared_storage_dir"`
+	SharedStorageBytes     int64                   `mapstructure:"shared_storage_bytes"`
+	WALSegmentBytes        int64                   `mapstructure:"wal_segment_bytes"`
 
 	Enabled               bool                     `mapstructure:"enabled"`
 	ListenAddress         string                   `mapstructure:"listen_addr"`
@@ -365,7 +366,13 @@ func StartOTLPService(parent context.Context, c OTLPServiceConfig) (_ *OTLPServi
 				return codecError
 			}
 		}
-		return s.owner.Admit(ctx, r)
+		if err := s.owner.Admit(ctx, r); err != nil {
+			return err
+		}
+		if c.ObserveAccepted != nil {
+			c.ObserveAccepted(r)
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err

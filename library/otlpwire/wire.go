@@ -76,8 +76,24 @@ func (r *Request) Signal() Signal      { return r.signal }
 func (r *Request) ContentType() string { return r.contentType }
 func (r *Request) Items() int          { return r.items }
 
+// PayloadSize returns the retained payload size without copying it.
+func (r *Request) PayloadSize() int { return len(r.payload) }
+
 // Payload returns a copy so callers cannot mutate retained request bytes.
 func (r *Request) Payload() []byte { return bytes.Clone(r.payload) }
+
+// DecodeLogs decodes the retained payload without exposing it, so an observer can
+// hold the immutable request instead of copying it while admission is waiting.
+func (r *Request) DecodeLogs() (plogotlp.ExportRequest, error) {
+	logs := plogotlp.NewExportRequest()
+	if r.signal != Logs {
+		return logs, fmt.Errorf("decode logs from %q request", r.signal)
+	}
+	if r.contentType == JSON {
+		return logs, logs.UnmarshalJSON(r.payload)
+	}
+	return logs, logs.UnmarshalProto(r.payload)
+}
 
 func mediaType(value string) (string, error) {
 	m, p, err := mime.ParseMediaType(value)

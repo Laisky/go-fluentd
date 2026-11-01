@@ -121,5 +121,68 @@
       "TestRegressionJWTRejectsMalformedNumericDates",
       "TestJWTOrdinaryClaimsAndAudience"
     ]
+  },
+  {
+    "package": "./internal/alerts",
+    "tests": [
+      "TestFluentSeveritySourceAndDedup",
+      "TestFluentEmbeddedJSON",
+      "TestConcurrentAndBounded",
+      "TestRedactionAndUnicode",
+      "TestCancellationAndTimeout",
+      "TestOTLPOriginalSeverityAndSources",
+      "TestOTLPQueueSaturation",
+      "TestReviewDecodeContinuesDuringTelegramBackoff",
+      "TestReviewMetadataCannotInjectMessageField",
+      "TestReviewHostScopeAndSeverityControls",
+      "TestReviewAggregationAndEviction",
+      "TestReviewDropUnits",
+      "TestReviewShutdownCountsOutstandingEvents",
+      "TestReviewNotifierBoundary",
+      "TestTagOnlyConfigurationSkipsOTLPWork",
+      "TestDistinctHiddenErrorsFromOneSourceAreNotCollapsed",
+      "TestHiddenMessagesRemainPrivateButDistinguishable",
+      "TestVariableTokensShareOneGroup",
+      "TestNonASCIIErrorTextStaysDistinct",
+      "TestMessageLinesCannotForgeNotificationFields",
+      "TestMultilineStackTraceRemainsReadable",
+      "TestRenderedNotificationStaysWithinTelegramLimit",
+      "TestLinkPreviewsAreDisabled",
+      "TestNoisySourceCannotStarveQuietSource",
+      "TestRotatedOTLPIdentityCannotStarveOtherService",
+      "TestServiceNameSelectorIsNotAnAuthenticationBoundary",
+      "TestInfoRecordsSkipMessageConversion",
+      "TestOTLPObservationDoesNotCopyPayload",
+      "TestSourceBudgetBoundsNotificationsAndReportsOverflow",
+      "TestSingleGroupBudgetRestoresOneNotificationPerSource",
+      "TestSummaryWaitsForQueueSpaceWithoutLosingCount",
+      "TestSummaryNamesOnlyTheAllowlistedSource",
+      "TestFingerprintIsKeyedPerObserver",
+      "TestConfigDefaultsAndBounds"
+    ]
+  },
+  {
+    "package": "./internal/controller",
+    "tests": [
+      "TestTelegramAlertConfigurationOptIn",
+      "TestDispatcherAlertSaturationDoesNotChangeRecords",
+      "TestNativeStorageFidelityWithFailedAlert",
+      "TestAlertFailureDoesNotBlockOTLPStorageOrRepeatOnReplay",
+      "TestTelegramAlertPolicyValidation",
+      "TestTelegramAlertTagsExpandEnv",
+      "TestAlertMonitorSeparatesLossReasons"
+    ]
+  },
+  {
+    "package": "./internal/monitor",
+    "tests": [
+      "TestAlertMetricsFixedAndPrivate"
+    ]
+  },
+  {
+    "package": "./library/otlpwire",
+    "tests": [
+      "TestDecodeLogsSharesRetainedPayloadSafely"
+    ]
   }
 ]

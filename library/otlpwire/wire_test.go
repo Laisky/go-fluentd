@@ -456,3 +456,41 @@ func FuzzOTLPWire(f *testing.F) {
 		}
 	})
 }
+
+func TestDecodeLogsSharesRetainedPayloadSafely(t *testing.T) {
+	logs := plogotlp.NewExportRequest()
+	logs.Logs().ResourceLogs().AppendEmpty().ScopeLogs().AppendEmpty().LogRecords().AppendEmpty().Body().SetStr("synthetic")
+	protobuf, err := logs.MarshalProto()
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := logs.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for contentType, body := range map[string][]byte{otlpwire.Protobuf: protobuf, otlpwire.JSON: encoded} {
+		r, err := otlpwire.ReadRequest(otlpwire.Logs, contentType, "", bytes.NewReader(body), otlpwire.DefaultLimits())
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := r.DecodeLogs()
+		if err != nil {
+			t.Fatal(err)
+		}
+		record := decoded.Logs().ResourceLogs().At(0).ScopeLogs().At(0).LogRecords().At(0)
+		if record.Body().Str() != "synthetic" {
+			t.Fatalf("%s: decoded body %q", contentType, record.Body().Str())
+		}
+		record.Body().SetStr("mutated")
+		if !bytes.Equal(r.Payload(), body) {
+			t.Fatalf("%s: retained payload changed", contentType)
+		}
+	}
+	metrics, err := otlpwire.ReadRequest(otlpwire.Metrics, otlpwire.JSON, "", strings.NewReader(`{"resourceMetrics":[]}`), otlpwire.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := metrics.DecodeLogs(); err == nil {
+		t.Fatal("metrics request decoded as logs")
+	}
+}

@@ -72,7 +72,7 @@ admission limit returns 503 when body-decoding/admission slots are exhausted.
 | `read_header_timeout` | 5 seconds |
 | `body_read_timeout` | 10 seconds |
 | `request_timeout` | 30 seconds |
-| `idle_timeout` | 30 seconds |
+| `idle_timeout` | 120 seconds; longer than the 90-second idle timeout Go HTTP clients (including the OpenTelemetry Go exporters) use by default, so a client never reuses a connection the receiver is closing |
 | `shutdown_timeout` | 10 seconds |
 | `max_wire_bytes` / `max_decoded_bytes` | 4 MiB each, independently |
 | `max_items` | 10,000 log records, spans or metric data points |

@@ -154,6 +154,11 @@ func ParseOTLPServiceConfig(raw interface{}) (*OTLPServiceConfig, error) {
 	return &c, nil
 }
 
+// defaultOTLPIdleTimeout outlasts net/http's default client IdleConnTimeout
+// (90 seconds), which OpenTelemetry SDK exporters inherit, so clients close idle
+// connections before the receiver does.
+const defaultOTLPIdleTimeout = 120 * time.Second
+
 func (c *OTLPServiceConfig) defaults() {
 	if c.ListenAddress == "" {
 		c.ListenAddress = "127.0.0.1:4318"
@@ -168,7 +173,14 @@ func (c *OTLPServiceConfig) defaults() {
 		c.ReadHeaderTimeout = 5 * time.Second
 	}
 	if c.IdleTimeout == 0 {
-		c.IdleTimeout = 30 * time.Second
+		// The side that sends requests must give up an idle connection first.
+		// OpenTelemetry Go exporters keep idle connections for net/http's
+		// default 90 seconds and do not retry a transport error, so a shorter
+		// server timeout lets a client reuse a connection the server is closing:
+		// the POST fails with EOF and the whole batch is lost. With the former
+		// 30-second default, one-api lost a batch whenever its 30-second
+		// periodic export landed on the server's close.
+		c.IdleTimeout = defaultOTLPIdleTimeout
 	}
 	if c.ShutdownTimeout == 0 {
 		c.ShutdownTimeout = 10 * time.Second

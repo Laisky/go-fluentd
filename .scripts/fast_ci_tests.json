@@ -119,7 +119,9 @@
     "package": "./tests/dependencysecurity",
     "tests": [
       "TestRegressionJWTRejectsMalformedNumericDates",
-      "TestJWTOrdinaryClaimsAndAudience"
+      "TestJWTOrdinaryClaimsAndAudience",
+      "TestRegressionZstdRejectsInvalidHuffmanWeights",
+      "TestRegressionZstdValidRoundTrip"
     ]
   },
   {

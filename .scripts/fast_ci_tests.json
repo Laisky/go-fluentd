@@ -36,7 +36,43 @@
       "TestOTLPConfigDiagnosticsDoNotRenderValues",
       "TestOTLPConfigDiagnosticPreservesDecoderCause",
       "TestOTLPConfigPrivacyPreservesValidBehavior",
-      "TestRegressionOTLPJournalUsesCollectorLogger"
+      "TestRegressionOTLPJournalUsesCollectorLogger",
+      "TestSharedOTLPBoundedRotationRestartAndExactReplay",
+      "TestSharedOTLPTwoWorkersCapAndAdmissionFalsePositives",
+      "TestSharedOTLPSizeRefusalLeavesSmallWorkUsable",
+      "TestSharedOTLPReplayExhaustionStopsBeforeDiscard",
+      "TestLegacyAdmissionThresholdDoesNotBoundReplayControl",
+      "TestSharedOTLPActualHTTPBackpressureAndRecovery",
+      "TestSharedOTLPSIGKILLRetainsBudgetAndAcceptedWork",
+      "TestSharedOTLPGenerationPreventsUnbudgetedReopen",
+      "TestSharedOTLPOutageDoesNotRotateOrRetireUnacknowledgedSegments",
+      "TestSharedOTLPFullAdmissionBudgetStillDrainsAcceptedWork",
+      "TestSharedOTLPRestartReconcilesCrashOvercountAtExactCap",
+      "TestOverallDiskConfigAppliesToEveryPipeline",
+      "TestOverallDiskLegacyAndOTLPShareOneCapAndDrain",
+      "TestOverallDiskLegacyRefusalIsExplicitAndDoesNotPersist",
+      "TestOverallDiskLegacyRetainsUnacknowledgedPlainAndGzip",
+      "TestOverallDiskLegacySIGKILLFullLedgerRecovery",
+      "TestOverallArchiveSurvivesCollectorAndVolatileSinkLoss",
+      "TestOverallArchiveLegacyACKedOriginalsRemainReplayable",
+      "TestOverallArchiveOfflineRecoveryOwnershipDryRunAndExecute",
+      "TestOverallArchiveRecoveryRefusesFreshRoot",
+      "TestLegacyRecoveryTransportTLSExactRawDryRunAndRefusal",
+      "TestLegacyRecoveryTransportValidatesWholeArchiveBeforeSending",
+      "TestOverallTransitionOverCapNeedsSeparateStorageAndPreservesEveryOriginal",
+      "TestTelegramAlertConfigurationOptIn",
+      "TestDispatcherAlertSaturationDoesNotChangeRecords",
+      "TestNativeStorageFidelityWithFailedAlert",
+      "TestAlertFailureDoesNotBlockOTLPStorageOrRepeatOnReplay",
+      "TestTelegramAlertPolicyValidation",
+      "TestTelegramAlertTagsExpandEnv",
+      "TestAlertMonitorSeparatesLossReasons",
+      "TestRegressionLegacyPrivateRoot",
+      "TestRegressionLegacyPrivateChildAndFiles",
+      "TestRegressionLegacyPrivateCreation",
+      "TestLegacyPrivateExplicitMigrationPreservesReplay",
+      "TestLegacyPrivateRootChangedBeforeAdmission",
+      "TestLegacyPrivateRefusalOwnership"
     ]
   },
   {
@@ -73,53 +109,12 @@
     ]
   },
   {
-    "package": "./internal/controller",
-    "tests": [
-      "TestSharedOTLPBoundedRotationRestartAndExactReplay",
-      "TestSharedOTLPTwoWorkersCapAndAdmissionFalsePositives",
-      "TestSharedOTLPSizeRefusalLeavesSmallWorkUsable",
-      "TestSharedOTLPReplayExhaustionStopsBeforeDiscard",
-      "TestLegacyAdmissionThresholdDoesNotBoundReplayControl",
-      "TestSharedOTLPActualHTTPBackpressureAndRecovery",
-      "TestSharedOTLPSIGKILLRetainsBudgetAndAcceptedWork",
-      "TestSharedOTLPGenerationPreventsUnbudgetedReopen",
-      "TestSharedOTLPOutageDoesNotRotateOrRetireUnacknowledgedSegments",
-      "TestSharedOTLPFullAdmissionBudgetStillDrainsAcceptedWork",
-      "TestSharedOTLPRestartReconcilesCrashOvercountAtExactCap"
-    ]
-  },
-  {
-    "package": "./internal/controller",
-    "tests": [
-      "TestOverallDiskConfigAppliesToEveryPipeline",
-      "TestOverallDiskLegacyAndOTLPShareOneCapAndDrain",
-      "TestOverallDiskLegacyRefusalIsExplicitAndDoesNotPersist",
-      "TestOverallDiskLegacyRetainsUnacknowledgedPlainAndGzip",
-      "TestOverallDiskLegacySIGKILLFullLedgerRecovery"
-    ]
-  },
-  {
-    "package": "./internal/controller",
-    "tests": [
-      "TestOverallArchiveSurvivesCollectorAndVolatileSinkLoss",
-      "TestOverallArchiveLegacyACKedOriginalsRemainReplayable",
-      "TestOverallArchiveOfflineRecoveryOwnershipDryRunAndExecute",
-      "TestOverallArchiveRecoveryRefusesFreshRoot"
-    ]
-  },
-  {
-    "package": "./internal/controller",
-    "tests": [
-      "TestLegacyRecoveryTransportTLSExactRawDryRunAndRefusal",
-      "TestLegacyRecoveryTransportValidatesWholeArchiveBeforeSending",
-      "TestOverallTransitionOverCapNeedsSeparateStorageAndPreservesEveryOriginal"
-    ]
-  },
-  {
     "package": "./tests/dependencysecurity",
     "tests": [
       "TestRegressionJWTRejectsMalformedNumericDates",
-      "TestJWTOrdinaryClaimsAndAudience"
+      "TestJWTOrdinaryClaimsAndAudience",
+      "TestRegressionZstdRejectsInvalidHuffmanWeights",
+      "TestRegressionZstdValidRoundTrip"
     ]
   },
   {
@@ -159,18 +154,6 @@
       "TestSummaryNamesOnlyTheAllowlistedSource",
       "TestFingerprintIsKeyedPerObserver",
       "TestConfigDefaultsAndBounds"
-    ]
-  },
-  {
-    "package": "./internal/controller",
-    "tests": [
-      "TestTelegramAlertConfigurationOptIn",
-      "TestDispatcherAlertSaturationDoesNotChangeRecords",
-      "TestNativeStorageFidelityWithFailedAlert",
-      "TestAlertFailureDoesNotBlockOTLPStorageOrRepeatOnReplay",
-      "TestTelegramAlertPolicyValidation",
-      "TestTelegramAlertTagsExpandEnv",
-      "TestAlertMonitorSeparatesLossReasons"
     ]
   },
   {

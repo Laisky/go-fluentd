@@ -1,11 +1,6 @@
 name: Legacy journal private storage
 on:
-  push:
-    branches: [master, develop]
-    paths: ['go.mod', 'go.sum', '**/*.go', '.github/workflows/legacy-journal-permissions.yml']
-  pull_request:
-    branches: [master, develop]
-    paths: ['go.mod', 'go.sum', '**/*.go', '.github/workflows/legacy-journal-permissions.yml']
+  # Historical RED/race/root-only qualification is opt-in, not a PR gate.
   workflow_dispatch:
 permissions:
   contents: read

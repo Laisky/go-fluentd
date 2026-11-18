@@ -88,3 +88,37 @@ UID and an unauthorized same-group UID must fail both read and write access to a
 could traverse the test path. Ordinary unprivileged suites may skip those two
 privileged tests; the dedicated workflow rejects skipped or incomplete results.
 No test touches production storage or claims filesystem power-loss certification.
+
+## Fast CI versus manual qualification
+
+PR and branch CI retain six current, unprivileged journal-permission regressions
+in the strict essential gate: unsafe roots/children/files, creation under both
+umasks, explicit migration/replay, changed-root admission and refusal ownership.
+The allowlist groups tests by package so each package is discovered and tested
+once, without dropping any existing essential test. Missing, skipped or failed
+tests still fail the gate. Source and binary vulnerability scans and CodeQL are
+unchanged.
+
+Frozen-baseline RED reproduction, repeated race campaigns and real other-UID
+tests are manual qualification, not repeated on every PR. The existing
+`legacy-journal-permissions.yml` retains the complete historical recipe as an
+opt-in dispatch; prefer running the needed checks locally on an isolated Linux
+development checkout. Full-suite/Docker/performance qualification remains
+separate and manual.
+
+For ordinary local permission regression/race checks:
+
+```sh
+GOTOOLCHAIN=local go test -mod=readonly -race -count=3 -shuffle=on -timeout=180s \
+  -run 'Test(RegressionLegacyPrivate|LegacyPrivate|LegacyJournalSecurity)' ./internal/controller
+```
+
+An unprivileged run skips the two other-UID/foreign-owner tests and therefore
+does not qualify them. If that boundary changed, use an explicitly authorized
+isolated root-capable test environment and the workflow's compiled-binary
+command plus its no-skips log validator. Do not elevate permissions on a shared
+host merely to make ordinary CI green. Preserve historical RED evidence; rerun
+the baseline recipe only when its reproduction or harness itself needs review.
+
+No test result from an older commit qualifies a later source revision, and
+manual qualification must record the source, toolchain, actual exits and skips.
